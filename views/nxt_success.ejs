@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NXT APP</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap-theme.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
+</head>
+<body>
+    <div style="margin:100px;">
+        <div class="jumbotron" style="padding:40px;">
+            <p><b>Nextensio Secured Tunnel</b></p>
+            <p id='logintime'>Secured login successful!</p>
+            <p id='nxttimer'>Tunnel creation in progress ...</p>
+            <script> 
+                var deadline = new Date().getTime() + 11000;
+                var x = setInterval(function() { 
+                    var now = new Date().getTime(); 
+                    var t = deadline - now; 
+                    var seconds = Math.floor((t % (1000 * 60)) / 1000); 
+                    document.getElementById("nxttimer").innerHTML = 'Tunnel creation in progress ... ' + seconds + " s "; 
+                    if (t < 0) { 
+                        clearInterval(x); 
+                        document.getElementById("nxttimer").innerHTML = "Tunnel creation completed!"; 
+                    } 
+                }, 1000); 
+            </script> 
+            <form id="learn"  method="get" action="/register">
+                <p><button id="submit" type="submit" class="btn btn-primary btn-lg">Login again...</button></p>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
