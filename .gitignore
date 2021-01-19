@@ -1,2 +1,11 @@
-node_modules
 .vscode
+go/go.sum
+go/agent/agent
+go/agent/go.sum
+go/conntrack/go.sum
+go/common/go.sum
+go/test/integ/integ
+go/test/integ/go.sum
+js/node_modules
+js/npm-debug.log
+
