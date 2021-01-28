@@ -146,10 +146,11 @@ var self = module.exports = {
 
     // The sourceAgent and destAgent can get swapped on the connector, the originAgent
     // continues to identify the agent that originated the flow. 
-    createNxtFlow: function (methodN, destURL, destAgentN, srcIpN, srcPortN, sourceAgentN, originAgent, rxStreamid, txStreamid) {
+    createNxtFlow: function (methodN, destURL, destPort, destAgentN, srcIpN, srcPortN, sourceAgentN, originAgent, rxStreamid, txStreamid) {
         return {
             method: methodN,
             dest: destURL,
+            destPort: destPort,
             destAgent: destAgentN,
             srcIp: srcIpN,
             srcPort: srcPortN,
@@ -161,10 +162,10 @@ var self = module.exports = {
     },
 
     getNxtFlowMsgType: function (NxtFlow) {
-        if (NxtFlow.getType() == NxtHdrs.NxtFlow.FLOW_TYPE.PROXY) {
-            return "CONNECT"
+        if (NxtFlow.getType() == NxtHdrs.NxtFlow.FLOW_TYPE.L4) {
+            return "L4"
         } else {
-            return "TCP"
+            return "L3"
         }
     },
 
@@ -173,6 +174,7 @@ var self = module.exports = {
         return this.createNxtFlow(
             this.getNxtFlowMsgType(NxtFlow),
             NxtFlow.getDest(),
+            NxtFlow.getDport(),
             NxtFlow.getDestagent(),
             NxtFlow.getSource(),
             NxtFlow.getSport(),
@@ -195,7 +197,7 @@ var self = module.exports = {
         return pack;
     },
 
-    createNxtHeader: function (method, dest, destAgent, srcIp, srcPort, sourceAgent, originAgent, streamid) {
+    createNxtHeader: function (method, dest, destPort, destAgent, srcIp, srcPort, sourceAgent, originAgent, streamid) {
         var hdr = new NxtHdrs.NxtHdr()
         var flow = new NxtHdrs.NxtFlow()
         flow.setSource(srcIp)
@@ -204,12 +206,13 @@ var self = module.exports = {
         flow.setProto(6)
         flow.setSourceagent(sourceAgent)
         flow.setDest(dest)
+        flow.setDport(destPort)
         flow.setDestagent(destAgent)
         flow.setOriginagent(originAgent)
-        if (method == 'CONNECT') {
-            flow.setType(NxtHdrs.NxtFlow.FLOW_TYPE.PROXY)
-        } else {
+        if (method == 'L4') {
             flow.setType(NxtHdrs.NxtFlow.FLOW_TYPE.L4)
+        } else {
+            flow.setType(NxtHdrs.NxtFlow.FLOW_TYPE.L3)
         }
         hdr.setStreamid(streamid)
         hdr.setFlow(flow)
@@ -292,6 +295,7 @@ var self = module.exports = {
         let lines = [];
         lines[0] = Buffer.from(this.createNxtHeader(flow.method,
             flow.dest,
+            flow.destPort,
             flow.destAgent,
             flow.srcIp,
             flow.srcPort,
@@ -383,11 +387,6 @@ var self = module.exports = {
                 TUNNEL_RING_BUFFER_SIZE,
                 this.checkNxtTunnelHighWaterMark);
             ws.on('open', function () {
-                //
-                // Save the peer socket address at the connection time so that 
-                // we can know which socket is closed when receiving the 'close' event. 
-                //
-                ws.peerAddress = uri;
                 var pack = packOnboard(isAgent, registrationInfo, services)
                 ws.send(pack)
                 self.drainNxtTunnel(tunnel);
@@ -399,8 +398,6 @@ var self = module.exports = {
             });
 
             ws.on('close', function () {
-                console.log(">>>>> WSS connection [", ws.peerAddress, "] closed");
-                delete ws.peerAddress;
                 // The periodic timer will watch for the socket state and reopen it
             });
 

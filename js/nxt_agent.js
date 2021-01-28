@@ -71,8 +71,12 @@ httpServer.on('connect', function (req, socket, head) {
     // Save the peer socket address at the connection time so that 
     // we can know which socket is closed when receiving the 'close' event. 
     //
-    socket.peerAddress = socket.remoteAddress + " : " + socket.remotePort;
-    nxtConnect(req, nxtAsyncWsTunnel, socket, head);
+    createNewSocket(req, nxtAsyncWsTunnel, socket);
+    // Just say ok to the client right away, later if there are errors on the nextensio
+    // side, we will end up tearing down this session anyways
+    socket.write('HTTP/1.1 200 Connection Established\r\n' +
+        'proxy-agent: nxt-connector\r\n' +
+        '\r\n');
 });
 
 var login = require('fs'),
@@ -98,7 +102,7 @@ okta.createServer(function (req, res) {
 //
 // This is the entry function to handle HTTPS connection request from the client
 //
-function nxtConnect(req, nxtAsyncTunnel, clientSocket, head) {
+function createNewSocket(req, nxtAsyncTunnel, clientSocket) {
     //
     // NOTE: proxy.pac file is used to filter connect request
     //
@@ -110,13 +114,9 @@ function nxtConnect(req, nxtAsyncTunnel, clientSocket, head) {
     var serverURL = urlParser.parse('https://' + req.url);
 
     try {
-        // construct HTTP connect string from request
+        // empty payload to send to the connector on getting CONNECT request,
+        // we just need the connector to open sockets thats all
         var body = [];
-        body.push(Buffer.from(`${req.method}` + ' ' + `${req.url}` + ' ' + 'HTTP/1.1' + '\r\n'));
-        Object.keys(req.headers).forEach(function (key) {
-            let val = req.headers[key];
-            body.push(Buffer.from(`${key}` + ':' + ' ' + `${val}` + '\r\n'));
-        });
 
         var d;
         var destService = 'default-internet';
@@ -126,13 +126,12 @@ function nxtConnect(req, nxtAsyncTunnel, clientSocket, head) {
                 break;
             }
         }
-        //
-        // If we reached here, this must be a new connection. set up new ring buffers for this socket
-        //
+
         var clientAsyncSocket = new AsyncSocket(clientSocket, common.SOCKET_RING_BUFFER_SIZE)
 
-        var flow = common.createNxtFlow('CONNECT',
+        var flow = common.createNxtFlow('L4',
             serverURL.hostname,
+            serverURL.port,
             destService,
             clientSocket.remoteAddress,
             clientSocket.remotePort,
@@ -157,9 +156,9 @@ function nxtConnect(req, nxtAsyncTunnel, clientSocket, head) {
 
 
 //
-// The worker function to handle the responses received from NXT tunnel
+// The worker function to handle data received from NXT tunnel
 //
-function handleResponseMessage(nxtAsyncTunnel, message) {
+function packetFromCluster(nxtAsyncTunnel, message) {
     let clientAsyncSocket;
 
     var ret = common.parseWsPayload(nxtAsyncTunnel, message);
@@ -231,7 +230,7 @@ function checkTunnel() {
         nxtAsyncWsTunnel = common.createNxtWsTunnel(gatewayURL,
             null,
             extension,
-            handleResponseMessage,
+            packetFromCluster,
             registrationInfo, true, services);
     }
     setTimeout(checkTunnel, 1);
@@ -254,7 +253,7 @@ function registerAndCreateTunnel() {
     nxtAsyncWsTunnel = common.createNxtWsTunnel(gatewayURL,
         null,
         extension,
-        handleResponseMessage,
+        packetFromCluster,
         registrationInfo, true, services);
 
     console.log('\nNAGT - scheduled 1 second timer');

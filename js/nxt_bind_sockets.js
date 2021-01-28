@@ -25,8 +25,6 @@ const common = require('./nxt_common.js');
             if (typeof flow !== 'undefined') {
                 console.log('tcp data fow', flow)
                 // Got the flow, sent it out to tunnel.
-                // Overwrite the method (which might be CONNECT at the moment) to indicate TCP data
-                flow.method = 'TCP';
                 common.sendNxtTunnelInChunks(tcpconn, nxtAsyncTunnel, flow, buffer, true);
             } else {
                 console.log('tcpconn data, flow not found. Drop!');
@@ -39,10 +37,6 @@ const common = require('./nxt_common.js');
         });
 
         tcpconn.on("end", function () {
-            //
-            // socket.peerAddress property is defined at connect event
-            //
-            // 
             // Received TCP FIN packet from remote socket.
             // Delete from flow hashmap
             // Note: By default (allowHalfOpen is false) the socket will send a FIN packet back and destroy its file 
@@ -67,11 +61,6 @@ const common = require('./nxt_common.js');
         });
 
         tcpconn.on("close", function () {
-            //
-            // socket.peerAddress property is defined at connect event
-            //
-            delete tcpconn.peerAddress;
-
             // Delete from flow hashmap
             let flow = common.getNxtTcpToFlow(tcpconn);
             if (typeof flow !== 'undefined') {

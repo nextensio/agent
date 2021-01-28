@@ -705,8 +705,7 @@ proto.nxthdr.NxtFlow.prototype.setUsrattr = function(value) {
  */
 proto.nxthdr.NxtFlow.FLOW_TYPE = {
   L4: 0,
-  PROXY: 1,
-  L3: 2
+  L3: 1
 };
 
 

@@ -89,9 +89,9 @@ var httpServer = http.createServer(function (req, res) {
 
 
 //
-// Common function to handle websocket message coming from Websocket Server or Tunnel
+// Common function to handle data coming from the cluster
 //
-function handleRequestMessage(nxtAsyncTunnel, message) {
+function packetFromCluster(nxtAsyncTunnel, message) {
     let clientAsyncSocket;
 
     var ret = common.parseWsPayload(nxtAsyncTunnel, message);
@@ -102,66 +102,44 @@ function handleRequestMessage(nxtAsyncTunnel, message) {
 
     let myPayload = ret[0]
     let flow = ret[1]
-    let msgtype = ret[2]
-    if (msgtype === 'CONNECT') {
-        // Parse Body
-        let connectReq = httpParser.parseRequest(myPayload.toString());
-
-        let uri = urlParser.parse('http://' + connectReq.uri);
-        let options = {
-            host: `${uri.hostname}`,
-            path: `${uri.path}`,
-            port: `${uri.port}`,
-            method: `${connectReq.method}`,
-            headers: connectReq.headers
-        };
-
-        handleConnectRequest(nxtAsyncTunnel, flow, options);
-
-    } else if (msgtype === 'TCP') {
-        clientAsyncSocket = common.getNxtFlowToTcp(flow);
+    let orig = { ...flow }
+    clientAsyncSocket = common.getNxtFlowToTcp(flow);
+    if (typeof clientAsyncSocket === 'undefined') {
+        createNewSocket(nxtAsyncTunnel, flow);
+        clientAsyncSocket = common.getNxtFlowToTcp(orig);
         if (typeof clientAsyncSocket === 'undefined') {
-            console.log('NCTR - client key not found');
-            return;
-        } else {
-            clientAsyncSocket.send(myPayload);
+            console.log('Cannot create socket for flow', flow)
+            return
         }
     }
+    clientAsyncSocket.send(myPayload);
 }
 
-function handleConnectRequest(nxtAsyncTunnel, flow, options) {
+// ############################## HUGE TODO ####################################
+// If we get data before the socket is fully connected, then we have to queue it
+// up someplace. Also in situations like the tcpConn running into error/getting
+// closed, we have to propagate that all the way back to the agent rather than
+// just logging an error. Error handling in agent/connector/common code needs to
+// be very very carefully looked at, wherever there are errors or packet drops etc..
+// we need to cascade it all the way back
+function createNewSocket(nxtAsyncTunnel, flow) {
     // open a TCP connection to the remote host
-    var tcpConn = net.createConnection(options.port, options.host);
-    tcpConn.on('error', function (err) { console.log(err) });
-    tcpConn.on('connect', function () {
-        console.log('   NCTR - connect OK for srcPort', flow.srcPort);
-        // Construct HTTP Response
-        let goodStatus = 'HTTP/1.1 200 Connection Established\r\n';
-        let genStatus = 'proxy-agent: nxt-connector\r\n' +
-            '\r\n';
-        let body = Buffer.from(goodStatus + genStatus);
-
-        //
-        // Save the peer socket address at the connection time so that 
-        // we can know which socket is closed when receiving the 'close' event. 
-        //
-        tcpConn.peerAddress = tcpConn.remoteAddress + " : " + tcpConn.remotePort;
-
-        var clientAsyncSocket = new AsyncSocket(tcpConn,
-            common.SOCKET_RING_BUFFER_SIZE);
-        // Set flow host to the ingress gateway for the connector
-        flow.host = registrationInfo.host;
-        // Reverse the flow before storing
-        [flow.destAgent, flow.sourceAgent] = [flow.sourceAgent, flow.destAgent];
-        flow.txStreamid = streamid * 2
-        streamid += 1
-
-        common.storeNxtFlowToTcp(flow, clientAsyncSocket);
-        common.storeNxtTcpToFlow(tcpConn, flow);
-        bindSockets(nxtAsyncTunnel, clientAsyncSocket);
-
-        common.sendNxtTunnelInChunks(tcpConn, nxtAsyncTunnel, flow, body, false);
+    var tcpConn = net.createConnection(flow.destPort, flow.dest, () => {
+        console.log('Connected to', flow.dest, flow.destPort)
     });
+    tcpConn.on('error', function (err) { console.log(err) });
+    var clientAsyncSocket = new AsyncSocket(tcpConn,
+        common.SOCKET_RING_BUFFER_SIZE);
+    // Set flow host to the ingress gateway for the connector
+    flow.host = registrationInfo.host;
+    // Reverse the flow before storing
+    [flow.destAgent, flow.sourceAgent] = [flow.sourceAgent, flow.destAgent];
+    flow.txStreamid = streamid * 2
+    streamid += 1
+
+    common.storeNxtFlowToTcp(flow, clientAsyncSocket);
+    common.storeNxtTcpToFlow(tcpConn, flow);
+    bindSockets(nxtAsyncTunnel, clientAsyncSocket);
 }
 
 function nxtOnboard() {
@@ -220,7 +198,7 @@ function checkTunnel() {
         dialoutAsyncWsTunnel = common.createNxtWsTunnel(gatewayURL,
             null,
             extension,
-            handleRequestMessage,
+            packetFromCluster,
             registrationInfo, false, services);
     }
     setTimeout(checkTunnel, 1);
@@ -238,7 +216,7 @@ function registerAndCreateTunnel() {
     dialoutAsyncWsTunnel = common.createNxtWsTunnel(gatewayURL,
         null,
         extension,
-        handleRequestMessage,
+        packetFromCluster,
         registrationInfo, false, services);
 
     console.log('\nNCTR - scheduled 1 second timer');

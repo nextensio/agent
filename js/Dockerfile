@@ -11,7 +11,7 @@ RUN pip3 install selenium
 RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 RUN apt install -y ./google-chrome-stable_current_amd64.deb
 RUN rm ./google-chrome-stable_current_amd64.deb
-RUN wget https://chromedriver.storage.googleapis.com/86.0.4240.22/chromedriver_linux64.zip
+RUN wget https://chromedriver.storage.googleapis.com/88.0.4324.96/chromedriver_linux64.zip
 RUN unzip chromedriver_linux64.zip 
 RUN mv chromedriver /usr/bin/
 RUN rm chromedriver_linux64.zip 
