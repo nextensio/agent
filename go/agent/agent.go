@@ -28,7 +28,6 @@ type registrationInfo struct {
 
 var controller string
 var regInfo registrationInfo
-var nxtOnboarded bool
 var nxtOnboardPending bool
 var services []string
 
@@ -52,7 +51,6 @@ func nxtOnboard() {
 			if err == nil {
 				err = json.Unmarshal(body, &regInfo)
 				if err == nil {
-					nxtOnboarded = true
 					nxtOnboardPending = false
 					services = append(services, regInfo.ConnectID)
 					fmt.Println("New services", services)
@@ -68,7 +66,8 @@ func oktaResults() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/accessid/", func(w http.ResponseWriter, r *http.Request) {
 		regInfo.AccessToken = r.URL.Query().Get("access")
-		if !nxtOnboarded && !nxtOnboardPending {
+		if !nxtOnboardPending {
+			nxtOnboardPending = true
 			go nxtOnboard()
 		}
 		w.WriteHeader(http.StatusOK)
