@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/nextensio/common"
 	"gitlab.com/nextensio/common/messages/nxthdr"
+	"gitlab.com/nextensio/common/transport/fd"
+	proxy "gitlab.com/nextensio/common/transport/l3proxy"
 	"gitlab.com/nextensio/common/transport/webproxy"
 )
 
@@ -20,6 +22,11 @@ const NXT_AGENT_PROXY = 8080
 type flowKey struct {
 	port  uint16
 	proto int
+}
+
+type Iface struct {
+	Fd int
+	IP net.IP
 }
 
 var controller string
@@ -31,6 +38,7 @@ var appStreams chan common.NxtStream
 var flowLock sync.RWMutex
 var flows map[flowKey]common.Transport
 var unique uuid.UUID
+var pktIface *Iface
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -177,8 +185,22 @@ func monitorGw() {
 // Onboarding succesfully completed. Now start listening for data from the apps,
 // and establish tunnels to the gateway
 func onboarded() {
+	// We listen for an http proxy request
 	p := webproxy.NewListener(NXT_AGENT_PROXY)
 	go p.Listen(appStreams)
+
+	// If the agent has a source of l3 IP packets, then we also try and
+	// terminate them to get tcp/udp out of it and forward them. The l3proxy
+	// is a combination of a source of l3 IP packets (a file descriptor here)
+	// and a proxy that terminates the packets to tcp/udp
+	if pktIface != nil {
+		f := fd.NewClient(mainCtx, uintptr(pktIface.Fd))
+		f.Dial(appStreams)
+		p := proxy.NewListener(f, pktIface.IP)
+		go p.Listen(appStreams)
+	}
+
+	// Go get the gateway tunnel up
 	go monitorGw()
 }
 
@@ -191,8 +213,15 @@ func args() {
 	regInfo.Services = strings.Fields(svcs)
 }
 
-func agent_main(loginFile string) {
+// LoginFile is the location where the IDP/Okta login webpages are stored,
+// which user can access from the browsert on their device and onboard the agent
+//
+// pktFD if 0 is just ignored. If non zero, its assumed to be the descriptor
+// for a device which gives us L3 packets, which we terminate and get udp/tcp
+// out of it
+func AgentMain(loginFile string, iface *Iface) {
 	mainCtx = context.Background()
+	pktIface = iface
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
@@ -211,10 +240,4 @@ func agent_main(loginFile string) {
 			go appToGw(stream.Stream)
 		}
 	}
-}
-
-// TODO: The main will eventually move out of here and agent will become just a lib,
-// the agent_main() will get called from android/ios/windows etc..
-func main() {
-	agent_main("/var/okta/login.html")
 }

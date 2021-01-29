@@ -1,7 +1,7 @@
 .vscode
 go/files/gitlab_rsa
 go/go.sum
-go/agent/agent
+go/agent/platforms/docker/docker
 go/agent/go.sum
 go/connector/connector
 go/connector/go.sum

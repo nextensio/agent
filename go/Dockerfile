@@ -4,7 +4,7 @@ FROM golang:1.15
 # Note that the docker container is huge because of these chromium stuff,
 # we need this only for the test/automation environment
 RUN apt update
-RUN apt install -y python3-pip unzip
+RUN apt install -y python3-pip unzip iproute2 iptables net-tools
 RUN pip3 install chromedriver
 RUN pip3 install selenium
 RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
