@@ -1,16 +1,28 @@
 package main
 
-// Open two sessions:
-// 1. An "underlay" session to rx/tx packets from the local system - it can be getting packets from
-//    the applications on the phone via vpnService tunnel in android agent OR it can be getting
-//    packets from the cloud via ethernet interface of a connector. The exact nature of ethernet Vs
-//    vpnService etc.. is abstracted via the "Transport" interface in common/transport.go
-//
-// 2. A "overlay" session to rx/tx packets towards the nextensio clusters - it can also be different
-//    kinds of transports like a DTLS tunnel or a TLS tunnel or IPSec etc.. The exact transport is again
-//    abstracted using the "Transport" interface
-//
-// The main() function continuously monitors the overlay session for disconnects and reopens it if
-// it gets disconnected
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+const (
+	NXT_AGENT_PROXY  = 8080
+	NXT_OKTA_RESULTS = 8081
+	NXT_OKTA_LOGIN   = 8180
+)
+
+func oktaLogin() {
+	fs := http.FileServer(http.Dir("./public/"))
+	http.Handle("/", fs)
+
+	addr := fmt.Sprintf(":%d", NXT_OKTA_LOGIN)
+	err := http.ListenAndServe(addr, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
+	oktaLogin()
 }

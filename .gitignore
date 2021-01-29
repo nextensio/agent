@@ -2,6 +2,8 @@
 go/go.sum
 go/agent/agent
 go/agent/go.sum
+go/connector/connector
+go/connector/go.sum
 go/conntrack/go.sum
 go/common/go.sum
 go/test/integ/integ
