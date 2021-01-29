@@ -30,19 +30,17 @@ COPY files/okta/* /var/okta/
 # Now compile the code
 WORKDIR /go/src/app
 RUN mkdir -p /root/.ssh
-COPY files/gitlab.sh /go
-COPY files/gitlab_rsa /go/
-RUN chmod +x /go/gitlab.sh
-RUN /go/gitlab.sh
+RUN mkdir -p /go/files/
+COPY files/ /go/files
+RUN chmod +x /go/files/gitlab.sh
+RUN /go/files/gitlab.sh
 RUN go env -w GOPRIVATE="gitlab.com"
 RUN go env -w GO111MODULE="on"
 COPY . .
-RUN rm -rf files
 RUN go get -d -v ./... \
     && go install -v ./...
-RUN rm /go/gitlab_rsa
+RUN rm /go/files/gitlab_rsa
 
-COPY files/run.sh /go
-RUN chmod +x /go/run.sh
+RUN chmod +x /go/files/run.sh
 EXPOSE 8180/tcp 8081/tcp 8080/tcp
-CMD /go/run.sh
+CMD /go/files/run.sh

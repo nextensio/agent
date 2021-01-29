@@ -8,6 +8,6 @@ EOM
 cat > /root/.ssh/config  <<- EOM
 Host gitlab.com
     StrictHostKeyChecking no
-    IdentityFile /go/gitlab_rsa
+    IdentityFile /go/files/gitlab_rsa
 EOM
 
