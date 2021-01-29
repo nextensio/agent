@@ -92,7 +92,8 @@ func gwToApp(tun common.Transport) {
 func appToGw(tun common.Transport) {
 	var dest common.Transport
 	var key flowKey
-	var added bool
+	var seen bool
+	var destAgent string = ""
 
 	if gwTun == nil {
 		tun.Close()
@@ -109,31 +110,35 @@ func appToGw(tun common.Transport) {
 		if err != nil {
 			tun.Close()
 			dest.Close()
-			if added {
+			if seen {
 				flowDel(key, tun)
 			}
 			return
 		}
 		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-		if !added {
+
+		if !seen {
 			key.port = uint16(flow.Sport)
 			key.proto = int(flow.Proto)
 			flowAdd(key, tun)
-			added = true
-		}
-		// If we could not get a valid service name and has to default to IP address,
-		// then we just have to rely on customer punching in the IP/subnet and us routing
-		// based on that information
-		if net.ParseIP(flow.DestAgent) == nil {
-			// If the domain doesnt match any of the customer private domains, then its
-			// default internet service, otherwise its a customer private service
-			flow.DestAgent = "default-internet"
-			for _, d := range regInfo.Domains {
-				if strings.Contains(flow.DestAgent, d) {
-					flow.DestAgent = d
-					break
+			seen = true
+			// If we could not get a valid service name and has to default to IP address,
+			// then we just have to rely on customer punching in the IP/subnet and us routing
+			// based on that information
+			if net.ParseIP(flow.DestAgent) == nil {
+				// If the domain doesnt match any of the customer private domains, then its
+				// default internet service, otherwise its a customer private service
+				destAgent = "default-internet"
+				for _, d := range regInfo.Domains {
+					if strings.Contains(strings.ToLower(flow.DestAgent), strings.ToLower(d)) {
+						destAgent = d
+						break
+					}
 				}
 			}
+		}
+		if destAgent != "" {
+			flow.DestAgent = destAgent
 		}
 		flow.SourceAgent = regInfo.ConnectID
 		flow.OriginAgent = regInfo.ConnectID

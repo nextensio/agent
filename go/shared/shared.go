@@ -59,7 +59,7 @@ func nxtOnboard(regInfo *RegistrationInfo, controller string, callback func()) {
 				}
 			}
 		}
-		log.Println("Onboarding failed, will retry again")
+		log.Println("Onboarding failed, will retry again", err)
 		time.Sleep(5 * time.Second)
 	}
 }
