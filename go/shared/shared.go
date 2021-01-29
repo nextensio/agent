@@ -95,7 +95,6 @@ func dialWebsocket(ctx context.Context, regInfo *RegistrationInfo, c chan common
 	req.Add("x-nextensio-connect", regInfo.ConnectID)
 	wsock := websock.NewClient(ctx, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req)
 	if err := wsock.Dial(c); err != nil {
-		wsock.Close()
 		log.Println("Cannot dial websocket", err)
 		return nil
 	}
