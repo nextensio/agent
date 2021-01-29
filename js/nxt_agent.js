@@ -15,7 +15,9 @@ const urlParser = require('url');
 const common = require('./nxt_common.js');
 const bindSockets = require('./nxt_bind_sockets.js');
 const AsyncSocket = require('./nxt_async_socket.js');
-const NXT_AGENT_HTTP_LISTENING_PORT = 8081;
+const NXT_AGENT_PROXY = 8080;
+const NXT_OKTA_RESULTS = 8081;
+const NXT_OKTA_LOGIN = 8180
 
 var streamid = 1;
 var nxtOnboarded = false;
@@ -47,10 +49,8 @@ if (common.getArgs().usages) {
     common.printUsages();
 }
 
-//
-// HTTP Web Server
-//
-var httpServer = http.createServer(function (req, res) {
+
+var oktaResults = http.createServer(function (req, res) {
     let path = urlParser.parse(req.url, true).pathname;
     let query = urlParser.parse(req.url, true).query;
     registrationInfo.accessToken = query.access;
@@ -62,11 +62,14 @@ var httpServer = http.createServer(function (req, res) {
     }
     res.writeHead(200, { 'Access-Control-Allow-Origin': '*' });
     res.end();
-}).listen(NXT_AGENT_HTTP_LISTENING_PORT);
+}).listen(NXT_OKTA_RESULTS);
 
-console.log('NXT Agent HTTP Server listening on port ' + NXT_AGENT_HTTP_LISTENING_PORT);
+var webProxy = http.createServer(function (req, res) {
+    res.writeHead(200);
+    res.end();
+}).listen(NXT_AGENT_PROXY);
 
-httpServer.on('connect', function (req, socket, head) {
+webProxy.on('connect', function (req, socket, head) {
     //
     // Save the peer socket address at the connection time so that 
     // we can know which socket is closed when receiving the 'close' event. 
@@ -97,7 +100,7 @@ okta.createServer(function (req, res) {
         res.writeHead(201);
         res.end('');
     }
-}).listen(8180);
+}).listen(NXT_OKTA_LOGIN);
 
 //
 // This is the entry function to handle HTTPS connection request from the client

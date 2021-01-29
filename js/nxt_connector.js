@@ -17,6 +17,8 @@ const urlParser = require('url');
 const common = require('./nxt_common.js');
 const bindSockets = require('./nxt_bind_sockets.js');
 const AsyncSocket = require('./nxt_async_socket.js');
+const NXT_OKTA_RESULTS = 8081;
+const NXT_OKTA_LOGIN = 8180
 
 var streamid = 1;
 var nxtOnboarded = false;
@@ -70,10 +72,10 @@ okta.createServer(function (req, res) {
         res.writeHead(201);
         res.end('');
     }
-}).listen(8180);
+}).listen(NXT_OKTA_LOGIN);
 
 // Port on which Single sign on sends tokens back to us
-var httpServer = http.createServer(function (req, res) {
+var oktaResults = http.createServer(function (req, res) {
     let path = urlParser.parse(req.url, true).pathname;
     let query = urlParser.parse(req.url, true).query;
     registrationInfo.accessToken = query.access;
@@ -85,7 +87,7 @@ var httpServer = http.createServer(function (req, res) {
     }
     res.writeHead(200, { 'Access-Control-Allow-Origin': '*' });
     res.end();
-}).listen(8081);
+}).listen(NXT_OKTA_RESULTS);
 
 
 //

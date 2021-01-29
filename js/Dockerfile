@@ -41,5 +41,5 @@ RUN npm install ringbufferjs
 # Bundle app source
 COPY . .
 
-EXPOSE 8180/tcp 8081/tcp
+EXPOSE 8180/tcp 8081/tcp 8080/tcp
 CMD ./files/run.sh

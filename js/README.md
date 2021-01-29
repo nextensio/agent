@@ -14,12 +14,12 @@ quite similar. The basic theory of operation of this code is as follows
    prompts the user to login and authenticate themselves. 
 3. Once authenticated, the agent code uses the information obtained from authentication 
    to connect to a nextensio cluster using websocket
-4. The agent also opens a port 8081 which is a "web proxy" port - in your browser, you can
+4. The agent also opens a port 8080 which is a "web proxy" port - in your browser, you can
    open the broswer settings and ask the browser to forward any web browsing activity to 
-   http://localhost:8081
-5. When you browse a website, the browser forwards that request to port 8081 of the agent,
+   http://localhost:8080
+5. When you browse a website, the browser forwards that request to port 8080 of the agent,
    agent gets that and sends it to nextensio cluster websocket. Agent takes the response
-   from websocket and sends it back to the browser thats connected to agent's port 8081
+   from websocket and sends it back to the browser thats connected to agent's port 8080
 
 ### Basic Connector operation
 
@@ -52,7 +52,7 @@ any specific route, read the code and search for catchall to know more
 
 After the agent is launched, go to http://localhost:8180 on your browser and authenticate
 yourself. The authentication details are in a section later. After that in your browser 
-settings configure the proxy to point to localhost:8081 and assuming the connector has already
+settings configure the proxy to point to localhost:8080 and assuming the connector has already
 been launched and the nextensio gateways are all setup, your traffic will start flowing 
 through nextensio agent--gateway--connector at the point.
 
@@ -121,10 +121,7 @@ Also within Authorization Code flow there is something called PKCE mode, which i
    inside nodejs - note that the javascript running in the login page is running in the browser,
    and that is not "sharing" anything with the javascript running inside nodejs - nodejs just
    "served" the login page to the browser and after that both are seperate entities. So from the
-   javascript in browser, we pass the access/id token to nodejs agent code by calling into port
-   8081 - the same port which is used as proxy port. Proxies usually do only a CONNECT http 
-   action, so the access code is sent using a GET http action and hence they dont clash. Well we
-   can just use another port also if there is a clash.
+   javascript in browser, we pass the access/id token to nodejs agent code by calling into port 8081
 
 6. The agent code gets the access/id token and sends it to the controller and says "hey controller,
    you can use these tokens to know who I am, and once you are satisfied with my identity, please
