@@ -276,7 +276,7 @@ func newGwSession(ctx context.Context, encap string) common.Transport {
 				if err.Timeout() {
 					retry++
 					if retry >= 50 {
-						log.Println("Unable to establish gateway tunnel")
+						log.Println("Unable to read onboard response from gateway tunnel")
 						return nil
 					}
 					continue

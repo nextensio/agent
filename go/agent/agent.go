@@ -1,79 +1,163 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"flag"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
+	"nextensio/agent/shared"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"gitlab.com/nextensio/common"
+	"gitlab.com/nextensio/common/messages/nxthdr"
+	"gitlab.com/nextensio/common/transport/webproxy"
 )
 
-const (
-	NXT_AGENT_PROXY  = 8080
-	NXT_OKTA_RESULTS = 8081
-	NXT_OKTA_LOGIN   = 8180
-)
+const NXT_AGENT_PROXY = 8080
 
-type registrationInfo struct {
-	Host        string   `json:"gateway"`
-	AccessToken string   `json:"accessToken"`
-	ConnectID   string   `json:"connectid"`
-	Domains     []string `json:"domains"`
-	CACert      []rune   `json:"cacert"`
-	Userid      string   `json:"userid"`
+type flowKey struct {
+	port  uint16
+	proto int
 }
 
 var controller string
-var regInfo registrationInfo
-var nxtOnboardPending bool
-var services []string
+var regInfo shared.RegistrationInfo
+var mainCtx context.Context
+var gwTun common.Transport
+var gwStreams chan common.NxtStream
+var appStreams chan common.NxtStream
+var flowLock sync.RWMutex
+var flows map[flowKey]common.Transport
+var unique uuid.UUID
 
-func oktaLogin() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./public/login.html")
-	})
-	addr := fmt.Sprintf(":%d", NXT_OKTA_LOGIN)
-	err := http.ListenAndServe(addr, mux)
-	if err != nil {
-		log.Fatal(err)
+func flowAdd(key flowKey, tun common.Transport) {
+	flowLock.Lock()
+	flows[key] = tun
+	flowLock.Unlock()
+}
+
+func flowDel(key flowKey, tun common.Transport) {
+	flowLock.Lock()
+	delete(flows, key)
+	flowLock.Unlock()
+}
+
+func flowGet(key flowKey) common.Transport {
+	var tun common.Transport
+	flowLock.RLock()
+	tun = flows[key]
+	flowLock.RUnlock()
+	return tun
+}
+
+// Stream coming from the gateway, find the corresponding app stream and send
+// the data to the app on that stream
+func gwToApp(tun common.Transport) {
+	var dest common.Transport
+
+	for {
+		hdr, buf, err := tun.Read()
+		if err != nil {
+			tun.Close()
+			if dest != nil {
+				dest.Close()
+			}
+			return
+		}
+		if dest == nil {
+			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+			key := flowKey{port: uint16(flow.Sport), proto: int(flow.Proto)}
+			dest = flowGet(key)
+			// As of today, agents are expected to only initiate flows, some day when
+			// we allow agent to agent talk, we can do some kind of app lookup here
+			// and create a new session to the app
+			if dest == nil {
+				tun.Close()
+				return
+			}
+		}
+		err = dest.Write(hdr, buf)
+		if err != nil {
+			tun.Close()
+			dest.Close()
+			return
+		}
 	}
 }
 
-func nxtOnboard() {
+// Stream coming from the app. Create a new stream to the gateway and send the
+// data to the gateway
+func appToGw(tun common.Transport) {
+	var dest common.Transport
+	var key flowKey
+	var added bool
+
+	if gwTun == nil {
+		tun.Close()
+		return
+	}
+	dest = gwTun.NewStream(nil)
+	if dest == nil {
+		tun.Close()
+		return
+	}
+
 	for {
-		resp, err := http.Get("http://" + controller + "/api/v1/onboard/" + regInfo.AccessToken)
-		if err == nil {
-			body, err := ioutil.ReadAll(resp.Body)
-			if err == nil {
-				err = json.Unmarshal(body, &regInfo)
-				if err == nil {
-					nxtOnboardPending = false
-					services = append(services, regInfo.ConnectID)
-					fmt.Println("New services", services)
-					break
+		hdr, buf, err := tun.Read()
+		if err != nil {
+			tun.Close()
+			dest.Close()
+			if added {
+				flowDel(key, tun)
+			}
+			return
+		}
+		if !added {
+			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+			key.port = uint16(flow.Sport)
+			key.proto = int(flow.Proto)
+			flowAdd(key, tun)
+			added = true
+		}
+		err = dest.Write(hdr, buf)
+		if err != nil {
+			tun.Close()
+			dest.Close()
+			flowDel(key, tun)
+			return
+		}
+	}
+}
+
+// If the gateway tunnel goes down for any reason, re-create a new tunnel
+func monitorGw() {
+	for {
+		if gwTun == nil || gwTun.IsClosed() {
+			newTun := shared.DialGateway(mainCtx, "websocket", &regInfo, gwStreams)
+			if newTun != nil {
+				if shared.OnboardTunnel(newTun, true, &regInfo, unique.String()) == nil {
+					gwTun = newTun
+					// Note that we are not launching an goroutines to read/write out of this
+					// stream (first stream to the gateway), appToGw() always creates a new
+					// stream over this session. Eventually we will support L3 raw ip pkt mode
+					// for our agent and at that time the first stream will be used to tx/rx
+					// all L3 packets
+				} else {
+					newTun.Close()
 				}
 			}
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 }
 
-func oktaResults() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/accessid/", func(w http.ResponseWriter, r *http.Request) {
-		regInfo.AccessToken = r.URL.Query().Get("access")
-		if !nxtOnboardPending {
-			nxtOnboardPending = true
-			go nxtOnboard()
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-	addr := fmt.Sprintf(":%d", NXT_OKTA_RESULTS)
-	http.ListenAndServe(addr, mux)
+// Onboarding succesfully completed. Now start listening for data from the apps,
+// and establish tunnels to the gateway
+func onboarded() {
+	p := webproxy.NewListener(NXT_AGENT_PROXY)
+	go p.Listen(appStreams)
+	go monitorGw()
 }
 
 func args() {
@@ -82,12 +166,27 @@ func args() {
 	flag.Parse()
 	controller = *c
 	svcs := strings.TrimSpace(*s)
-	services = strings.Fields(svcs)
-	fmt.Println("controller", controller, "services", services)
+	regInfo.Services = strings.Fields(svcs)
 }
 
 func main() {
+	mainCtx = context.Background()
+	unique = uuid.New()
+	gwStreams = make(chan common.NxtStream)
+	appStreams = make(chan common.NxtStream)
+	flows = make(map[flowKey]common.Transport)
+
 	args()
-	go oktaLogin()
-	oktaResults()
+	shared.OktaInit(&regInfo, controller, onboarded)
+
+	// Keep monitoring for new streams from either gateway or app direction,
+	// and launch workers that will cross connect them to the other direction
+	for {
+		select {
+		case stream := <-gwStreams:
+			go gwToApp(stream.Stream)
+		case stream := <-appStreams:
+			go appToGw(stream.Stream)
+		}
+	}
 }
