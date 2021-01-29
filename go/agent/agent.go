@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"net"
 	"nextensio/agent/shared"
 	"strings"
 	"sync"
@@ -65,8 +66,8 @@ func gwToApp(tun common.Transport) {
 			}
 			return
 		}
+		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 		if dest == nil {
-			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 			key := flowKey{port: uint16(flow.Sport), proto: int(flow.Proto)}
 			dest = flowGet(key)
 			// As of today, agents are expected to only initiate flows, some day when
@@ -113,13 +114,29 @@ func appToGw(tun common.Transport) {
 			}
 			return
 		}
+		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 		if !added {
-			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 			key.port = uint16(flow.Sport)
 			key.proto = int(flow.Proto)
 			flowAdd(key, tun)
 			added = true
 		}
+		// If we could not get a valid service name and has to default to IP address,
+		// then we just have to rely on customer punching in the IP/subnet and us routing
+		// based on that information
+		if net.ParseIP(flow.DestAgent) == nil {
+			// If the domain doesnt match any of the customer private domains, then its
+			// default internet service, otherwise its a customer private service
+			flow.DestAgent = "default-internet"
+			for _, d := range regInfo.Domains {
+				if strings.Contains(flow.DestAgent, d) {
+					flow.DestAgent = d
+					break
+				}
+			}
+		}
+		flow.SourceAgent = regInfo.ConnectID
+		flow.OriginAgent = regInfo.ConnectID
 		err = dest.Write(hdr, buf)
 		if err != nil {
 			tun.Close()
