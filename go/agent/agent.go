@@ -191,7 +191,7 @@ func args() {
 	regInfo.Services = strings.Fields(svcs)
 }
 
-func main() {
+func agent_main(loginFile string) {
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
@@ -199,7 +199,7 @@ func main() {
 	flows = make(map[flowKey]common.Transport)
 
 	args()
-	shared.OktaInit(&regInfo, controller, onboarded)
+	shared.OktaInit(&regInfo, controller, loginFile, onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction
@@ -211,4 +211,10 @@ func main() {
 			go appToGw(stream.Stream)
 		}
 	}
+}
+
+// TODO: The main will eventually move out of here and agent will become just a lib,
+// the agent_main() will get called from android/ios/windows etc..
+func main() {
+	agent_main("/var/okta/login.html")
 }

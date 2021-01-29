@@ -32,10 +32,10 @@ type RegistrationInfo struct {
 
 var nxtOnboardPending bool
 
-func oktaLogin() {
+func oktaLogin(loginFile string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./public/login.html")
+		http.ServeFile(w, r, loginFile)
 	})
 	addr := fmt.Sprintf(":%d", NXT_OKTA_LOGIN)
 	err := http.ListenAndServe(addr, mux)
@@ -78,8 +78,8 @@ func oktaResults(regInfo *RegistrationInfo, controller string, callback func()) 
 	http.ListenAndServe(addr, mux)
 }
 
-func OktaInit(regInfo *RegistrationInfo, controller string, callback func()) {
-	go oktaLogin()
+func OktaInit(regInfo *RegistrationInfo, controller string, loginFile string, callback func()) {
+	go oktaLogin(loginFile)
 	go oktaResults(regInfo, controller, callback)
 }
 

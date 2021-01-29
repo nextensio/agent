@@ -1,4 +1,5 @@
 .vscode
+go/files/gitlab_rsa
 go/go.sum
 go/agent/agent
 go/agent/go.sum
