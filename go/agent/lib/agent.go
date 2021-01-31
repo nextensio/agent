@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"flag"
+	"log"
 	"net"
 	"nextensio/agent/shared"
 	"strings"
@@ -143,6 +144,9 @@ func appToGw(tun common.Transport) {
 						break
 					}
 				}
+			} else {
+				log.Println("Forward to ip address", flow.DestAgent, flow.Dest, "proto", flow.Proto)
+				destAgent = "default-internet"
 			}
 		}
 		if destAgent != "" {
