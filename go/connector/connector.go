@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"nextensio/agent/shared"
 	"strings"
@@ -79,9 +80,11 @@ func appToGw(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
 		buf := make([]byte, common.MAXBUF)
 		n, err := src.Read(buf)
 		if err != nil {
-			src.Close()
-			dest.Close()
-			return
+			if err != io.EOF || n == 0 {
+				src.Close()
+				dest.Close()
+				return
+			}
 		}
 		hdr := nxthdr.NxtHdr{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
