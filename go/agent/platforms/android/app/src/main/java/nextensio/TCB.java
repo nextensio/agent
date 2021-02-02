@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package xyz.hexene.localvpn;
+package nextensio;
 
 import java.io.IOException;
 import java.nio.channels.SelectionKey;

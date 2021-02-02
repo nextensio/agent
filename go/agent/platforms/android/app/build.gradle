@@ -5,7 +5,7 @@ android {
     buildToolsVersion '30.0.3'
 
     defaultConfig {
-        applicationId "xyz.hexene.localvpn"
+        applicationId "nextensio"
         minSdkVersion 14
         targetSdkVersion 21
         versionCode 1

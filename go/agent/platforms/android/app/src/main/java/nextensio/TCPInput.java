@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package xyz.hexene.localvpn;
+package nextensio;
 
 import android.util.Log;
 
@@ -27,7 +27,7 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import xyz.hexene.localvpn.TCB.TCBStatus;
+import nextensio.TCB.TCBStatus;
 
 public class TCPInput implements Runnable
 {
