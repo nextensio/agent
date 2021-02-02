@@ -31,7 +31,7 @@ import java.nio.channels.Selector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class LocalVPNService extends VpnService
+public class NxtAgentService extends VpnService
 {
     private static final String TAG = "NxtAgent";
     private static final String VPN_ADDRESS = "169.254.2.1"; // Select a link local IP
