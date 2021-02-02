@@ -1,5 +1,3 @@
-
-
 package nextensio.agent;
 
 import android.content.BroadcastReceiver;
