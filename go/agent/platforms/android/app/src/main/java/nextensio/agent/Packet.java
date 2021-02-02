@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package nextensio;
+package nextensio.agent;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;

@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package nextensio;
+package nextensio.agent;
 
 import android.util.Log;
 
@@ -28,8 +28,8 @@ import java.nio.channels.SocketChannel;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import nextensio.Packet.TCPHeader;
-import nextensio.TCB.TCBStatus;
+import nextensio.agent.Packet.TCPHeader;
+import nextensio.agent.TCB.TCBStatus;
 
 public class TCPOutput implements Runnable
 {

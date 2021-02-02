@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package nextensio;
+package nextensio.agent;
 
 import java.io.IOException;
 import java.nio.channels.SelectionKey;

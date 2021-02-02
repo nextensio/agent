@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package nextensio;
+package nextensio.agent;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentLinkedQueue;

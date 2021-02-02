@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package nextensio;
+package nextensio.agent;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -51,8 +51,8 @@ public class LocalVPN extends ActionBarActivity
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_local_vpn);
-        final Button vpnButton = (Button)findViewById(R.id.vpn);
+        setContentView(R.layout.activity_nextensio);
+        final Button vpnButton = (Button)findViewById(R.id.agent);
         vpnButton.setOnClickListener(new View.OnClickListener()
         {
             @Override
@@ -96,16 +96,16 @@ public class LocalVPN extends ActionBarActivity
 
     private void enableButton(boolean enable)
     {
-        final Button vpnButton = (Button) findViewById(R.id.vpn);
+        final Button vpnButton = (Button) findViewById(R.id.agent);
         if (enable)
         {
             vpnButton.setEnabled(true);
-            vpnButton.setText(R.string.start_vpn);
+            vpnButton.setText(R.string.start_agent);
         }
         else
         {
             vpnButton.setEnabled(false);
-            vpnButton.setText(R.string.stop_vpn);
+            vpnButton.setText(R.string.stop_agent);
         }
     }
 }

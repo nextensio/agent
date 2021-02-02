@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-package nextensio;
+package nextensio.agent;
 
 import android.util.Log;
 
@@ -27,7 +27,7 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import nextensio.TCB.TCBStatus;
+import nextensio.agent.TCB.TCBStatus;
 
 public class TCPInput implements Runnable
 {
