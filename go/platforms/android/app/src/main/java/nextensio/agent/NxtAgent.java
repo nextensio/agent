@@ -15,8 +15,10 @@ import android.widget.Button;
 public class NxtAgent extends ActionBarActivity
 {
     private static final int VPN_REQUEST_CODE = 0x0F;
-
     private boolean waitingForVPNStart;
+    private boolean goLoaded;
+    private static Context context;
+    
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver()
     {
@@ -35,6 +37,11 @@ public class NxtAgent extends ActionBarActivity
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+        if (!goLoaded) {
+            this.context = getApplicationContext();
+            SharedLibraryLoader.loadSharedLibrary(this.context, "nxt-go");
+            goLoaded = true;
+        }
         setContentView(R.layout.activity_nextensio);
         final Button vpnButton = (Button)findViewById(R.id.agent);
         vpnButton.setOnClickListener(new View.OnClickListener()

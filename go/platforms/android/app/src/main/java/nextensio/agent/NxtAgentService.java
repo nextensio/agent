@@ -33,7 +33,8 @@ public class NxtAgentService extends VpnService
         {
             int fd = vpnInterface.detachFd();
             LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
-            Log.i(TAG, "Start "+fd);
+            Log.i(TAG, "Start ");
+            nxtOn(fd);
         }
         finally {
             
