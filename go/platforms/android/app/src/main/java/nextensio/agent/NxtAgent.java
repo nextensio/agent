@@ -12,21 +12,17 @@ import android.view.View;
 import android.widget.Button;
 
 
-public class NxtAgent extends ActionBarActivity
-{
+public class NxtAgent extends ActionBarActivity {
     private static final int VPN_REQUEST_CODE = 0x0F;
     private boolean waitingForVPNStart;
     private boolean goLoaded;
     private static Context context;
     
 
-    private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver()
-    {
+    private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent)
-        {
-            if (NxtAgentService.BROADCAST_VPN_STATE.equals(intent.getAction()))
-            {
+        public void onReceive(Context context, Intent intent) {
+            if (NxtAgentService.BROADCAST_VPN_STATE.equals(intent.getAction())) {
                 if (intent.getBooleanExtra("running", false))
                     waitingForVPNStart = false;
             }
@@ -34,8 +30,7 @@ public class NxtAgent extends ActionBarActivity
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState)
-    {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (!goLoaded) {
             this.context = getApplicationContext();
@@ -44,11 +39,9 @@ public class NxtAgent extends ActionBarActivity
         }
         setContentView(R.layout.activity_nextensio);
         final Button vpnButton = (Button)findViewById(R.id.agent);
-        vpnButton.setOnClickListener(new View.OnClickListener()
-        {
+        vpnButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v)
-            {
+            public void onClick(View v) {
                 startVPN();
             }
         });
@@ -57,8 +50,7 @@ public class NxtAgent extends ActionBarActivity
                 new IntentFilter(NxtAgentService.BROADCAST_VPN_STATE));
     }
 
-    private void startVPN()
-    {
+    private void startVPN() {
         Intent vpnIntent = VpnService.prepare(this);
         if (vpnIntent != null)
             startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
@@ -67,11 +59,9 @@ public class NxtAgent extends ActionBarActivity
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data)
-    {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK)
-        {
+        if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
             waitingForVPNStart = true;
             startService(new Intent(this, NxtAgentService.class));
             enableButton(false);
@@ -85,16 +75,13 @@ public class NxtAgent extends ActionBarActivity
         enableButton(!waitingForVPNStart && !NxtAgentService.isRunning());
     }
 
-    private void enableButton(boolean enable)
-    {
+    private void enableButton(boolean enable) {
         final Button vpnButton = (Button) findViewById(R.id.agent);
-        if (enable)
-        {
+        if (enable) {
             vpnButton.setEnabled(true);
             vpnButton.setText(R.string.start_agent);
         }
-        else
-        {
+        else {
             vpnButton.setEnabled(false);
             vpnButton.setText(R.string.stop_agent);
         }

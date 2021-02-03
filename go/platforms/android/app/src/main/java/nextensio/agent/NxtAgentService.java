@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
 import android.support.v4.content.LocalBroadcastManager;
+import android.content.pm.PackageManager;
 import android.util.Log;
 
 import java.io.Closeable;
@@ -12,8 +13,7 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.channels.Selector;
 
-public class NxtAgentService extends VpnService
-{
+public class NxtAgentService extends VpnService {
     private static final String TAG = "NxtAgent";
     private static final String VPN_ADDRESS = "169.254.2.1"; // Select a link local IP
     private static final String VPN_ROUTE = "0.0.0.0"; 
@@ -24,13 +24,11 @@ public class NxtAgentService extends VpnService
 
 
     @Override
-    public void onCreate()
-    {
+    public void onCreate() {
         super.onCreate();
         isRunning = true;
         setupVPN();
-        try
-        {
+        try {
             int fd = vpnInterface.detachFd();
             LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
             Log.i(TAG, "Start ");
@@ -41,56 +39,52 @@ public class NxtAgentService extends VpnService
         }
     }
 
-    private void setupVPN()
-    {
-        if (vpnInterface == null)
-        {
+    private void setupVPN() {
+        if (vpnInterface == null) {
             Builder builder = new Builder();
             builder.addAddress(VPN_ADDRESS, 32);
             builder.addRoute(VPN_ROUTE, 0);
+            try {
+            builder.addDisallowedApplication("nextensio.agent");
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.i(TAG, "Unable to protect the entire application");
+            }
+            builder.setBlocking(true);
             vpnInterface = builder.setSession(getString(R.string.app_name)).setConfigureIntent(pendingIntent).establish();
         }
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId)
-    {
+    public int onStartCommand(Intent intent, int flags, int startId) {
         return START_STICKY;
     }
 
-    public static boolean isRunning()
-    {
+    public static boolean isRunning() {
         return isRunning;
     }
 
     @Override
-    public void onDestroy()
-    {
+    public void onDestroy() {
         super.onDestroy();
         isRunning = false;
         cleanup();
         Log.i(TAG, "Destroyed");
     }
 
-    private void cleanup()
-    {
+    private void cleanup() {
         closeResources(vpnInterface);
     }
 
-    private static void closeResources(Closeable... resources)
-    {
+    private static void closeResources(Closeable... resources) {
         for (Closeable resource : resources)
         {
-            try
-            {
+            try {
                 resource.close();
             }
-            catch (IOException e)
-            {
+            catch (IOException e) {
                 // Ignore
             }
-            finally
-            {
+            finally {
             }
         }
     }
