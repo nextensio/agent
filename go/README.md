@@ -42,6 +42,9 @@ To compile the android agent, do the following
 
 5. Now if we click play on the studio, the app will get launched into the emulator 
 
+6. We can also do a commmand line compile by saying "./gradlew assembleRelease" in the 
+   platforms/android directory
+
 ## Connector
 
 The connector is expected to run on one platform which is linux, and we will
