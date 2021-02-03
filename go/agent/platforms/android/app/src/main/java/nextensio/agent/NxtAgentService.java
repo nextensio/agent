@@ -37,7 +37,7 @@ public class NxtAgentService extends VpnService
         try
         {
             executorService = Executors.newFixedThreadPool(1);
-            executorService.submit(new VPNRunnable(vpnInterface.getFileDescriptor()));
+            executorService.submit(new VPNRunnable(vpnInterface.detachFd()));
             LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
             Log.i(TAG, "Start");
         }
@@ -105,10 +105,10 @@ public class NxtAgentService extends VpnService
     {
         private static final String TAG = "NxtThread";
 
-        private FileDescriptor vpnFileDescriptor;
+        private int vpnFileDescriptor;
 
 
-        public VPNRunnable(FileDescriptor vpnFileDescriptor)
+        public VPNRunnable(int vpnFileDescriptor)
         {
             this.vpnFileDescriptor = vpnFileDescriptor;
         }
