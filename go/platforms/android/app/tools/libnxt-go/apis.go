@@ -14,7 +14,7 @@ func (l AndroidLogger) Write(p []byte) (int, error) {
 }
 
 func init() {
-	C.__android_log_write(l.level, C.CString("Nextensio/Go/"), C.CString("Init Called"))
+	C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("Nextensio/Go/"), C.CString("Init Called"))
 }
 
 //export nxtOn
