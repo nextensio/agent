@@ -14,7 +14,6 @@ go/platforms/docker/go.sum
 
 go/platforms/android/app/.cxx
 go/platforms/android/.gradle/
-go/platforms/android/gradle/
 go/platforms/android/.idea/*.xml
 go/platforms/android/.idea/caches/
 go/platforms/android/.idea/modules/
