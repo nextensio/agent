@@ -7,3 +7,8 @@ platforms which implement a thin layer to just provide us with packets.
 The platforms directory contains the platforms where the go code runs natively
 (ie without any CGO etc..), today its just a docker test container platform,
 tomorrow there can be a linux native agent in there for example
+
+## Connector
+
+The connector is expected to run on one platform which is linux, and we will
+most likely package the connector as a docker container
