@@ -165,10 +165,10 @@ func appToGw(tun common.Transport) {
 }
 
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
-func monitorGw() {
+func monitorGw(lg *log.Logger) {
 	for {
 		if gwTun == nil || gwTun.IsClosed() {
-			newTun := shared.DialGateway(mainCtx, "websocket", &regInfo, gwStreams)
+			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
 				if shared.OnboardTunnel(newTun, true, &regInfo, unique.String()) == nil {
 					gwTun = newTun
@@ -188,9 +188,9 @@ func monitorGw() {
 
 // Onboarding succesfully completed. Now start listening for data from the apps,
 // and establish tunnels to the gateway
-func onboarded() {
+func onboarded(lg *log.Logger) {
 	// We listen for an http proxy request
-	p := webproxy.NewListener(NXT_AGENT_PROXY)
+	p := webproxy.NewListener(mainCtx, lg, NXT_AGENT_PROXY)
 	go p.Listen(appStreams)
 
 	// If the agent has a source of l3 IP packets, then we also try and
@@ -198,14 +198,14 @@ func onboarded() {
 	// is a combination of a source of l3 IP packets (a file descriptor here)
 	// and a proxy that terminates the packets to tcp/udp
 	if pktIface != nil {
-		f := fd.NewClient(mainCtx, uintptr(pktIface.Fd))
+		f := fd.NewClient(mainCtx, lg, uintptr(pktIface.Fd))
 		f.Dial(appStreams)
-		p := proxy.NewListener(f, pktIface.IP)
+		p := proxy.NewListener(mainCtx, lg, f, pktIface.IP)
 		go p.Listen(appStreams)
 	}
 
 	// Go get the gateway tunnel up
-	go monitorGw()
+	go monitorGw(lg)
 }
 
 func args() {
@@ -223,7 +223,7 @@ func args() {
 // pktFD if 0 is just ignored. If non zero, its assumed to be the descriptor
 // for a device which gives us L3 packets, which we terminate and get udp/tcp
 // out of it
-func AgentMain(loginFile string, iface *Iface) {
+func AgentMain(lg *log.Logger, loginFile string, iface *Iface) {
 	mainCtx = context.Background()
 	pktIface = iface
 	unique = uuid.New()
@@ -232,7 +232,7 @@ func AgentMain(loginFile string, iface *Iface) {
 	flows = make(map[flowKey]common.Transport)
 
 	args()
-	shared.OktaInit(&regInfo, controller, loginFile, onboarded)
+	shared.OktaInit(lg, &regInfo, controller, loginFile, onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	agent "nextensio/agent/agent/lib"
 	"os"
@@ -36,7 +37,7 @@ func configTun() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = exec.Command("bash", "-c", "ifconfig tun0 1.1.1.1 netmask 255.255.255.0").Output()
+	_, err = exec.Command("bash", "-c", "ifconfig tun0 169.254.2.1 netmask 255.255.255.0").Output()
 	if err != nil {
 		panic(err)
 	}
@@ -52,7 +53,7 @@ func configTun() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = exec.Command("bash", "-c", "ip route add default via 1.1.1.1 dev tun0 table nxt").Output()
+	_, err = exec.Command("bash", "-c", "ip route add default via 169.254.2.1 dev tun0 table nxt").Output()
 	if err != nil {
 		panic(err)
 	}
@@ -91,7 +92,8 @@ func createTun() int {
 }
 
 func main() {
-	iface := agent.Iface{Fd: createTun(), IP: net.ParseIP("1.1.1.1")}
+	iface := agent.Iface{Fd: createTun(), IP: net.ParseIP("169.254.2.1")}
 	configTun()
-	agent.AgentMain("/var/okta/login.html", &iface)
+	lg := log.New(os.Stdout, "AGT", 0)
+	agent.AgentMain(lg, "/var/okta/login.html", &iface)
 }

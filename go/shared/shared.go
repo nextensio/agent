@@ -49,7 +49,7 @@ func oktaLogin(loginFile string) {
 	}
 }
 
-func nxtOnboard(regInfo *RegistrationInfo, controller string, callback func()) {
+func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
 	for {
 		resp, err := http.Get("http://" + controller + "/api/v1/onboard/" + regInfo.AccessToken)
 		if err == nil {
@@ -60,7 +60,7 @@ func nxtOnboard(regInfo *RegistrationInfo, controller string, callback func()) {
 					nxtOnboardPending = false
 					nxtOnboarded = true
 					regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
-					callback()
+					callback(lg)
 					break
 				}
 			}
@@ -70,13 +70,13 @@ func nxtOnboard(regInfo *RegistrationInfo, controller string, callback func()) {
 	}
 }
 
-func oktaResults(regInfo *RegistrationInfo, controller string, callback func()) {
+func oktaResults(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/accessid/", func(w http.ResponseWriter, r *http.Request) {
 		regInfo.AccessToken = r.URL.Query().Get("access")
 		if !nxtOnboardPending {
 			nxtOnboardPending = true
-			go nxtOnboard(regInfo, controller, callback)
+			go nxtOnboard(lg, regInfo, controller, callback)
 		}
 		w.WriteHeader(http.StatusOK)
 	})
@@ -84,16 +84,16 @@ func oktaResults(regInfo *RegistrationInfo, controller string, callback func()) 
 	http.ListenAndServe(addr, mux)
 }
 
-func OktaInit(regInfo *RegistrationInfo, controller string, loginFile string, callback func()) {
+func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string, loginFile string, callback func(*log.Logger)) {
 	go oktaLogin(loginFile)
-	go oktaResults(regInfo, controller, callback)
+	go oktaResults(lg, regInfo, controller, callback)
 }
 
 // Create a websocket session to the gateway
-func dialWebsocket(ctx context.Context, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
+func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
 	req := http.Header{}
 	req.Add("x-nextensio-connect", regInfo.ConnectID)
-	wsock := websock.NewClient(ctx, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req)
+	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req)
 	if err := wsock.Dial(c); err != nil {
 		log.Println("Cannot dial websocket", err)
 		return nil
@@ -104,9 +104,9 @@ func dialWebsocket(ctx context.Context, regInfo *RegistrationInfo, c chan common
 
 // Create a tunnel/session to the gateway with the given encap. We can expect
 // more and more encap types to get added here over time (like rsocket for example)
-func DialGateway(ctx context.Context, encap string, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
+func DialGateway(ctx context.Context, lg *log.Logger, encap string, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
 	if encap == "websocket" {
-		return dialWebsocket(ctx, regInfo, c)
+		return dialWebsocket(ctx, lg, regInfo, c)
 	} else {
 		panic(encap)
 	}

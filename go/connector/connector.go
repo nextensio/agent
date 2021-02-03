@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"nextensio/agent/shared"
+	"os"
 	"strings"
 	"time"
 
@@ -98,10 +100,10 @@ func appToGw(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
 }
 
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
-func monitorGw() {
+func monitorGw(lg *log.Logger) {
 	for {
 		if gwTun == nil || gwTun.IsClosed() {
-			newTun := shared.DialGateway(mainCtx, "websocket", &regInfo, gwStreams)
+			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
 				if shared.OnboardTunnel(newTun, false, &regInfo, unique.String()) == nil {
 					gwTun = newTun
@@ -121,8 +123,8 @@ func monitorGw() {
 
 // Onboarding succesfully completed. Now start listening for data from the apps,
 // and establish tunnels to the gateway
-func onboarded() {
-	go monitorGw()
+func onboarded(lg *log.Logger) {
+	go monitorGw(lg)
 }
 
 func args() {
@@ -138,9 +140,9 @@ func main() {
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
-
+	lg := log.New(os.Stdout, "CNTR", 0)
 	args()
-	shared.OktaInit(&regInfo, controller, "/var/okta/login.html", onboarded)
+	shared.OktaInit(lg, &regInfo, controller, "/var/okta/login.html", onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction
