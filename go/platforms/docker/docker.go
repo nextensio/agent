@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
-	agent "nextensio/agent/agent/lib"
+	"nextensio/agent/agent"
 	"os"
 	"os/exec"
 	"unsafe"

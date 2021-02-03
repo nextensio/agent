@@ -10,10 +10,7 @@ import android.util.Log;
 import java.io.Closeable;
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.channels.Selector;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class NxtAgentService extends VpnService
 {
@@ -23,9 +20,7 @@ public class NxtAgentService extends VpnService
     public static final String BROADCAST_VPN_STATE = "nextensio.agent.VPN_STATE";
     private static boolean isRunning = false;
     private ParcelFileDescriptor vpnInterface = null;
-
     private PendingIntent pendingIntent;
-    private ExecutorService executorService;
 
 
     @Override
@@ -36,10 +31,9 @@ public class NxtAgentService extends VpnService
         setupVPN();
         try
         {
-            executorService = Executors.newFixedThreadPool(1);
-            executorService.submit(new VPNRunnable(vpnInterface.detachFd()));
+            int fd = vpnInterface.detachFd();
             LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
-            Log.i(TAG, "Start");
+            Log.i(TAG, "Start "+fd);
         }
         finally {
             
@@ -73,7 +67,6 @@ public class NxtAgentService extends VpnService
     {
         super.onDestroy();
         isRunning = false;
-        executorService.shutdownNow();
         cleanup();
         Log.i(TAG, "Destroyed");
     }
@@ -101,36 +94,5 @@ public class NxtAgentService extends VpnService
         }
     }
 
-    private static class VPNRunnable implements Runnable
-    {
-        private static final String TAG = "NxtThread";
-
-        private int vpnFileDescriptor;
-
-
-        public VPNRunnable(int vpnFileDescriptor)
-        {
-            this.vpnFileDescriptor = vpnFileDescriptor;
-        }
-
-        @Override
-        public void run()
-        {
-            Log.i(TAG, "Read/write pkts from descriptor " + vpnFileDescriptor);
-
-            try
-            {
-                while (true) {
-                    Thread.sleep(10);
-                }
-            }
-            catch (InterruptedException e)
-            {
-                Log.i(TAG, "Stopping");
-            }
-            finally
-            {
-            }
-        }
-    }
+    private static native int nxtOn(int tunFd);
 }

@@ -18,7 +18,7 @@ export CGO_ENABLED := 1
 
 default: $(DESTDIR)/libnxt-go.so
 
-$(DESTDIR)/libnxt-go.so: go.mod
+$(DESTDIR)/libnxt-go.so:
 	go build -tags linux -v -trimpath -o "$@" -buildmode c-shared
 
 .DELETE_ON_ERROR:

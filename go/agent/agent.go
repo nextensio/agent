@@ -5,7 +5,7 @@ import (
 	"flag"
 	"log"
 	"net"
-	"nextensio/shared"
+	"nextensio/agent/shared"
 	"strings"
 	"sync"
 	"time"
