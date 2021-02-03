@@ -10,6 +10,7 @@ go/connector/go.sum
 go/shared/go.sum
 
 go/platforms/docker/docker
+go/platforms/docker/go.sum
 
 go/platforms/android/.gradle/
 go/platforms/android/.idea/*.xml

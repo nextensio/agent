@@ -7,7 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
-	"nextensio/agent/agtshared"
+	"nextensio/agent/shared"
 	"os"
 	"strings"
 	"time"
@@ -18,7 +18,7 @@ import (
 )
 
 var controller string
-var regInfo agtshared.RegistrationInfo
+var regInfo shared.RegistrationInfo
 var mainCtx context.Context
 var gwTun common.Transport
 var gwStreams chan common.NxtStream
@@ -103,9 +103,9 @@ func appToGw(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
 func monitorGw(lg *log.Logger) {
 	for {
 		if gwTun == nil || gwTun.IsClosed() {
-			newTun := agtshared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
+			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
-				if agtshared.OnboardTunnel(newTun, false, &regInfo, unique.String()) == nil {
+				if shared.OnboardTunnel(newTun, false, &regInfo, unique.String()) == nil {
 					gwTun = newTun
 					// Note that we are not launching an goroutines to read/write out of this
 					// stream (first stream to the gateway), appToGw() always creates a new
@@ -142,7 +142,7 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	lg := log.New(os.Stdout, "CNTR", 0)
 	args()
-	agtshared.OktaInit(lg, &regInfo, controller, "/var/okta/login.html", onboarded)
+	shared.OktaInit(lg, &regInfo, controller, "/var/okta/login.html", onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction
