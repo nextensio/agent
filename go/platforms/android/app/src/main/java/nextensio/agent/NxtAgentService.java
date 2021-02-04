@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor;
 import android.support.v4.content.LocalBroadcastManager;
 import android.content.pm.PackageManager;
 import android.util.Log;
+import android.content.Context;
 
 import java.io.Closeable;
 import java.io.FileDescriptor;
@@ -21,13 +22,19 @@ public class NxtAgentService extends VpnService {
     private static boolean isRunning = false;
     private ParcelFileDescriptor vpnInterface = null;
     private PendingIntent pendingIntent;
-
+    private boolean goLoaded;
+    private static Context context;
 
     @Override
     public void onCreate() {
         super.onCreate();
         isRunning = true;
         setupVPN();
+        if (!goLoaded) {
+            this.context = getApplicationContext();
+            SharedLibraryLoader.loadSharedLibrary(this.context, "nxt-go");
+            goLoaded = true;
+        }
         try {
             int fd = vpnInterface.detachFd();
             LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));

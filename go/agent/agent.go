@@ -145,7 +145,7 @@ func directOut(tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
 
 // Stream coming from the gateway, find the corresponding app stream and send
 // the data to the app on that stream
-func gwToApp(tun common.Transport) {
+func gwToApp(lg *log.Logger, tun common.Transport) {
 	var dest common.Transport
 
 	for {
@@ -180,7 +180,7 @@ func gwToApp(tun common.Transport) {
 
 // Stream coming from the app. Create a new stream to the gateway and send the
 // data to the gateway
-func appToGw(tun common.Transport) {
+func appToGw(lg *log.Logger, tun common.Transport) {
 	var dest common.Transport
 	var key flowKey
 	var seen bool
@@ -284,15 +284,15 @@ func onboarded(lg *log.Logger) {
 	go monitorGw(lg)
 }
 
-func monitorStreams() {
+func monitorStreams(lg *log.Logger) {
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction
 	for {
 		select {
 		case stream := <-gwStreams:
-			go gwToApp(stream.Stream)
+			go gwToApp(lg, stream.Stream)
 		case stream := <-appStreams:
-			go appToGw(stream.Stream)
+			go appToGw(lg, stream.Stream)
 		}
 	}
 }
@@ -321,7 +321,7 @@ func AgentInit(lg *log.Logger) {
 
 	args()
 	shared.OktaInit(lg, &regInfo, controller, onboarded)
-	go monitorStreams()
+	go monitorStreams(lg)
 }
 
 func AgentIface(lg *log.Logger, iface *Iface) {
