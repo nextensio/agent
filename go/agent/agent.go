@@ -223,7 +223,7 @@ func args() {
 // pktFD if 0 is just ignored. If non zero, its assumed to be the descriptor
 // for a device which gives us L3 packets, which we terminate and get udp/tcp
 // out of it
-func AgentMain(lg *log.Logger, loginFile string, iface *Iface) {
+func AgentMain(lg *log.Logger, iface *Iface) {
 	mainCtx = context.Background()
 	pktIface = iface
 	unique = uuid.New()
@@ -232,7 +232,7 @@ func AgentMain(lg *log.Logger, loginFile string, iface *Iface) {
 	flows = make(map[flowKey]common.Transport)
 
 	args()
-	shared.OktaInit(lg, &regInfo, controller, loginFile, onboarded)
+	shared.OktaInit(lg, &regInfo, controller, onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction

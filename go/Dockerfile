@@ -23,10 +23,6 @@ RUN chmod 400 /etc/lighttpd/certs/lighttpd.pem
 COPY files/http/config/lighttpd.conf /etc/lighttpd/lighttpd.conf
 RUN chmod 777 /var/log/lighttpd
 
-# The login files required for okta onboarding
-RUN mkdir -p /var/okta/
-COPY files/okta/* /var/okta/
-
 # Now compile the code
 WORKDIR /go/src/app
 RUN mkdir -p /root/.ssh

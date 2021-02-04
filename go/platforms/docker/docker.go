@@ -95,5 +95,5 @@ func main() {
 	iface := agent.Iface{Fd: createTun(), IP: net.ParseIP("169.254.2.1")}
 	configTun()
 	lg := log.New(os.Stdout, "AGT", 0)
-	agent.AgentMain(lg, "/var/okta/login.html", &iface)
+	agent.AgentMain(lg, &iface)
 }

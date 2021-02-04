@@ -142,7 +142,7 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	lg := log.New(os.Stdout, "CNTR", 0)
 	args()
-	shared.OktaInit(lg, &regInfo, controller, "/var/okta/login.html", onboarded)
+	shared.OktaInit(lg, &regInfo, controller, onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction
