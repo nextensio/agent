@@ -45,10 +45,18 @@ public class NxtAgentService extends VpnService {
             builder.addAddress(VPN_ADDRESS, 32);
             builder.addRoute(VPN_ROUTE, 0);
             try {
-            builder.addDisallowedApplication("nextensio.agent");
+                // We dont want our own packets to be looped back via VPN to ourselves.
+                // Usually android does that using a "socket.protect" call for each socket
+                // we establish. But we are going to interface with golang and we dont want
+                // to create some api back from golang to java for this purpose. Hopefully
+                // this achieves the purpose. Later when we have an "allowed-application"
+                // list, that also hopefully excludes ourselves automatically without the
+                // need to call a socket.protect
+                builder.addDisallowedApplication("nextensio.agent");
             } catch (PackageManager.NameNotFoundException e) {
                 Log.i(TAG, "Unable to protect the entire application");
             }
+            // golang code works with blocking sockets
             builder.setBlocking(true);
             vpnInterface = builder.setSession(getString(R.string.app_name)).setConfigureIntent(pendingIntent).establish();
         }

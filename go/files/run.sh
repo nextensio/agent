@@ -15,9 +15,9 @@ cp /go/files/index.html /var/www/html/index.lighttpd.html
 # If node dies because of some exception etc.., the container will restart
 if [ "$NXT_AGENT" == "true" ];
 then
-    2>&1 GODEBUG=x509ignoreCN=0 /go/bin/docker -service "$NXT_SERVICES" -controller $NXT_CONTROLLER  > /var/log/agent.log &
+    2>&1 /go/bin/docker -service "$NXT_SERVICES" -controller $NXT_CONTROLLER  > /var/log/agent.log &
 else
-    2>&1 GODEBUG=x509ignoreCN=0 /go/bin/connector -service "$NXT_SERVICES" -controller $NXT_CONTROLLER > /var/log/agent.log &
+    2>&1 /go/bin/connector -service "$NXT_SERVICES" -controller $NXT_CONTROLLER > /var/log/agent.log &
 fi
 
 tail -f /dev/null
