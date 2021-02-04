@@ -67,22 +67,42 @@ func flowGet(key flowKey) common.Transport {
 // to parse dns requests for private domains registered with nextensio, and send a dns
 // response back for those domains. The directOut/directIN APIs are for packets like dns
 // that can end up bypassing nextensio
-func directIn(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
+func directIn(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
 	for {
 		buf := make([]byte, common.MAXBUF)
-		n, err := src.Read(buf)
+		if flow.Proto == common.TCP {
+			src.Conn.SetReadDeadline(time.Now().Add(shared.TCP_AGER))
+		} else {
+			src.Conn.SetReadDeadline(time.Now().Add(shared.UDP_AGER))
+		}
+		rx := src.Rx
+		tx := src.Tx
+		n, err := src.Conn.Read(buf)
 		if err != nil {
-			if err != io.EOF || n == 0 {
-				src.Close()
-				dest.Close()
-				return
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				// We have not had any rx/tx for the RFC stipulated flow ageout time period,
+				// so close the session, this will trigger a cascade of closes upto the connector
+				if rx == src.Rx && tx == src.Tx {
+					src.Conn.Close()
+					dest.Close()
+					log.Println("Flow aged out", flow)
+					return
+				}
+			} else {
+				// Error can be EOF with valid data (n != 0)
+				if err != io.EOF || n == 0 {
+					src.Conn.Close()
+					dest.Close()
+					return
+				}
 			}
 		}
+		src.Rx += 1
 		hdr := nxthdr.NxtHdr{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 		e := dest.Write(&hdr, net.Buffers{buf[:n]})
 		if e != nil {
-			src.Close()
+			src.Conn.Close()
 			dest.Close()
 			return
 		}
@@ -90,34 +110,35 @@ func directIn(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
 }
 
 func directOut(tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
-	var dest net.Conn
+	dest := shared.ConnStats{}
 	var e error
 	addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
 	if flow.Proto == common.TCP {
-		dest, e = net.Dial("tcp", addr)
+		dest.Conn, e = net.Dial("tcp", addr)
 	} else {
-		dest, e = net.Dial("udp", addr)
+		dest.Conn, e = net.Dial("udp", addr)
 	}
 	if e != nil {
 		tun.Close()
 		return
 	}
-	go directIn(dest, tun, flow)
+	go directIn(&dest, tun, flow)
 
 	var err *common.NxtError
 	for {
 		for _, b := range buf {
-			_, e := dest.Write(b)
+			_, e := dest.Conn.Write(b)
 			if e != nil {
 				tun.Close()
-				dest.Close()
+				dest.Conn.Close()
 				return
 			}
+			dest.Tx += 1
 		}
 		_, buf, err = tun.Read()
 		if err != nil {
 			tun.Close()
-			dest.Close()
+			dest.Conn.Close()
 			return
 		}
 	}

@@ -27,25 +27,25 @@ var unique uuid.UUID
 // Stream coming from the gateway, create a new tcp/udp socket
 // and send the data over that socket
 func gwToApp(tun common.Transport) {
-	var dest net.Conn
+	dest := shared.ConnStats{}
 
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
 			tun.Close()
-			if dest != nil {
-				dest.Close()
+			if dest.Conn != nil {
+				dest.Conn.Close()
 			}
 			return
 		}
-		if dest == nil {
+		if dest.Conn == nil {
 			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 			addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
 			var e error
 			if flow.Proto == common.TCP {
-				dest, e = net.Dial("tcp", addr)
+				dest.Conn, e = net.Dial("tcp", addr)
 			} else {
-				dest, e = net.Dial("udp", addr)
+				dest.Conn, e = net.Dial("udp", addr)
 			}
 			if e != nil {
 				tun.Close()
@@ -54,25 +54,26 @@ func gwToApp(tun common.Transport) {
 			newTun := tun.NewStream(nil)
 			if newTun == nil {
 				tun.Close()
-				dest.Close()
+				dest.Conn.Close()
 				return
 			}
-			go appToGw(dest, newTun, *flow)
+			go appToGw(&dest, newTun, *flow)
 		}
 		for _, b := range buf {
-			_, e := dest.Write(b)
+			_, e := dest.Conn.Write(b)
 			if e != nil {
 				tun.Close()
-				dest.Close()
+				dest.Conn.Close()
 				return
 			}
+			dest.Tx += 1
 		}
 	}
 }
 
 // Data coming back from a tcp/udp socket. Send the data over the gateway
 // stream that initially created the socket
-func appToGw(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
+func appToGw(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
 
 	// Swap source and dest agents
 	s, d := flow.SourceAgent, flow.DestAgent
@@ -80,19 +81,39 @@ func appToGw(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
 
 	for {
 		buf := make([]byte, common.MAXBUF)
-		n, err := src.Read(buf)
+		if flow.Proto == common.TCP {
+			src.Conn.SetReadDeadline(time.Now().Add(shared.TCP_AGER))
+		} else {
+			src.Conn.SetReadDeadline(time.Now().Add(shared.UDP_AGER))
+		}
+		rx := src.Rx
+		tx := src.Tx
+		n, err := src.Conn.Read(buf)
 		if err != nil {
-			if err != io.EOF || n == 0 {
-				src.Close()
-				dest.Close()
-				return
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				// We have not had any rx/tx for the RFC stipulated flow ageout time period,
+				// so close the session, this will trigger a cascade of closes upto the connector
+				if rx == src.Rx && tx == src.Tx {
+					src.Conn.Close()
+					dest.Close()
+					log.Println("Flow aged out", flow)
+					return
+				}
+			} else {
+				// Error can be EOF with valid data (n != 0)
+				if err != io.EOF || n == 0 {
+					src.Conn.Close()
+					dest.Close()
+					return
+				}
 			}
 		}
+		src.Rx += 1
 		hdr := nxthdr.NxtHdr{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 		e := dest.Write(&hdr, net.Buffers{buf[:n]})
 		if e != nil {
-			src.Close()
+			src.Conn.Close()
 			dest.Close()
 			return
 		}

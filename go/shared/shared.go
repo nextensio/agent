@@ -20,6 +20,20 @@ const (
 	NXT_OKTA_LOGIN   = 8180
 )
 
+const (
+	UDP_AGER = 5 * time.Minute
+	// Well, for tcp its more granular than this, half closed sessions
+	// have a shorter timeout. Its a TODO to implement that. But then
+	// at the transport layer, we dont have the concept of half closed
+	TCP_AGER = 4 * time.Hour
+)
+
+type ConnStats struct {
+	Conn net.Conn
+	Rx   uint64
+	Tx   uint64
+}
+
 type RegistrationInfo struct {
 	Host        string   `json:"gateway"`
 	AccessToken string   `json:"accessToken"`
