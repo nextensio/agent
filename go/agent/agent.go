@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"nextensio/agent/shared"
@@ -59,6 +61,66 @@ func flowGet(key flowKey) common.Transport {
 	tun = flows[key]
 	flowLock.RUnlock()
 	return tun
+}
+
+// As of now we just send dns requests directly out bypassing nextensio. It is a TODO
+// to parse dns requests for private domains registered with nextensio, and send a dns
+// response back for those domains. The directOut/directIN APIs are for packets like dns
+// that can end up bypassing nextensio
+func directIn(src net.Conn, dest common.Transport, flow nxthdr.NxtFlow) {
+	for {
+		buf := make([]byte, common.MAXBUF)
+		n, err := src.Read(buf)
+		if err != nil {
+			if err != io.EOF || n == 0 {
+				src.Close()
+				dest.Close()
+				return
+			}
+		}
+		hdr := nxthdr.NxtHdr{}
+		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
+		e := dest.Write(&hdr, net.Buffers{buf[:n]})
+		if e != nil {
+			src.Close()
+			dest.Close()
+			return
+		}
+	}
+}
+
+func directOut(tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
+	var dest net.Conn
+	var e error
+	addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
+	if flow.Proto == common.TCP {
+		dest, e = net.Dial("tcp", addr)
+	} else {
+		dest, e = net.Dial("udp", addr)
+	}
+	if e != nil {
+		tun.Close()
+		return
+	}
+	go directIn(dest, tun, flow)
+
+	var err *common.NxtError
+	for {
+		for _, b := range buf {
+			_, e := dest.Write(b)
+			if e != nil {
+				tun.Close()
+				dest.Close()
+				return
+			}
+		}
+		_, buf, err = tun.Read()
+		if err != nil {
+			tun.Close()
+			dest.Close()
+			return
+		}
+	}
 }
 
 // Stream coming from the gateway, find the corresponding app stream and send
@@ -125,7 +187,12 @@ func appToGw(tun common.Transport) {
 			return
 		}
 		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-
+		// DNS needs special handling
+		if flow.Dport == 53 {
+			dest.Close()
+			go directOut(tun, *flow, buf)
+			return
+		}
 		if !seen {
 			key.port = uint16(flow.Sport)
 			key.proto = int(flow.Proto)
