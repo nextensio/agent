@@ -41,7 +41,6 @@ var appStreams chan common.NxtStream
 var flowLock sync.RWMutex
 var flows map[flowKey]common.Transport
 var unique uuid.UUID
-var pktIface *Iface
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -281,19 +280,21 @@ func onboarded(lg *log.Logger) {
 	p := webproxy.NewListener(mainCtx, lg, NXT_AGENT_PROXY)
 	go p.Listen(appStreams)
 
-	// If the agent has a source of l3 IP packets, then we also try and
-	// terminate them to get tcp/udp out of it and forward them. The l3proxy
-	// is a combination of a source of l3 IP packets (a file descriptor here)
-	// and a proxy that terminates the packets to tcp/udp
-	if pktIface != nil {
-		f := fd.NewClient(mainCtx, lg, uintptr(pktIface.Fd))
-		f.Dial(appStreams)
-		p := proxy.NewListener(mainCtx, lg, f, pktIface.IP)
-		go p.Listen(appStreams)
-	}
-
 	// Go get the gateway tunnel up
 	go monitorGw(lg)
+}
+
+func monitorStreams() {
+	// Keep monitoring for new streams from either gateway or app direction,
+	// and launch workers that will cross connect them to the other direction
+	for {
+		select {
+		case stream := <-gwStreams:
+			go gwToApp(stream.Stream)
+		case stream := <-appStreams:
+			go appToGw(stream.Stream)
+		}
+	}
 }
 
 func args() {
@@ -311,9 +312,8 @@ func args() {
 // pktFD if 0 is just ignored. If non zero, its assumed to be the descriptor
 // for a device which gives us L3 packets, which we terminate and get udp/tcp
 // out of it
-func AgentMain(lg *log.Logger, iface *Iface) {
+func AgentInit(lg *log.Logger) {
 	mainCtx = context.Background()
-	pktIface = iface
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
@@ -321,15 +321,16 @@ func AgentMain(lg *log.Logger, iface *Iface) {
 
 	args()
 	shared.OktaInit(lg, &regInfo, controller, onboarded)
+	go monitorStreams()
+}
 
-	// Keep monitoring for new streams from either gateway or app direction,
-	// and launch workers that will cross connect them to the other direction
-	for {
-		select {
-		case stream := <-gwStreams:
-			go gwToApp(stream.Stream)
-		case stream := <-appStreams:
-			go appToGw(stream.Stream)
-		}
-	}
+func AgentIface(lg *log.Logger, iface *Iface) {
+	// If the agent has a source of l3 IP packets, then we also try and
+	// terminate them to get tcp/udp out of it and forward them. The l3proxy
+	// is a combination of a source of l3 IP packets (a file descriptor here)
+	// and a proxy that terminates the packets to tcp/udp
+	f := fd.NewClient(mainCtx, lg, uintptr(iface.Fd))
+	f.Dial(appStreams)
+	p := proxy.NewListener(mainCtx, lg, f, iface.IP)
+	go p.Listen(appStreams)
 }

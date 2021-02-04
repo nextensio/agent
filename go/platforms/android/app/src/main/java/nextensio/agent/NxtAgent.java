@@ -48,6 +48,7 @@ public class NxtAgent extends ActionBarActivity {
         waitingForVPNStart = false;
         LocalBroadcastManager.getInstance(this).registerReceiver(vpnStateReceiver,
                 new IntentFilter(NxtAgentService.BROADCAST_VPN_STATE));
+        nxtInit();
     }
 
     private void startVPN() {
@@ -86,4 +87,6 @@ public class NxtAgent extends ActionBarActivity {
             vpnButton.setText(R.string.stop_agent);
         }
     }
+
+    private static native int nxtInit();
 }

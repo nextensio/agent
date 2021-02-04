@@ -47,10 +47,11 @@ type RegistrationInfo struct {
 var nxtOnboardPending bool
 var nxtOnboarded bool
 
-func oktaLogin() {
+func oktaLogin(lg *log.Logger) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if !nxtOnboarded {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Write([]byte(loginHtml))
 		} else {
 			w.WriteHeader(http.StatusCreated)
@@ -92,6 +93,7 @@ func oktaResults(lg *log.Logger, regInfo *RegistrationInfo, controller string, c
 			nxtOnboardPending = true
 			go nxtOnboard(lg, regInfo, controller, callback)
 		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(http.StatusOK)
 	})
 	addr := fmt.Sprintf(":%d", NXT_OKTA_RESULTS)
@@ -99,7 +101,7 @@ func oktaResults(lg *log.Logger, regInfo *RegistrationInfo, controller string, c
 }
 
 func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
-	go oktaLogin()
+	go oktaLogin(lg)
 	go oktaResults(lg, regInfo, controller, callback)
 }
 
