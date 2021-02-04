@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	//"net"
+
+	"net"
 	"nextensio/agent/agent"
 	"os"
 	"os/exec"
@@ -93,11 +94,11 @@ func createTun() int {
 }
 
 func main() {
-	//iface := agent.Iface{Fd: createTun(), IP: net.ParseIP("169.254.2.1")}
-	//configTun()
+	iface := agent.Iface{Fd: createTun(), IP: net.ParseIP("169.254.2.1")}
+	configTun()
 	lg := log.New(os.Stdout, "AGT", 0)
 	agent.AgentInit(lg)
-	//agent.AgentIface(lg, &iface)
+	agent.AgentIface(lg, &iface)
 	for {
 		time.Sleep(100000 * time.Hour)
 	}
