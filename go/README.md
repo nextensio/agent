@@ -77,12 +77,14 @@ the phone's wifi to the rest of the nextensio docker containers)
    get those names mapped - basically add those names to the "/etc/hosts" of android's linux
    In the docker container of the emulator, type the below commands
 
+   ```
    adb root
    adb remount
    adb shell 'echo "172.18.0.2 server.nextensio.net" >> /etc/hosts'
    adb shell 'echo "172.18.0.3 gateway.testa.nextensio.net" >> /etc/hosts'
    adb shell 'echo "172.18.0.4 gateway.testc.nextensio.net" >> /etc/hosts'
    adb shell "cat /etc/hosts" 
+   ```
 
    The 172.18.x IP addresses are obtained from the /tmp/nextensio-kind/environment file which
    is generated when we create the nextensio kind testbed. Confirm your IPs with that file
