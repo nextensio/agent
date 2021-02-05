@@ -75,7 +75,7 @@ the phone's wifi to the rest of the nextensio docker containers)
    server.nextensio.net (controller) and gateway.testa.nextensio.net and gateway.testc.nextensio.net
    We dont have any dns server etc.. that serves these names, so we have to the below hacks to 
    get those names mapped - basically add those names to the "/etc/hosts" of android's linux
-   In the docker container of the emulator, type the below commands
+   In the docker container of the emulator, type the below commands inside the android docker container
 
    ```
    adb root
