@@ -26,7 +26,7 @@ var unique uuid.UUID
 
 // Stream coming from the gateway, create a new tcp/udp socket
 // and send the data over that socket
-func gwToApp(tun common.Transport) {
+func gwToApp(lg *log.Logger, tun common.Transport) {
 	dest := shared.ConnStats{}
 
 	for {
@@ -57,7 +57,7 @@ func gwToApp(tun common.Transport) {
 				dest.Conn.Close()
 				return
 			}
-			go appToGw(&dest, newTun, *flow)
+			go appToGw(lg, &dest, newTun, *flow)
 		}
 		for _, b := range buf {
 			_, e := dest.Conn.Write(b)
@@ -73,7 +73,7 @@ func gwToApp(tun common.Transport) {
 
 // Data coming back from a tcp/udp socket. Send the data over the gateway
 // stream that initially created the socket
-func appToGw(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
+func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
 
 	// Swap source and dest agents
 	s, d := flow.SourceAgent, flow.DestAgent
@@ -96,7 +96,7 @@ func appToGw(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) 
 				if rx == src.Rx && tx == src.Tx {
 					src.Conn.Close()
 					dest.Close()
-					log.Println("Flow aged out", flow)
+					lg.Println("Flow aged out", flow)
 					return
 				}
 			} else {
@@ -126,7 +126,7 @@ func monitorGw(lg *log.Logger) {
 		if gwTun == nil || gwTun.IsClosed() {
 			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
-				if shared.OnboardTunnel(newTun, false, &regInfo, unique.String()) == nil {
+				if shared.OnboardTunnel(lg, newTun, false, &regInfo, unique.String()) == nil {
 					gwTun = newTun
 					// Note that we are not launching an goroutines to read/write out of this
 					// stream (first stream to the gateway), appToGw() always creates a new
@@ -170,7 +170,7 @@ func main() {
 	for {
 		select {
 		case stream := <-gwStreams:
-			go gwToApp(stream.Stream)
+			go gwToApp(lg, stream.Stream)
 		}
 	}
 }

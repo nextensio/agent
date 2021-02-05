@@ -66,7 +66,7 @@ func flowGet(key flowKey) common.Transport {
 // to parse dns requests for private domains registered with nextensio, and send a dns
 // response back for those domains. The directOut/directIN APIs are for packets like dns
 // that can end up bypassing nextensio
-func directIn(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
+func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
 	for {
 		buf := make([]byte, common.MAXBUF)
 		if flow.Proto == common.TCP {
@@ -84,7 +84,7 @@ func directIn(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow)
 				if rx == src.Rx && tx == src.Tx {
 					src.Conn.Close()
 					dest.Close()
-					log.Println("Flow aged out", flow)
+					lg.Println("Flow aged out", flow)
 					return
 				}
 			} else {
@@ -108,7 +108,7 @@ func directIn(src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow)
 	}
 }
 
-func directOut(tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
+func directOut(lg *log.Logger, tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
 	dest := shared.ConnStats{}
 	var e error
 	addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
@@ -121,7 +121,7 @@ func directOut(tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
 		tun.Close()
 		return
 	}
-	go directIn(&dest, tun, flow)
+	go directIn(lg, &dest, tun, flow)
 
 	var err *common.NxtError
 	for {
@@ -210,7 +210,7 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 		// DNS needs special handling
 		if flow.Dport == 53 {
 			dest.Close()
-			go directOut(tun, *flow, buf)
+			go directOut(lg, tun, *flow, buf)
 			return
 		}
 		if !seen {
@@ -232,7 +232,7 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 					}
 				}
 			} else {
-				log.Println("Forward to ip address", flow.DestAgent, flow.Dest, "proto", flow.Proto)
+				lg.Println("Forward to ip address", flow.DestAgent, flow.Dest, "proto", flow.Proto)
 				destAgent = "default-internet"
 			}
 		}
@@ -257,7 +257,7 @@ func monitorGw(lg *log.Logger) {
 		if gwTun == nil || gwTun.IsClosed() {
 			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
-				if shared.OnboardTunnel(newTun, true, &regInfo, unique.String()) == nil {
+				if shared.OnboardTunnel(lg, newTun, true, &regInfo, unique.String()) == nil {
 					gwTun = newTun
 					// Note that we are not launching an goroutines to read/write out of this
 					// stream (first stream to the gateway), appToGw() always creates a new
@@ -279,7 +279,6 @@ func onboarded(lg *log.Logger) {
 	// We listen for an http proxy request
 	p := webproxy.NewListener(mainCtx, lg, NXT_AGENT_PROXY)
 	go p.Listen(appStreams)
-
 	// Go get the gateway tunnel up
 	go monitorGw(lg)
 }

@@ -80,7 +80,7 @@ func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, ca
 				}
 			}
 		}
-		log.Println("Onboarding failed, will retry again", err)
+		lg.Println("Onboarding failed, will retry again", err)
 		time.Sleep(5 * time.Second)
 	}
 }
@@ -111,7 +111,7 @@ func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInf
 	req.Add("x-nextensio-connect", regInfo.ConnectID)
 	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req)
 	if err := wsock.Dial(c); err != nil {
-		log.Println("Cannot dial websocket", err)
+		lg.Println("Cannot dial websocket", err, regInfo.ConnectID)
 		return nil
 	}
 
@@ -134,7 +134,7 @@ func DialGateway(ctx context.Context, lg *log.Logger, encap string, regInfo *Reg
 // one, then we resend. Hence set the socket to blocking-with-timeout to
 // read a response with a timeout. We try this a few times and give up if
 // we still cant confirm that our onboard info was received by the gateway
-func OnboardTunnel(tunnel common.Transport, isAgent bool, regInfo *RegistrationInfo, uuid string) *common.NxtError {
+func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInfo *RegistrationInfo, uuid string) *common.NxtError {
 	p := &nxthdr.NxtOnboard{
 		Agent: isAgent, Userid: regInfo.Userid, Uuid: uuid,
 		AccessToken: regInfo.AccessToken, Services: regInfo.Services,
@@ -155,9 +155,9 @@ func OnboardTunnel(tunnel common.Transport, isAgent bool, regInfo *RegistrationI
 			case net.Error:
 				if e.Timeout() {
 					retry++
-					log.Println("Onboard timed out, retry", retry)
+					lg.Println("Onboard timed out, retry", retry)
 					if retry >= 10 {
-						log.Println("Unable to read onboard response from gateway tunnel")
+						lg.Println("Unable to read onboard response from gateway tunnel")
 						tunnel.SetReadDeadline(time.Time{})
 						return err
 					}
@@ -172,7 +172,7 @@ func OnboardTunnel(tunnel common.Transport, isAgent bool, regInfo *RegistrationI
 		} else {
 			switch hdr.Hdr.(type) {
 			case *nxthdr.NxtHdr_Onboard:
-				log.Println("Handshaked with gateway")
+				lg.Println("Handshaked with gateway")
 				tunnel.SetReadDeadline(time.Time{})
 				return nil
 			}
