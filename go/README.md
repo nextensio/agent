@@ -160,3 +160,4 @@ file descriptor
 
 The connector is expected to run on one platform which is linux, and we will
 most likely package the connector as a docker container
+
