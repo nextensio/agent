@@ -8,9 +8,16 @@
 
 ## Apple Developer License
 
-- Open app/nxtapp.xcodeproj file 
-- Click on nxtapp and nxtTunnel targets, go to Sign & Capabilities to change the respective Team in order to build the apps with Network Extension successfully
+- Register your apple developer account through Xcode preferences -> Account
+- Open app/nxtapp.xcodeproj file, go to nxtapp and nxtTunnel targets -> Sign & Capabilities to change the respective Team in order to build the apps with Network Extension successfully
 
 ## Xcode Scheme 
 
 - Xcode Scheme defines a collection of target to build. You can pick "My Mac" for MacOS or "iPhone X" for iOS build. 
+
+## Two Processes
+
+- nxtapp - is the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
+- nxtTunnel - is the tunnel provider process to handle tunnel packet flow. Main function is startTunnel() and stopTunnel()
+
+
