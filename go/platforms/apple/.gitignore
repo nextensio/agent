@@ -50,3 +50,4 @@ Sources/NextensioAgent/Config/Developer.xcconfig
 # Vim
 .*.sw*
 
+app/.DS_Store
