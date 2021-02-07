@@ -20,11 +20,11 @@ func (l AndroidLogger) Write(p []byte) (int, error) {
 }
 
 //export nxtInit
-func nxtInit() {
+func nxtInit(direct int) {
 	C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString("NxtInit"))
 	l := AndroidLogger{level: C.ANDROID_LOG_ERROR}
 	lg := log.New(&l, "", 0)
-	agent.AgentInit(lg)
+	agent.AgentInit(lg, direct)
 }
 
 //export nxtOn

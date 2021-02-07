@@ -41,6 +41,7 @@ var appStreams chan common.NxtStream
 var flowLock sync.RWMutex
 var flows map[flowKey]common.Transport
 var unique uuid.UUID
+var directMode int
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -66,7 +67,7 @@ func flowGet(key flowKey) common.Transport {
 // to parse dns requests for private domains registered with nextensio, and send a dns
 // response back for those domains. The directOut/directIN APIs are for packets like dns
 // that can end up bypassing nextensio
-func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
+func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow *nxthdr.NxtFlow) {
 	for {
 		buf := make([]byte, common.MAXBUF)
 		if flow.Proto == common.TCP {
@@ -98,7 +99,7 @@ func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow
 		}
 		src.Rx += 1
 		hdr := nxthdr.NxtHdr{}
-		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
+		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: flow}
 		e := dest.Write(&hdr, net.Buffers{buf[:n]})
 		if e != nil {
 			src.Conn.Close()
@@ -108,9 +109,20 @@ func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow
 	}
 }
 
-func directOut(lg *log.Logger, tun common.Transport, flow nxthdr.NxtFlow, buf net.Buffers) {
-	dest := shared.ConnStats{}
+func directOut(lg *log.Logger, tun common.Transport, flow *nxthdr.NxtFlow, buf net.Buffers) {
+	var err *common.NxtError
+	var hdr *nxthdr.NxtHdr
+	if flow == nil {
+		hdr, buf, err = tun.Read()
+		if err != nil {
+			tun.Close()
+			return
+		}
+		flow = hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+	}
+
 	var e error
+	dest := shared.ConnStats{}
 	addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
 	if flow.Proto == common.TCP {
 		dest.Conn, e = net.Dial("tcp", addr)
@@ -123,7 +135,6 @@ func directOut(lg *log.Logger, tun common.Transport, flow nxthdr.NxtFlow, buf ne
 	}
 	go directIn(lg, &dest, tun, flow)
 
-	var err *common.NxtError
 	for {
 		for _, b := range buf {
 			_, e := dest.Conn.Write(b)
@@ -207,10 +218,13 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 			return
 		}
 		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-		// DNS needs special handling
+		// Flows that needs to bypass Nextensio. TODO: This is quite hacky at the
+		// moment, we need a more nicer way to figure out the bypass-nextensio
+		// flows rather than adding list of if statementes here
 		if flow.Dport == 53 {
 			dest.Close()
-			go directOut(lg, tun, *flow, buf)
+			// Copy the flow, it points inside a huge data buffer which we dont want to hold up
+			go directOut(lg, tun, &*flow, buf)
 			return
 		}
 		if !seen {
@@ -291,7 +305,11 @@ func monitorStreams(lg *log.Logger) {
 		case stream := <-gwStreams:
 			go gwToApp(lg, stream.Stream)
 		case stream := <-appStreams:
-			go appToGw(lg, stream.Stream)
+			if directMode != 0 {
+				go directOut(lg, stream.Stream, nil, nil)
+			} else {
+				go appToGw(lg, stream.Stream)
+			}
 		}
 	}
 }
@@ -311,7 +329,8 @@ func args() {
 // pktFD if 0 is just ignored. If non zero, its assumed to be the descriptor
 // for a device which gives us L3 packets, which we terminate and get udp/tcp
 // out of it
-func AgentInit(lg *log.Logger) {
+func AgentInit(lg *log.Logger, direct int) {
+	directMode = direct
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)

@@ -4,9 +4,9 @@
 extern int nxtInit();
 extern int nxtOn(int tun_fd);
 
-JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtInit(JNIEnv *env, jclass c)
+JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    nxtInit();
+    nxtInit(direct);
     return 0;
 }
 
