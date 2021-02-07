@@ -1,0 +1,522 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		6B2D6A8525CFBB9C0051991B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6A8425CFBB9C0051991B /* AppDelegate.swift */; };
+		6B2D6A8725CFBB9C0051991B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6A8625CFBB9C0051991B /* SceneDelegate.swift */; };
+		6B2D6A8925CFBB9C0051991B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6A8825CFBB9C0051991B /* ViewController.swift */; };
+		6B2D6A8C25CFBB9C0051991B /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6B2D6A8A25CFBB9C0051991B /* Main.storyboard */; };
+		6B2D6A8E25CFBB9D0051991B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B2D6A8D25CFBB9D0051991B /* Assets.xcassets */; };
+		6B2D6A9125CFBB9D0051991B /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6B2D6A8F25CFBB9D0051991B /* LaunchScreen.storyboard */; };
+		6B2D6AA425CFBFC80051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6AA325CFBFC80051991B /* NetworkExtension.framework */; };
+		6B2D6AAC25CFC06B0051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6AA325CFBFC80051991B /* NetworkExtension.framework */; };
+		6B2D6AAF25CFC06B0051991B /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6AAE25CFC06B0051991B /* PacketTunnelProvider.swift */; };
+		6B2D6AB425CFC06B0051991B /* nxtTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6AAB25CFC06B0051991B /* nxtTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6B2D6ABC25CFC0E20051991B /* PacketType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6ABB25CFC0E20051991B /* PacketType.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6B2D6AB225CFC06B0051991B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6B2D6A7925CFBB9C0051991B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6B2D6AAA25CFC06B0051991B;
+			remoteInfo = nxtTunnel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6B2D6AB825CFC06B0051991B /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6B2D6AB425CFC06B0051991B /* nxtTunnel.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		6B2D6A8125CFBB9C0051991B /* nxtapp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = nxtapp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B2D6A8425CFBB9C0051991B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		6B2D6A8625CFBB9C0051991B /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		6B2D6A8825CFBB9C0051991B /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		6B2D6A8B25CFBB9C0051991B /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		6B2D6A8D25CFBB9D0051991B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6B2D6A9025CFBB9D0051991B /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		6B2D6A9225CFBB9D0051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6B2D6A9925CFBBA30051991B /* nxtapp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = nxtapp.entitlements; sourceTree = "<group>"; };
+		6B2D6AA325CFBFC80051991B /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.1.sdk/System/Library/Frameworks/NetworkExtension.framework; sourceTree = DEVELOPER_DIR; };
+		6B2D6AAB25CFC06B0051991B /* nxtTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = nxtTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B2D6AAE25CFC06B0051991B /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		6B2D6AB025CFC06B0051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6B2D6AB125CFC06B0051991B /* nxtTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = nxtTunnel.entitlements; sourceTree = "<group>"; };
+		6B2D6ABB25CFC0E20051991B /* PacketType.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PacketType.swift; sourceTree = "<group>"; };
+		6B2D6AC125CFC7F00051991B /* nxtTunnelRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = nxtTunnelRelease.entitlements; sourceTree = "<group>"; };
+		6B2D6AC425CFCAFB0051991B /* nxtappRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = nxtappRelease.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6B2D6A7E25CFBB9C0051991B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B2D6AA425CFBFC80051991B /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B2D6AA825CFC06B0051991B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B2D6AAC25CFC06B0051991B /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6B2D6A7825CFBB9C0051991B = {
+			isa = PBXGroup;
+			children = (
+				6B2D6A8325CFBB9C0051991B /* nxtapp */,
+				6B2D6AAD25CFC06B0051991B /* nxtTunnel */,
+				6B2D6A8225CFBB9C0051991B /* Products */,
+				6B2D6AA225CFBFC70051991B /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		6B2D6A8225CFBB9C0051991B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6B2D6A8125CFBB9C0051991B /* nxtapp.app */,
+				6B2D6AAB25CFC06B0051991B /* nxtTunnel.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6B2D6A8325CFBB9C0051991B /* nxtapp */ = {
+			isa = PBXGroup;
+			children = (
+				6B2D6AC425CFCAFB0051991B /* nxtappRelease.entitlements */,
+				6B2D6A9925CFBBA30051991B /* nxtapp.entitlements */,
+				6B2D6A8425CFBB9C0051991B /* AppDelegate.swift */,
+				6B2D6A8625CFBB9C0051991B /* SceneDelegate.swift */,
+				6B2D6A8825CFBB9C0051991B /* ViewController.swift */,
+				6B2D6A8A25CFBB9C0051991B /* Main.storyboard */,
+				6B2D6A8D25CFBB9D0051991B /* Assets.xcassets */,
+				6B2D6A8F25CFBB9D0051991B /* LaunchScreen.storyboard */,
+				6B2D6A9225CFBB9D0051991B /* Info.plist */,
+			);
+			path = nxtapp;
+			sourceTree = "<group>";
+		};
+		6B2D6AA225CFBFC70051991B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				6B2D6AA325CFBFC80051991B /* NetworkExtension.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6B2D6AAD25CFC06B0051991B /* nxtTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				6B2D6AC125CFC7F00051991B /* nxtTunnelRelease.entitlements */,
+				6B2D6ABB25CFC0E20051991B /* PacketType.swift */,
+				6B2D6AAE25CFC06B0051991B /* PacketTunnelProvider.swift */,
+				6B2D6AB025CFC06B0051991B /* Info.plist */,
+				6B2D6AB125CFC06B0051991B /* nxtTunnel.entitlements */,
+			);
+			path = nxtTunnel;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6B2D6A8025CFBB9C0051991B /* nxtapp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B2D6A9525CFBB9D0051991B /* Build configuration list for PBXNativeTarget "nxtapp" */;
+			buildPhases = (
+				6B2D6A7D25CFBB9C0051991B /* Sources */,
+				6B2D6A7E25CFBB9C0051991B /* Frameworks */,
+				6B2D6A7F25CFBB9C0051991B /* Resources */,
+				6B2D6AB825CFC06B0051991B /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6B2D6AB325CFC06B0051991B /* PBXTargetDependency */,
+			);
+			name = nxtapp;
+			productName = nxtapp;
+			productReference = 6B2D6A8125CFBB9C0051991B /* nxtapp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		6B2D6AAA25CFC06B0051991B /* nxtTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B2D6AB525CFC06B0051991B /* Build configuration list for PBXNativeTarget "nxtTunnel" */;
+			buildPhases = (
+				6B2D6AA725CFC06B0051991B /* Sources */,
+				6B2D6AA825CFC06B0051991B /* Frameworks */,
+				6B2D6AA925CFC06B0051991B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = nxtTunnel;
+			productName = nxtTunnel;
+			productReference = 6B2D6AAB25CFC06B0051991B /* nxtTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6B2D6A7925CFBB9C0051991B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1240;
+				LastUpgradeCheck = 1240;
+				TargetAttributes = {
+					6B2D6A8025CFBB9C0051991B = {
+						CreatedOnToolsVersion = 12.4;
+					};
+					6B2D6AAA25CFC06B0051991B = {
+						CreatedOnToolsVersion = 12.4;
+					};
+				};
+			};
+			buildConfigurationList = 6B2D6A7C25CFBB9C0051991B /* Build configuration list for PBXProject "nxtapp" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 6B2D6A7825CFBB9C0051991B;
+			productRefGroup = 6B2D6A8225CFBB9C0051991B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6B2D6A8025CFBB9C0051991B /* nxtapp */,
+				6B2D6AAA25CFC06B0051991B /* nxtTunnel */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		6B2D6A7F25CFBB9C0051991B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B2D6A9125CFBB9D0051991B /* LaunchScreen.storyboard in Resources */,
+				6B2D6A8E25CFBB9D0051991B /* Assets.xcassets in Resources */,
+				6B2D6A8C25CFBB9C0051991B /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B2D6AA925CFC06B0051991B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6B2D6A7D25CFBB9C0051991B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B2D6A8925CFBB9C0051991B /* ViewController.swift in Sources */,
+				6B2D6A8525CFBB9C0051991B /* AppDelegate.swift in Sources */,
+				6B2D6A8725CFBB9C0051991B /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B2D6AA725CFC06B0051991B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B2D6AAF25CFC06B0051991B /* PacketTunnelProvider.swift in Sources */,
+				6B2D6ABC25CFC0E20051991B /* PacketType.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6B2D6AB325CFC06B0051991B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6B2D6AAA25CFC06B0051991B /* nxtTunnel */;
+			targetProxy = 6B2D6AB225CFC06B0051991B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		6B2D6A8A25CFBB9C0051991B /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				6B2D6A8B25CFBB9C0051991B /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		6B2D6A8F25CFBB9D0051991B /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				6B2D6A9025CFBB9D0051991B /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		6B2D6A9325CFBB9D0051991B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		6B2D6A9425CFBB9D0051991B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6B2D6A9625CFBB9D0051991B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = nxtapp/nxtapp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = nxtapp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.nxtapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6B2D6A9725CFBB9D0051991B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = nxtapp/nxtappRelease.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = nxtapp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.nxtapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		6B2D6AB625CFC06B0051991B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = nxtTunnel/nxtTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = nxtTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.nxtapp.nxtTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6B2D6AB725CFC06B0051991B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = nxtTunnel/nxtTunnelRelease.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = nxtTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.nxtapp.nxtTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6B2D6A7C25CFBB9C0051991B /* Build configuration list for PBXProject "nxtapp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B2D6A9325CFBB9D0051991B /* Debug */,
+				6B2D6A9425CFBB9D0051991B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6B2D6A9525CFBB9D0051991B /* Build configuration list for PBXNativeTarget "nxtapp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B2D6A9625CFBB9D0051991B /* Debug */,
+				6B2D6A9725CFBB9D0051991B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6B2D6AB525CFC06B0051991B /* Build configuration list for PBXNativeTarget "nxtTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B2D6AB625CFC06B0051991B /* Debug */,
+				6B2D6AB725CFC06B0051991B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 6B2D6A7925CFBB9C0051991B /* Project object */;
+}
