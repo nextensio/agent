@@ -15,9 +15,8 @@
 
 - Xcode Scheme defines a collection of target to build. You can pick "My Mac" for MacOS or "iPhone X" for iOS build. 
 
-## Two Processes
+## Two Processes and files
 
 - nxtapp - is the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
 - nxtTunnel - is the tunnel provider process to handle tunnel packet flow. Main function is startTunnel() and stopTunnel()
-
-
+- ViewController.swift and PacketProviderTunnel.swift are the two main files to look
