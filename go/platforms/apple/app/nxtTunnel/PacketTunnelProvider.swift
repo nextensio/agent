@@ -13,48 +13,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var conf = [String: AnyObject]()
     var pendingStartCompletion: ((NSError?) -> Void)?
     
-    func tunToUDP() {
-        self.packetFlow.readPackets { (packets: [Data], protocols: [NSNumber]) in
-            for packet in packets {
-                logPacketSrcDestIP(packet, "original")
-                logPacket(packet, prefix: "Original")
-
-                self.session?.writeDatagram(packet, completionHandler: { (error: Error?) in
-                    if let error = error {
-                        NSLog("Failed in writeDatagram \(error)")
-                        self.setupUDPSession()
-                        return
-                    }
-                })
-            }
-            // Recursive to keep reading
-            self.tunToUDP()
-        }
-    }
-
-    func udpToTun() {
-        // It's callback here
-        NSLog("udpToTun")
-
-        session?.setReadHandler({ (_packets: [Data]?, error: Error?) -> Void in
-            if let packets = _packets {
-                self.packetFlow.writePackets(packets, withProtocols: [NSNumber](repeating: AF_INET as NSNumber, count: packets.count))
-            }
-        }, maxDatagrams: NSIntegerMax)
-    }
-    
     // These are core methods for Nextensio VPN tunnelling
     //   - read from tun device, override, write to tun device
     func tunProxy() {
-        NSLog("proxy tun packets...")
-        
         self.packetFlow.readPackets { (packets: [Data], protocols: [NSNumber]) in
             for packet in packets {
                 let proto = protocolNumber(for: packet)
                 
-                logPacketSrcDestIP(packet, "original")
-
-                NSLog("proto: \(proto.uint8Value), tcp: \(PacketType.TCP.rawValue)")
+                // logPacketSrcDestIP(packet, "original")
+                // NSLog("proto: \(proto.uint8Value), tcp: \(PacketType.TCP.rawValue)")
+                
                 if (protocolType(for: packet) == PacketType.TCP) {
                     var overridePacket = packet // make it mutuable
                     overrideDestAddr(&overridePacket)
@@ -71,21 +39,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
     
-    func setupUDPSession() {
-        if self.session != nil {
-            self.reasserting = true
-            self.session = nil
-        }
-        let serverAddress = self.conf["server"] as! String
-        let serverPort = self.conf["port"] as! String
-        self.reasserting = false
-        
-        NSLog("Setup UDP session to \(serverAddress) \(serverPort)")
-
-        self.session = self.createUDPSession(to: NWHostEndpoint(hostname: serverAddress, port: serverPort), from: nil)
-        self.setupPacketTunnelNetworkSettings()
-    }
-
     func setupPacketTunnelNetworkSettings() {
         
         // the `tunnelRemoteAddress` is meaningless because we are not creating a tunnel.
@@ -116,8 +69,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.setTunnelNetworkSettings(networkSettings) { error in
             self.pendingStartCompletion?(nil)
             self.pendingStartCompletion = nil
-            
-            // self.udpToTun()
         }
     }
 
@@ -134,17 +85,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // If you are going to be reading directly from this fd, be aware that iOS's tun implementatio appends a 4-byte protocol information header to each packet. If we had more control we would create the tun with the IFF_NO_PI option to prevent this, but instead we just throw away the first four bytes.
         
         let utunstr = String(format: "%d", self.tunnelFileDescriptor!)
-        NSLog("tunnel fd = \(utunstr)")
-                
-        self.tunProxy()
+        let interfaceName = self.interfaceName ?? "unknown"
+        NSLog("tunnel, fd = \(interfaceName) \(utunstr)")
 
-//        self.setupUDPSession()
-//        self.tunToUDP()
+        //
+        self.tunProxy()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         NSLog("tunnel stop")
-        session?.cancel()
         super.stopTunnel(with: reason, completionHandler: completionHandler)
     }
 
@@ -252,9 +201,7 @@ private func computeIPCheckSum(_ packet: Data) -> [UInt8] {
     var sum32: UInt32 = 0
     var loop: UInt8 = 0
     for i in stride(from: 0, to: 19, by: 2) { // 20 bytes header, 10 16bits
-        let u16: UInt16 = (UInt16(packet[i]) << 8) + UInt16(packet[i+1]) // preserved the network order
-//        st = String(format:"i:%d, 0x%02X,0x%02X, uint16: 0x%02X", i, packet[i], packet[i+1], u16)
-//        NSLog("Compute IP Checksum...\(st)")
+        let u16: UInt16 = (UInt16(packet[i]) << 8) + UInt16(packet[i+1])
 
         if (i != 10) { // don't add checksum into the sum32
             sum32 += UInt32(u16)
@@ -262,15 +209,9 @@ private func computeIPCheckSum(_ packet: Data) -> [UInt8] {
         loop += 1
     }
 
-    // st = String(format:"0x%02X", sum32)
-    // NSLog("Compute Checksum... loop=\(loop), sum32=\(st)")
-
     while (sum32 > 0xffff) {
         sum32 = (sum32 >> 16) + (sum32 & 0xFFFF);
     }
-
-    // st = String(format:"0x%02X", sum32)
-    // NSLog("Compute Checksum... after folding, sum32=\(st)")
 
     var checksum = [UInt8](repeating: 0, count: 2)
     checksum[0] = UInt8(sum32 >> 8 & 0x00ff)
@@ -292,47 +233,28 @@ private func computeTCPCheckSum(_ packet: Data) -> [UInt8] {
 
     // Compute Pseudo Header: SRCIP + DSTIP
     for i in stride(from: 12, to: 19, by: 2) { //
-        let u16: UInt16 = (UInt16(packet[i]) << 8) + UInt16(packet[i+1]) // preserved the network order
-//        st = String(format:"i:%d, 0x%02X,0x%02X, uint16: 0x%02X, %d", i, packet[i], packet[i+1], u16, u16)
-//        NSLog("Compute TCP Checksum...src/dst IP \(st)")
+        let u16: UInt16 = (UInt16(packet[i]) << 8) + UInt16(packet[i+1])
         sum32 += UInt32(u16)
     }
-    
-//    st = String(format:"src+dst sum32: 0x%02X (%d)", sum32, sum32)
-//    NSLog("Compute TCP Checksum... \(st)")
-    
+   
     // TCP Proto
     sum32 += UInt32(PacketType.TCP.rawValue)
-    
-//    st = String(format:"proto sum32: 0x%02X (%d)", sum32, sum32)
-//    NSLog("Compute TCP Checksum... \(st)")
 
     // TCP Segment Length
     let IP_HEADER_SIZE: Int = 20
     sum32 += UInt32(packet.count - IP_HEADER_SIZE)
-    
-//    st = String(format:"0x%02X, %d", sum32, sum32)
-//    NSLog("Compute TCP Checksum... pseudo header sum=\(st)")
-    
+   
     // TCPHeader + TCPData
     for i in stride(from: 20, to: packet.count-1, by: 2) { // 20 - 64 bytes header, 10 16bits
-        let u16: UInt16 = (UInt16(packet[i]) << 8) + UInt16(packet[i+1]) // preserved the network order
-//        st = String(format:"i:%d, 0x%02X,0x%02X, uint16: 0x%02X", i, packet[i], packet[i+1], u16)
-//        NSLog("Compute TCP Checksum...\(st)")
+        let u16: UInt16 = (UInt16(packet[i]) << 8) + UInt16(packet[i+1])
         if (i != 36) { // don't add checksum into the sum32
             sum32 += UInt32(u16)
         }
     }
 
-//    st = String(format:"0x%02X", sum32)
-//    NSLog("Compute TCP Checksum... sum32=\(st)")
-
     while (sum32 > 0xffff) {
         sum32 = (sum32 >> 16) + (sum32 & 0xFFFF);
     }
-
-//    st = String(format:"0x%02X", sum32)
-//    NSLog("Compute TCP Checksum... after folding, sum32=\(st)")
 
     var checksum = [UInt8](repeating: 0, count: 2)
     checksum[0] = UInt8(sum32 >> 8 & 0x00ff)
