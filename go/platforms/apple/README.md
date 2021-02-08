@@ -20,3 +20,4 @@
 - nxtapp - is the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
 - nxtTunnel - is the tunnel provider process to handle tunnel packet flow. Main functions are startTunnel() and stopTunnel()
 - ViewController.swift and PacketProviderTunnel.swift are the two main files that handle the configuration and packet flow
+- Two methods to connect to local agent, 1. through exposing tun fd and WG adaptor, 2. Socket.swift is a raw socket class to connect to local agent (this is WIP)

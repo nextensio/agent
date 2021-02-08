@@ -1,15 +1,24 @@
 //
 //  PacketTunnelProvider.swift
-//  Nxt App Tunnel
+//  NextensioPacketTunnel
 //
-//  Created by Rudy Zulkarnain on 1/22/21.
+//  Created by Rudy Zulkarnain on 2/7/21.
 //
 
 import NetworkExtension
 import os.log
 
+enum IPVersion: UInt8 {
+    case IPv4 = 4, IPv6 = 6
+}
+
+enum PacketType: UInt8 {
+    case TCP = 6, UDP = 17, ICMP = 1
+}
+
 class PacketTunnelProvider: NEPacketTunnelProvider {
     var session: NWUDPSession? = nil
+    var connection: Socket = Socket()
     var conf = [String: AnyObject]()
     var pendingStartCompletion: ((NSError?) -> Void)?
     
@@ -37,6 +46,24 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             // Recursive to keep reading
             self.tunProxy()
         }
+    }
+    
+    func setupAgentConnection() {
+        let serverAddress = self.conf["server"] as! String
+        let serverPort = Int(self.conf["port"] as! String) ?? 0
+
+        NSLog("Setup connection to agent \(serverAddress) \(serverPort)")
+
+        self.connection.open(host: serverAddress, port: serverPort)
+
+        // send a test message...
+        // var bytes: [UInt8] = [11, 22, 33, 44, 55, 66, 77, 88]
+        // let uint8Pointer = UnsafeMutablePointer<UInt8>.allocate(capacity: 8)
+        // uint8Pointer.initialize(from: &bytes, count: 8)
+
+        // let message = Data.init(bytes: uint8Pointer, count: 8)
+        // logPacket(message, prefix: "Test packet")
+        // self.connection.send(bytes: message)
     }
     
     func setupPacketTunnelNetworkSettings() {
@@ -305,3 +332,4 @@ private func overrideDestAddr(_ newPacket: inout Data) -> Void {
     
     logPacket(newPacket, prefix: "Mapped")
 }
+
