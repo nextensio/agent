@@ -60,6 +60,7 @@
 		6B2D6BC025D114240051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6B2D6BC125D114240051991B /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 		6B2D6BCE25D116B20051991B /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
+		6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NxtNetworkExtension-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,6 +105,7 @@
 		6B2D6B9B25D113630051991B /* NextensioApp */ = {
 			isa = PBXGroup;
 			children = (
+				6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */,
 				6B2D6BB325D113DE0051991B /* NextensioApp.entitlements */,
 				6B2D6B9C25D113630051991B /* AppDelegate.swift */,
 				6B2D6B9E25D113630051991B /* SceneDelegate.swift */,
