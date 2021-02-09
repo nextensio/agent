@@ -1,8 +1,8 @@
 //
 //  ViewController.swift
-//  nxtapp
+//  NextensioAgent
 //
-//  Created by Rudy Zulkarnain on 2/6/21.
+//  Created by Rudy Zulkarnain on 2/7/21.
 //
 
 import UIKit
@@ -13,7 +13,7 @@ class ViewController: UIViewController {
     @IBOutlet var connectButton: UIButton!
 
     // Hard code VPN configurations
-    let tunnelBundleId = "com.nextensio.io.vpn.nxtapp.nxtTunnel"
+    let tunnelBundleId = "com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel"
     let serverAddress = "127.0.0.1"
     let serverPort = "8888"
     let mtu = "1400"

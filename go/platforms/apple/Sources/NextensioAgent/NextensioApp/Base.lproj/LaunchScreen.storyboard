@@ -16,9 +16,9 @@
                         <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Nextensio.io" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="YmU-IM-aD2">
-                                <rect key="frame" x="99.5" y="423.5" width="215" height="49"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="41"/>
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Nextensio.io" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="5Km-il-hGa">
+                                <rect key="frame" x="115" y="427" width="184" height="42"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="35"/>
                                 <nil key="textColor"/>
                                 <nil key="highlightedColor"/>
                             </label>
@@ -26,8 +26,8 @@
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                         <constraints>
-                            <constraint firstItem="YmU-IM-aD2" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="L8c-aM-eST"/>
-                            <constraint firstItem="YmU-IM-aD2" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="MoH-LA-CLD"/>
+                            <constraint firstItem="5Km-il-hGa" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="H7c-ya-FVM"/>
+                            <constraint firstItem="5Km-il-hGa" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="Ywj-NW-DpZ"/>
                         </constraints>
                     </view>
                 </viewController>

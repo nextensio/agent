@@ -1,8 +1,8 @@
 //
 //  SceneDelegate.swift
-//  nxtapp
+//  NextensioAgent
 //
-//  Created by Rudy Zulkarnain on 2/6/21.
+//  Created by Rudy Zulkarnain on 2/7/21.
 //
 
 import UIKit
