@@ -36,6 +36,10 @@ COPY . .
 RUN go get -d -v ./... 
 RUN cd connector; go install -v ./...
 RUN cd platforms/docker; go install -v ./...
+RUN rm -r -f /go/src/app/* \
+    && \rm -r -f /go/pkg/mod \
+    && \rm -r -f /go/pkg/sumdb
+
 RUN rm /go/files/gitlab_rsa
 
 RUN chmod +x /go/files/run.sh

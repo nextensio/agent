@@ -97,7 +97,7 @@ func main() {
 	iface := agent.Iface{Fd: createTun(), IP: net.ParseIP("169.254.2.1")}
 	configTun()
 	lg := log.New(os.Stdout, "AGT", 0)
-	agent.AgentInit(lg)
+	agent.AgentInit(lg, 0)
 	agent.AgentIface(lg, &iface)
 	for {
 		time.Sleep(100000 * time.Hour)
