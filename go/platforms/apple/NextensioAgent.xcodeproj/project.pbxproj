@@ -60,7 +60,7 @@
 		6B2D6BC025D114240051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6B2D6BC125D114240051991B /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 		6B2D6BCE25D116B20051991B /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
-		6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NxtNetworkExtension-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
+		6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "NxtNetworkExtension-Go-Bridge.h"; path = "Sources/NextensioAgent/NextensioPacketTunnel/NxtNetworkExtension-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,7 +105,6 @@
 		6B2D6B9B25D113630051991B /* NextensioApp */ = {
 			isa = PBXGroup;
 			children = (
-				6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */,
 				6B2D6BB325D113DE0051991B /* NextensioApp.entitlements */,
 				6B2D6B9C25D113630051991B /* AppDelegate.swift */,
 				6B2D6B9E25D113630051991B /* SceneDelegate.swift */,
@@ -115,7 +114,8 @@
 				6B2D6BA725D113640051991B /* LaunchScreen.storyboard */,
 				6B2D6BAA25D113640051991B /* Info.plist */,
 			);
-			path = NextensioApp;
+			name = NextensioApp;
+			path = Sources/NextensioAgent/NextensioApp;
 			sourceTree = "<group>";
 		};
 		6B2D6BBA25D114240051991B /* Frameworks */ = {
@@ -129,12 +129,14 @@
 		6B2D6BBD25D114240051991B /* NextensioPacketTunnel */ = {
 			isa = PBXGroup;
 			children = (
+				6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */,
 				6B2D6BCE25D116B20051991B /* Socket.swift */,
 				6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */,
 				6B2D6BC025D114240051991B /* Info.plist */,
 				6B2D6BC125D114240051991B /* NextensioPacketTunnel.entitlements */,
 			);
-			path = NextensioPacketTunnel;
+			name = NextensioPacketTunnel;
+			path = Sources/NextensioAgent/NextensioPacketTunnel;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -404,10 +406,10 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = NextensioApp/NextensioApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = NextensioApp/Info.plist;
+				INFOPLIST_FILE = Sources/NextensioAgent/NextensioApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -426,10 +428,10 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = NextensioApp/NextensioApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = NextensioApp/Info.plist;
+				INFOPLIST_FILE = Sources/NextensioAgent/NextensioApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -445,10 +447,10 @@
 		6B2D6BC625D114240051991B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = NextensioPacketTunnel/Info.plist;
+				INFOPLIST_FILE = Sources/NextensioAgent/NextensioPacketTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -458,6 +460,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NxtNetworkExtension-Go-Bridge.h";
+				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -466,10 +470,10 @@
 		6B2D6BC725D114240051991B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = NextensioPacketTunnel/Info.plist;
+				INFOPLIST_FILE = Sources/NextensioAgent/NextensioPacketTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -479,6 +483,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NxtNetworkExtension-Go-Bridge.h";
+				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
