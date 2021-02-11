@@ -42,6 +42,8 @@ var flowLock sync.RWMutex
 var flows map[flowKey]common.Transport
 var unique uuid.UUID
 var directMode int
+var initDone bool
+var initLock sync.Mutex
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -323,23 +325,27 @@ func args() {
 	regInfo.Services = strings.Fields(svcs)
 }
 
-// LoginFile is the location where the IDP/Okta login webpages are stored,
-// which user can access from the browsert on their device and onboard the agent
-//
-// pktFD if 0 is just ignored. If non zero, its assumed to be the descriptor
-// for a device which gives us L3 packets, which we terminate and get udp/tcp
-// out of it
+// direct is usually a test-only mode where if set to value 1, the agent is being instructed
+// to send all traffic directly to internet bypassing nextensio tunnels.
+// Various agents like android/ios may end up calling AgentInit multiple times depending
+// on how their UI/Networking components are loaded and in which order etc.., so we ensure
+// the init is done just once
 func AgentInit(lg *log.Logger, direct int) {
-	directMode = direct
-	mainCtx = context.Background()
-	unique = uuid.New()
-	gwStreams = make(chan common.NxtStream)
-	appStreams = make(chan common.NxtStream)
-	flows = make(map[flowKey]common.Transport)
+	initLock.Lock()
+	if !initDone {
+		directMode = direct
+		mainCtx = context.Background()
+		unique = uuid.New()
+		gwStreams = make(chan common.NxtStream)
+		appStreams = make(chan common.NxtStream)
+		flows = make(map[flowKey]common.Transport)
 
-	args()
-	shared.OktaInit(lg, &regInfo, controller, onboarded)
-	go monitorStreams(lg)
+		args()
+		shared.OktaInit(lg, &regInfo, controller, onboarded)
+		go monitorStreams(lg)
+		initDone = true
+	}
+	initLock.Unlock()
 }
 
 func AgentIface(lg *log.Logger, iface *Iface) {
