@@ -2,6 +2,7 @@ package shared
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -66,7 +67,15 @@ func oktaLogin(lg *log.Logger) {
 
 func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
 	for {
-		resp, err := http.Get("http://" + controller + "/api/v1/onboard/" + regInfo.AccessToken)
+		// TODO: This is purely for the time being where we dont have proper certificates,
+		// we work with self signed certs. And its difficult to get that into the android/ios
+		// agents, so we just turn it off altogether, at any rate there is no production
+		// image without proper certs, so this needs to be removed at that time
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client := &http.Client{Transport: tr}
+		resp, err := client.Get("https://" + controller + "/api/v1/onboard/" + regInfo.AccessToken)
 		if err == nil {
 			body, err := ioutil.ReadAll(resp.Body)
 			if err == nil {

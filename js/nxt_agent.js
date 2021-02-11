@@ -214,7 +214,7 @@ function nxtOnboard() {
     }
     // async http call. 
     var http = require('http');
-    http.get('http://' + common.getArgs().controller + '/api/v1/onboard/' + registrationInfo.accessToken, callback).
+    http.get('https://' + common.getArgs().controller + '/api/v1/onboard/' + registrationInfo.accessToken, callback).
         on("error", (err) => {
             console.log("Error: " + err.message);
             nxtOnboardPending = false;
