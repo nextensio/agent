@@ -45,7 +45,7 @@ var loginHtml = `<!doctype html>
         var oktaSignIn = new OktaSignIn({
             baseUrl: 'https://dev-635657.okta.com',
             redirectUri: 'http://localhost:8180/',
-            clientId: '0oaz5lndczD0DSUeh4x6',
+            clientId: '0oa24hr70oNBZW0b64x7',
             authParams: {
                 pkce: true,
                 responseMode: 'query',
