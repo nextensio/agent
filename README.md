@@ -159,6 +159,12 @@ password to authenticate an agent / connector respectively. Or feel free to add/
 
 ## Settings done inside Okta
 
+Inside Okta, we have created two "Applications" - both set as "SPA" (Single Page Application).
+One application is for all agent/connector logins and they all have localhost:blah as their
+redirect_uris - because the agent/connectors all login to a "local" website on the device 
+whereas people logging into the controller/UX login to a global controller website. This is
+in flux and we might change the way the agents login to the IDP/Okta (TODO)
+
 1. Adding users - of course we need users added to authenticate agent/connectors
 2. Under API->Trusted Origin, added http://localhost:8180 to make sure that the redirect_uri 
    is a trusted link
@@ -184,44 +190,3 @@ password to authenticate an agent / connector respectively. Or feel free to add/
 All the above info is specific to Okta obviously, Azure will do it some other way which we will
 have to figure out
  
-## Miscellaneous
-
-### Fine Tunning Parameters
-* nxt_common.js
-  * FRAGMENTATION 1: WSS Tunnel chunks    : CHUNK_SIZE
-  * FRAGMENTATION 2: AGT TO Browser chunks: AGT_CHUNK_SIZE
-* nxt_common.js and nxt_agent.js
-  * WSS Tunnel sleep     : common.sleep(..)
-  * AGT to Browser sleep : this.sleep(...)  
-
-### Known Issues
-* MaxListenerExceeded -- multiple socket binding exceeded 11 listeners. Not functionality impacting.
-
-* Thats about it. The browser caches the login information, so when the agent is restarted, the login
-page presented will say that the user is already logged in. We need to use the cached tokens in 
-that case, but that is not coded up, so today we have to logout and login again if the agent or
-connector is restarted
-
-* On the connector server, nodejs often reports dns lookup failures, theres something with dns caching
-thats going wrong, see this article - https://medium.com/@amirilovic/how-to-fix-node-dns-issues-5d4ec2e12e95
-As per the article once I sudo apt install nscd, it runs fine without any dns errors! So installing nscd
-I think is recommended
-
-### Key+Cert generation
-```
-## ROOT CA ##
-openssl req -new -x509 -days 999 -keyout ca-key.pem -out ca-crt.pem
-
-## SERVER - Important: use COMMON NAME: localhost ##
-openssl genrsa -out server-key.pem 4096
-openssl req -new -key server-key.pem -out server-csr.pem
-openssl x509 -req -days 999 -in server-csr.pem -CA ca-crt.pem -CAkey ca-key.pem -CAcreateserial -out server-crt.pem
-
-## CLIENT - Important: use COMMON NAME: AGENT ##
-openssl genrsa -out client-key.pem 4096
-openssl req -new -key client-key.pem -out client-csr.pem
-openssl x509 -req -days 999 -in client-csr.pem -CA ca-crt.pem -CAkey ca-key.pem -CAcreateserial -out client-crt.pem
-
-## Verify Certificate ##
-openssl verify -CAfile ca-crt.pem client-crt.pem
-```

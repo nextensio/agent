@@ -75,18 +75,24 @@ func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, ca
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		client := &http.Client{Transport: tr}
-		resp, err := client.Get("https://" + controller + "/api/v1/onboard/" + regInfo.AccessToken)
+		req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/onboard/"+regInfo.AccessToken, nil)
 		if err == nil {
-			body, err := ioutil.ReadAll(resp.Body)
+			req.Header.Add("Authorization", "Bearer "+regInfo.AccessToken)
+			resp, err := client.Do(req)
 			if err == nil {
-				err = json.Unmarshal(body, regInfo)
+				body, err := ioutil.ReadAll(resp.Body)
 				if err == nil {
-					nxtOnboardPending = false
-					nxtOnboarded = true
-					regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
-					callback(lg)
-					break
+					err = json.Unmarshal(body, regInfo)
+					if err == nil {
+						nxtOnboardPending = false
+						nxtOnboarded = true
+						regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
+						callback(lg)
+						break
+					}
 				}
+			} else {
+				lg.Println("Onboard request failed", err)
 			}
 		}
 		lg.Println("Onboarding failed, will retry again", err)
