@@ -16,6 +16,26 @@ enum PacketType: UInt8 {
     case TCP = 6, UDP = 17, ICMP = 1
 }
 
+// A enum describing NextensioAgentGoBridge log levels defined in `apis.go`.
+public enum NextensioGoBridgeLogLevel: Int32 {
+    case debug = 0
+    case info = 1
+    case error = 2
+}
+
+// logger_cb_t  -> function pointer defined in nxt.h
+var loggerHandler : logger_cb_t = { context, level, msg in
+    guard let context = context, let message = msg else { return }
+
+    let unretainedSelf = Unmanaged<PacketTunnelProvider>.fromOpaque(context)
+        .takeUnretainedValue()
+    
+    let swiftString = String(cString: msg!)
+    let tunnelLogLevel = NextensioGoBridgeLogLevel(rawValue: level) ?? .debug
+    
+    NSLog("Logger: \(tunnelLogLevel) Msg: \(swiftString)")
+}
+
 class PacketTunnelProvider: NEPacketTunnelProvider {
     var session: NWUDPSession? = nil
     var connection: Socket = Socket()
@@ -167,6 +187,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
               }
           }
     }
+    
+    /// Setup NextensioAgent log handler.
+    private func setupLogHandler() {
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        nxtLogger(context, loggerHandler)
+    }
+}
+
+public func logHandler(_ ctx: UnsafeMutableRawPointer, _ level: Int32, _ message: UnsafePointer<Int8>) -> Void {
 }
 
 private func protocolType(for packet: Data) -> PacketType {
