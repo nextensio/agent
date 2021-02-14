@@ -6,7 +6,7 @@
 - Apple Developer License $99/year for individual (register with developer.apple.com or buy enterprise license for multiple users)
 - Download xcode latest from Apple App Store 
 - iOS version 13.0 and above
-- MacOS version 10.15.1 and above
+- MacOS version 11.1 and above
 
 ## Apple Developer License
 
@@ -16,15 +16,20 @@
 ## Building iOS target in Xcode
 
 - iOS build
-- First: build Target:NextensioGoBridgeIOS to generate libnxt-go.a in relative build products
-- Second: pick iPhone X (simulator) as the build target
-- Third: build Target:NextensioApp to build the phone app and NextsionPacketTunnel
+- First: build Target:NextensioGoBridgeIOS and pick iPhone X (simulator/device) to generate libnxt-go.a 
+- Second: build Target:NextensioApp and pick iPhone X (simulator/device) to generate the NextensioAgent app
+- (if second step doesn't generate PacketTunnel appex, go to third step and re-do second step)
+- Third: build Target:NextensioPacketTunnel and pick iPhone X (simulator/device) to generate the NextensioPacketTunnel appex
 
 ## Building MacOS target in Xcode
 
-- WIP
+- MacOS build
+- First: build Target:NextensioGoBridgeMacOSX and pick my mac to generate libnxt-go.a 
+- Second: build Target:NextensioAppMacOSX and pick my mac to generate the NextensioAgentAppMacOSX app
+- (if second step doesn't generate PacketTunnel appex, go to third step and re-do second step)
+- Third: build Target:NextensioPacketTunnelMacOSX and pick my mac to generate the NextensioPacketTunnel appex
 
-## Two Processes and files
+## Source Code 
 
 - NextensioApp - is the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
 - NextensioPacketTunnel - is the tunnel provider process to handle tunnel packet flow. Main functions are startTunnel() and stopTunnel()
