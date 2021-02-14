@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		6B64F6A125D876E90094BF60 /* NextensioGoBridge.h in Headers */ = {isa = PBXBuildFile; fileRef = 6B64F69F25D876E90094BF60 /* NextensioGoBridge.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		6B64F6AC25D877170094BF60 /* nxt.h in Headers */ = {isa = PBXBuildFile; fileRef = 6B64F6A825D877170094BF60 /* nxt.h */; };
 		6B64F6AD25D877170094BF60 /* Makefile in Sources */ = {isa = PBXBuildFile; fileRef = 6B64F6A925D877170094BF60 /* Makefile */; };
 		6B64F6AE25D877170094BF60 /* apis.go in Resources */ = {isa = PBXBuildFile; fileRef = 6B64F6AB25D877170094BF60 /* apis.go */; };
@@ -15,7 +14,6 @@
 
 /* Begin PBXFileReference section */
 		6B64F69C25D876E90094BF60 /* NextensioGoBridge.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = NextensioGoBridge.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		6B64F69F25D876E90094BF60 /* NextensioGoBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NextensioGoBridge.h; sourceTree = "<group>"; };
 		6B64F6A025D876E90094BF60 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6B64F6A825D877170094BF60 /* nxt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = nxt.h; sourceTree = "<group>"; };
 		6B64F6A925D877170094BF60 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
@@ -41,7 +39,6 @@
 				6B64F6A925D877170094BF60 /* Makefile */,
 				6B64F6AA25D877170094BF60 /* module.modulemap */,
 				6B64F6A825D877170094BF60 /* nxt.h */,
-				6B64F69F25D876E90094BF60 /* NextensioGoBridge.h */,
 				6B64F6A025D876E90094BF60 /* Info.plist */,
 				6B64F69D25D876E90094BF60 /* Products */,
 			);
@@ -62,7 +59,6 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B64F6A125D876E90094BF60 /* NextensioGoBridge.h in Headers */,
 				6B64F6AC25D877170094BF60 /* nxt.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

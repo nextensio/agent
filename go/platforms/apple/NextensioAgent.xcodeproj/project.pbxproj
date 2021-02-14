@@ -62,7 +62,7 @@
 		6B2D6BC025D114240051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6B2D6BC125D114240051991B /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 		6B2D6BCE25D116B20051991B /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
-		6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "NxtNetworkExtension-Go-Bridge.h"; path = "Sources/NextensioAgent/NextensioPacketTunnel/NxtNetworkExtension-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
+		6B2D6BD625D11EA30051991B /* NextensioAgent-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "NextensioAgent-Go-Bridge.h"; path = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,7 +133,7 @@
 		6B2D6BBD25D114240051991B /* NextensioPacketTunnel */ = {
 			isa = PBXGroup;
 			children = (
-				6B2D6BD625D11EA30051991B /* NxtNetworkExtension-Go-Bridge.h */,
+				6B2D6BD625D11EA30051991B /* NextensioAgent-Go-Bridge.h */,
 				6B2D6BCE25D116B20051991B /* Socket.swift */,
 				6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */,
 				6B2D6BC025D114240051991B /* Info.plist */,
@@ -573,7 +573,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NxtNetworkExtension-Go-Bridge.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -602,7 +602,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NxtNetworkExtension-Go-Bridge.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
