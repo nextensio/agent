@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6B2042DA25D8A47E001A7129 /* libnxt-go.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2042D925D8A47E001A7129 /* libnxt-go.a */; };
 		6B2D6B9D25D113630051991B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6B9C25D113630051991B /* AppDelegate.swift */; };
 		6B2D6B9F25D113630051991B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6B9E25D113630051991B /* SceneDelegate.swift */; };
 		6B2D6BA125D113630051991B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BA025D113630051991B /* ViewController.swift */; };
@@ -45,6 +46,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6B2042D925D8A47E001A7129 /* libnxt-go.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = "libnxt-go.a"; sourceTree = "<group>"; };
 		6B2D6B9925D113630051991B /* NextensioApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6B9C25D113630051991B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6B2D6B9E25D113630051991B /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6B2042DA25D8A47E001A7129 /* libnxt-go.a in Frameworks */,
 				6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -121,6 +124,7 @@
 		6B2D6BBA25D114240051991B /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				6B2042D925D8A47E001A7129 /* libnxt-go.a */,
 				6B2D6BBB25D114240051991B /* NetworkExtension.framework */,
 			);
 			name = Frameworks;
@@ -140,6 +144,36 @@
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
+
+/* Begin PBXLegacyTarget section */
+		6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(ACTION)";
+			buildConfigurationList = 6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeIOS" */;
+			buildPhases = (
+			);
+			buildToolPath = /usr/bin/make;
+			buildWorkingDirectory = "$(PROJECT_DIR)/Sources/NextensioGoBridge";
+			dependencies = (
+			);
+			name = NextensioGoBridgeIOS;
+			passBuildSettingsInEnvironment = 1;
+			productName = NextensioGoBridgeIOS;
+		};
+		6B2042E525D8A664001A7129 /* NextensioGoBridgeMacOSX */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(ACTION)";
+			buildConfigurationList = 6B2042E625D8A664001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeMacOSX" */;
+			buildPhases = (
+			);
+			buildToolPath = /usr/bin/make;
+			dependencies = (
+			);
+			name = NextensioGoBridgeMacOSX;
+			passBuildSettingsInEnvironment = 1;
+			productName = NextensioGoBridgeMacOSX;
+		};
+/* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
 		6B2D6B9825D113630051991B /* NextensioApp */ = {
@@ -187,6 +221,12 @@
 				LastSwiftUpdateCheck = 1240;
 				LastUpgradeCheck = 1240;
 				TargetAttributes = {
+					6B2042DB25D8A4D1001A7129 = {
+						CreatedOnToolsVersion = 12.4;
+					};
+					6B2042E525D8A664001A7129 = {
+						CreatedOnToolsVersion = 12.4;
+					};
 					6B2D6B9825D113630051991B = {
 						CreatedOnToolsVersion = 12.4;
 					};
@@ -210,6 +250,8 @@
 			targets = (
 				6B2D6B9825D113630051991B /* NextensioApp */,
 				6B2D6BB825D114240051991B /* NextensioPacketTunnel */,
+				6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */,
+				6B2042E525D8A664001A7129 /* NextensioGoBridgeMacOSX */,
 			);
 		};
 /* End PBXProject section */
@@ -284,6 +326,66 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		6B2042DD25D8A4D1001A7129 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PATH = "${PATH}:/usr/local/go/bin";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		6B2042DE25D8A4D1001A7129 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PATH = "${PATH}:/usr/local/go/bin";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		6B2042E725D8A664001A7129 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PATH = "${PATH}:/usr/local/go/bin";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6B2042E825D8A664001A7129 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PATH = "${PATH}:/usr/local/go/bin";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
 		6B2D6BAB25D113640051991B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -456,6 +558,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -479,6 +585,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -493,6 +603,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B2042DD25D8A4D1001A7129 /* Debug */,
+				6B2042DE25D8A4D1001A7129 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6B2042E625D8A664001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeMacOSX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B2042E725D8A664001A7129 /* Debug */,
+				6B2042E825D8A664001A7129 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		6B2D6B9425D113630051991B /* Build configuration list for PBXProject "NextensioAgent" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
