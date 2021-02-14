@@ -190,8 +190,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     
     /// Setup NextensioAgent log handler.
     private func setupLogHandler() {
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        nxtLogger(context, loggerHandler)
+        // let context = Unmanaged.passUnretained(self).toOpaque()
+        // nxtLogger(context, loggerHandler)
     }
 }
 

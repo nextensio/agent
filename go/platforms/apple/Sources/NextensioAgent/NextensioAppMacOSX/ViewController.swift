@@ -1,16 +1,17 @@
 //
 //  ViewController.swift
-//  NextensioAgent
+//  NextensioAppMacOS
 //
-//  Created by Rudy Zulkarnain on 2/7/21.
+//  Created by Rudy Zulkarnain on 2/14/21.
 //
-import UIKit
+
+import Cocoa
 import NetworkExtension
 
-class ViewController: UIViewController {
-
+class ViewController: NSViewController {
+    
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
-    @IBOutlet var connectButton: UIButton!
+    @IBOutlet var connectButton: NSButton!
 
     // Hard code VPN configurations
     let tunnelBundleId = "com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel"
@@ -75,29 +76,24 @@ class ViewController: UIViewController {
         NotificationCenter.default.addObserver(self, selector: #selector(ViewController.VPNStatusDidChange(_:)), name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
     }
 
-    override func didReceiveMemoryWarning() {
-        super.didReceiveMemoryWarning()
-        // Dispose of any resources that can be recreated.
-    }
-
     @objc func VPNStatusDidChange(_ notification: Notification?) {
         print("VPN Status changed:")
         let status = self.vpnManager.connection.status
         switch status {
         case .connecting:
             print("Connecting...")
-            connectButton.setTitle("Disconnect", for: .normal)
+            connectButton.title = "Disconnect"
             break
         case .connected:
             print("Connected...")
-            connectButton.setTitle("Disconnect", for: .normal)
+            connectButton.title = "Disconnect"
             break
         case .disconnecting:
             print("Disconnecting...")
             break
         case .disconnected:
             print("Disconnected...")
-            connectButton.setTitle("Connect", for: .normal)
+            connectButton.title = "Connect"
             break
         case .invalid:
             print("Invalid")
@@ -110,13 +106,14 @@ class ViewController: UIViewController {
         }
     }
 
-    @IBAction func go(_ sender: UIButton, forEvent event: UIEvent) {
+    @IBAction func connect_button(_ sender: Any) {
         print("Go!")
+        let button = sender as! NSButton
         self.vpnManager.loadFromPreferences { (error:Error?) in
             if let error = error {
                 print(error)
             }
-            if (sender.title(for: .normal) == "Connect") {
+            if (button.title == "Connect") {
                 do {
                     try self.vpnManager.connection.startVPNTunnel()
                 } catch {

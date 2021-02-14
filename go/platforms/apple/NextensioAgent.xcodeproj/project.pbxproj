@@ -3,22 +3,33 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 52;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		6B2042DA25D8A47E001A7129 /* libnxt-go.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2042D925D8A47E001A7129 /* libnxt-go.a */; };
+		6B0BA57925D8FAE300F3B1C6 /* libnxt-go.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2042D925D8A47E001A7129 /* libnxt-go.a */; platformFilter = maccatalyst; };
+		6B0BA57A25D8FAE300F3B1C6 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
+		6B0BA58C25D8FDE300F3B1C6 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
+		6B17496A25D98FB30065D488 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BE9EA4325D989F3006DCD29 /* Main.storyboard */; };
+		6B2042DA25D8A47E001A7129 /* libnxt-go.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2042D925D8A47E001A7129 /* libnxt-go.a */; platformFilter = ios; };
 		6B2D6B9D25D113630051991B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6B9C25D113630051991B /* AppDelegate.swift */; };
 		6B2D6B9F25D113630051991B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6B9E25D113630051991B /* SceneDelegate.swift */; };
 		6B2D6BA125D113630051991B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BA025D113630051991B /* ViewController.swift */; };
 		6B2D6BA425D113630051991B /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6B2D6BA225D113630051991B /* Main.storyboard */; };
 		6B2D6BA625D113640051991B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B2D6BA525D113640051991B /* Assets.xcassets */; };
 		6B2D6BA925D113640051991B /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6B2D6BA725D113640051991B /* LaunchScreen.storyboard */; };
-		6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
-		6B2D6BBF25D114240051991B /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */; };
-		6B2D6BC425D114240051991B /* NextensioPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
-		6B2D6BCF25D116B20051991B /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BCE25D116B20051991B /* Socket.swift */; };
+		6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
+		6B2D6BBF25D114240051991B /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */; platformFilter = ios; };
+		6B2D6BC425D114240051991B /* NextensioPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
+		6B2D6BCF25D116B20051991B /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BCE25D116B20051991B /* Socket.swift */; platformFilter = ios; };
+		6BE9E9AA25D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BE9E9A925D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist */; platformFilter = maccatalyst; };
+		6BE9EA4925D989F3006DCD29 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BE9EA3425D989F3006DCD29 /* Assets.xcassets */; };
+		6BF3B78525D99FE60023DD0B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE9EA3325D989F3006DCD29 /* ViewController.swift */; };
+		6BF3B78625D99FE60023DD0B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE9EA3825D989F3006DCD29 /* AppDelegate.swift */; };
+		6BF3B7AC25D9B5B00023DD0B /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BCE25D116B20051991B /* Socket.swift */; };
+		6BF3B7AD25D9B5B00023DD0B /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */; };
+		6BF3B7BA25D9BBDF0023DD0B /* NextensioPacketTunnelMacOSX.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,6 +39,27 @@
 			proxyType = 1;
 			remoteGlobalIDString = 6B2D6BB825D114240051991B;
 			remoteInfo = NextensioPacketTunnel;
+		};
+		6BE9E96725D90E9E006DCD29 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6B2D6B9125D113630051991B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6B2042E525D8A664001A7129;
+			remoteInfo = NextensioGoBridgeMacOSX;
+		};
+		6BE9E96925D90EA5006DCD29 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6B2D6B9125D113630051991B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6B2042DB25D8A4D1001A7129;
+			remoteInfo = NextensioGoBridgeIOS;
+		};
+		6BF3B7A025D9B4910023DD0B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6B2D6B9125D113630051991B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6B0BA57425D8FAE300F3B1C6;
+			remoteInfo = NextensioPacketTunnelMacOSX;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -43,9 +75,22 @@
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6BE9E96225D90D69006DCD29 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6BF3B7BA25D9BBDF0023DD0B /* NextensioPacketTunnelMacOSX.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NextensioPacketTunnelMacOSX.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B0BA59625D8FDE300F3B1C6 /* NextensioAppMacOSX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioAppMacOSX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2042D925D8A47E001A7129 /* libnxt-go.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libnxt-go.a"; path = "../../../../../../../../Documents/agent/go/platforms/apple/libnxt-go.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6B9925D113630051991B /* NextensioApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6B9C25D113630051991B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -60,12 +105,37 @@
 		6B2D6BBB25D114240051991B /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		6B2D6BC025D114240051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		6B2D6BC125D114240051991B /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 		6B2D6BCE25D116B20051991B /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
 		6B2D6BD625D11EA30051991B /* NextensioAgent-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "NextensioAgent-Go-Bridge.h"; path = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
+		6BE9E9A925D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "PacketTunnelMacOSX-Info.plist"; sourceTree = "<group>"; };
+		6BE9EA3325D989F3006DCD29 /* ViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		6BE9EA3425D989F3006DCD29 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6BE9EA3825D989F3006DCD29 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		6BE9EA4325D989F3006DCD29 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
+		6BE9EA4625D989F3006DCD29 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6BF3B75B25D99B890023DD0B /* NextensioPacketTunnelMacOSXDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnelMacOSXDebug.entitlements; sourceTree = "<group>"; };
+		6BF3B7C425D9BEAE0023DD0B /* NextensioAppMacOSXDebug.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioAppMacOSXDebug.entitlements; sourceTree = "<group>"; };
+		6BF3B7C525D9BFD00023DD0B /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		6B0BA57825D8FAE300F3B1C6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B0BA57925D8FAE300F3B1C6 /* libnxt-go.a in Frameworks */,
+				6B0BA57A25D8FAE300F3B1C6 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B0BA58B25D8FDE300F3B1C6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B0BA58C25D8FDE300F3B1C6 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6B2D6B9625D113630051991B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -89,6 +159,7 @@
 		6B2D6B9025D113630051991B = {
 			isa = PBXGroup;
 			children = (
+				6BE9EA3225D989F3006DCD29 /* NextensioAppMacOSX */,
 				6B2D6B9B25D113630051991B /* NextensioApp */,
 				6B2D6BBD25D114240051991B /* NextensioPacketTunnel */,
 				6B2D6BBA25D114240051991B /* Frameworks */,
@@ -101,6 +172,8 @@
 			children = (
 				6B2D6B9925D113630051991B /* NextensioApp.app */,
 				6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */,
+				6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */,
+				6B0BA59625D8FDE300F3B1C6 /* NextensioAppMacOSX.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -133,14 +206,30 @@
 		6B2D6BBD25D114240051991B /* NextensioPacketTunnel */ = {
 			isa = PBXGroup;
 			children = (
+				6BF3B7C525D9BFD00023DD0B /* NextensioPacketTunnel.entitlements */,
+				6BF3B75B25D99B890023DD0B /* NextensioPacketTunnelMacOSXDebug.entitlements */,
 				6B2D6BD625D11EA30051991B /* NextensioAgent-Go-Bridge.h */,
 				6B2D6BCE25D116B20051991B /* Socket.swift */,
 				6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */,
+				6BE9E9A925D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist */,
 				6B2D6BC025D114240051991B /* Info.plist */,
-				6B2D6BC125D114240051991B /* NextensioPacketTunnel.entitlements */,
 			);
 			name = NextensioPacketTunnel;
 			path = Sources/NextensioAgent/NextensioPacketTunnel;
+			sourceTree = "<group>";
+		};
+		6BE9EA3225D989F3006DCD29 /* NextensioAppMacOSX */ = {
+			isa = PBXGroup;
+			children = (
+				6BF3B7C425D9BEAE0023DD0B /* NextensioAppMacOSXDebug.entitlements */,
+				6BE9EA4625D989F3006DCD29 /* Info.plist */,
+				6BE9EA4325D989F3006DCD29 /* Main.storyboard */,
+				6BE9EA3325D989F3006DCD29 /* ViewController.swift */,
+				6BE9EA3425D989F3006DCD29 /* Assets.xcassets */,
+				6BE9EA3825D989F3006DCD29 /* AppDelegate.swift */,
+			);
+			name = NextensioAppMacOSX;
+			path = Sources/NextensioAgent/NextensioAppMacOSX;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -177,6 +266,43 @@
 /* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
+		6B0BA57425D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B0BA57C25D8FAE300F3B1C6 /* Build configuration list for PBXNativeTarget "NextensioPacketTunnelMacOSX" */;
+			buildPhases = (
+				6B0BA57525D8FAE300F3B1C6 /* Sources */,
+				6B0BA57825D8FAE300F3B1C6 /* Frameworks */,
+				6B0BA57B25D8FAE300F3B1C6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6BE9E96825D90E9E006DCD29 /* PBXTargetDependency */,
+			);
+			name = NextensioPacketTunnelMacOSX;
+			productName = NextensioPacketTunnel;
+			productReference = 6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		6B0BA58425D8FDE300F3B1C6 /* NextensioAppMacOSX */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B0BA59325D8FDE300F3B1C6 /* Build configuration list for PBXNativeTarget "NextensioAppMacOSX" */;
+			buildPhases = (
+				6B0BA58725D8FDE300F3B1C6 /* Sources */,
+				6B0BA58B25D8FDE300F3B1C6 /* Frameworks */,
+				6B0BA58D25D8FDE300F3B1C6 /* Resources */,
+				6BE9E96225D90D69006DCD29 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6BF3B7A125D9B4910023DD0B /* PBXTargetDependency */,
+			);
+			name = NextensioAppMacOSX;
+			productName = NextensioAgent;
+			productReference = 6B0BA59625D8FDE300F3B1C6 /* NextensioAppMacOSX.app */;
+			productType = "com.apple.product-type.application";
+		};
 		6B2D6B9825D113630051991B /* NextensioApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6B2D6BAD25D113640051991B /* Build configuration list for PBXNativeTarget "NextensioApp" */;
@@ -207,6 +333,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				6BE9E96A25D90EA5006DCD29 /* PBXTargetDependency */,
 			);
 			name = NextensioPacketTunnel;
 			productName = NextensioPacketTunnel;
@@ -252,12 +379,31 @@
 				6B2D6B9825D113630051991B /* NextensioApp */,
 				6B2D6BB825D114240051991B /* NextensioPacketTunnel */,
 				6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */,
+				6B0BA58425D8FDE300F3B1C6 /* NextensioAppMacOSX */,
+				6B0BA57425D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX */,
 				6B2042E525D8A664001A7129 /* NextensioGoBridgeMacOSX */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		6B0BA57B25D8FAE300F3B1C6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BE9E9AA25D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B0BA58D25D8FDE300F3B1C6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B17496A25D98FB30065D488 /* Main.storyboard in Resources */,
+				6BE9EA4925D989F3006DCD29 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6B2D6B9725D113630051991B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -278,6 +424,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6B0BA57525D8FAE300F3B1C6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BF3B7AC25D9B5B00023DD0B /* Socket.swift in Sources */,
+				6BF3B7AD25D9B5B00023DD0B /* PacketTunnelProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B0BA58725D8FDE300F3B1C6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BF3B78525D99FE60023DD0B /* ViewController.swift in Sources */,
+				6BF3B78625D99FE60023DD0B /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6B2D6B9525D113630051991B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -302,8 +466,27 @@
 /* Begin PBXTargetDependency section */
 		6B2D6BC325D114240051991B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
+			platformFilter = ios;
 			target = 6B2D6BB825D114240051991B /* NextensioPacketTunnel */;
 			targetProxy = 6B2D6BC225D114240051991B /* PBXContainerItemProxy */;
+		};
+		6BE9E96825D90E9E006DCD29 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = maccatalyst;
+			target = 6B2042E525D8A664001A7129 /* NextensioGoBridgeMacOSX */;
+			targetProxy = 6BE9E96725D90E9E006DCD29 /* PBXContainerItemProxy */;
+		};
+		6BE9E96A25D90EA5006DCD29 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */;
+			targetProxy = 6BE9E96925D90EA5006DCD29 /* PBXContainerItemProxy */;
+		};
+		6BF3B7A125D9B4910023DD0B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = maccatalyst;
+			target = 6B0BA57425D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX */;
+			targetProxy = 6BF3B7A025D9B4910023DD0B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -327,6 +510,131 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		6B0BA57D25D8FAE300F3B1C6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_ID_IOS = "";
+				APP_ID_MACOSX = "";
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/PacketTunnelMacOSX-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+					"$(BUILD_DIR)/Debug",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
+				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 6;
+			};
+			name = Debug;
+		};
+		6B0BA57E25D8FAE300F3B1C6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_ID_IOS = "";
+				APP_ID_MACOSX = "";
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/PacketTunnelMacOSX-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+					"$(BUILD_DIR)/Debug",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
+				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 6;
+			};
+			name = Release;
+		};
+		6B0BA59425D8FDE300F3B1C6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = Sources/NextensioAgent/NextensioAppMacOSX/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 6;
+			};
+			name = Debug;
+		};
+		6B0BA59525D8FDE300F3B1C6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				INFOPLIST_FILE = Sources/NextensioAgent/NextensioAppMacOSX/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 6;
+			};
+			name = Release;
+		};
 		6B2042DD25D8A4D1001A7129 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -368,6 +676,7 @@
 				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.1;
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				PATH = "${PATH}:/usr/local/go/bin";
@@ -383,6 +692,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.1;
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				PATH = "${PATH}:/usr/local/go/bin";
@@ -395,6 +705,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				APP_ID_IOS = "";
+				APP_ID_MACOSX = "";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -443,6 +755,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
+				MACOSX_DEPLOYMENT_TARGET = 11.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -456,6 +769,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				APP_ID_IOS = "";
+				APP_ID_MACOSX = "";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -498,6 +813,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
+				MACOSX_DEPLOYMENT_TARGET = 11.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
@@ -528,7 +844,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -553,7 +869,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -620,6 +936,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6B0BA57C25D8FAE300F3B1C6 /* Build configuration list for PBXNativeTarget "NextensioPacketTunnelMacOSX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B0BA57D25D8FAE300F3B1C6 /* Debug */,
+				6B0BA57E25D8FAE300F3B1C6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6B0BA59325D8FDE300F3B1C6 /* Build configuration list for PBXNativeTarget "NextensioAppMacOSX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B0BA59425D8FDE300F3B1C6 /* Debug */,
+				6B0BA59525D8FDE300F3B1C6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeIOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
