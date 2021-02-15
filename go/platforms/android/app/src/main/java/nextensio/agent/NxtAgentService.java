@@ -8,46 +8,66 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.content.pm.PackageManager;
 import android.util.Log;
 import android.content.Context;
-
+import android.os.Binder;
+import android.os.IBinder;
+import android.system.Os;
 import java.io.Closeable;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.channels.Selector;
 
+// This class is an android 'service' class (ie it has nothing to do with UI etc..), 
+// its job is to create the vpnService interface/file descriptors and pass it onto 
+// the golang agent, thats about it.
 public class NxtAgentService extends VpnService {
-    private static final String TAG = "NxtAgent";
+    private static final String TAG = "NxtSvc";
     private static final String VPN_ADDRESS = "169.254.2.1"; // Select a link local IP
     private static final String VPN_ROUTE = "0.0.0.0"; 
     public static final String BROADCAST_VPN_STATE = "nextensio.agent.VPN_STATE";
-    private static boolean isRunning = false;
-    private ParcelFileDescriptor vpnInterface = null;
+    private static Context context;
+    private ParcelFileDescriptor vpnInterface;
+    private int vpnFd = 0;
     private PendingIntent pendingIntent;
     private boolean goLoaded;
-    private static Context context;
+    private final IBinder mBinder = new NxtAgentServiceBinder();
 
+    // TODO: I am still not clear whether the onCreate here should load the golang libs
+    // when the onCreate in NxtAgent.java already does that. But I remember some issues
+    // with java complaining JNI not found unless its done in both places, not sure how
+    // this class can be launched before NxtAgent is launched and has done its onCreate()
     @Override
     public void onCreate() {
         super.onCreate();
-        isRunning = true;
         setupVPN();
         if (!goLoaded) {
             this.context = getApplicationContext();
             SharedLibraryLoader.loadSharedLibrary(this.context, "nxt-go");
             goLoaded = true;
-        }
-        try {
-            int fd = vpnInterface.detachFd();
-            LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
-            Log.i(TAG, "Start ");
-            nxtOn(fd);
-        }
-        finally {
+            Log.i(TAG, "Loaded golibs");
+        } try {
+            if (vpnFd != 0) {
+                // Call into the golang agent and ask it to start Rx/Tx on this fd
+                nxtOn(vpnFd);
+                LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
+                Log.i(TAG, "VPN Start " + String.format("Fd = %d", vpnFd));
+            } else {
+                LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", false));
+                stop();
+                Log.i(TAG, "VPN fail");
+            }
+        } finally {
             
         }
     }
 
+    public void stop() {
+        closeResources();
+        stopSelf();
+        Log.i(TAG, "Stopping vpn");
+    }
+
     private void setupVPN() {
-        if (vpnInterface == null) {
+        if (vpnFd == 0) {
             Builder builder = new Builder();
             builder.addAddress(VPN_ADDRESS, 32);
             builder.addRoute(VPN_ROUTE, 0);
@@ -62,11 +82,28 @@ public class NxtAgentService extends VpnService {
                 builder.addDisallowedApplication("nextensio.agent");
             } catch (PackageManager.NameNotFoundException e) {
                 Log.i(TAG, "Unable to protect the entire application");
+                return;
             }
             // golang code works with blocking sockets
             builder.setBlocking(true);
             vpnInterface = builder.setSession(getString(R.string.app_name)).setConfigureIntent(pendingIntent).establish();
+            if (vpnInterface != null) {
+                vpnFd = vpnInterface.detachFd();
+            }
         }
+    }
+
+    // The binder is what comes into picture when NxtAgent.java calls doBindService()
+    // to get a reference to the actual memory object running to provide this service
+    public class NxtAgentServiceBinder extends Binder {
+        NxtAgentService getService() {
+            return NxtAgentService.this;
+        }
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return mBinder;
     }
 
     @Override
@@ -74,35 +111,28 @@ public class NxtAgentService extends VpnService {
         return START_STICKY;
     }
 
-    public static boolean isRunning() {
-        return isRunning;
-    }
-
     @Override
     public void onDestroy() {
-        super.onDestroy();
-        isRunning = false;
-        cleanup();
+        closeResources();
+        LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", false));
         Log.i(TAG, "Destroyed");
+        super.onDestroy();
     }
 
-    private void cleanup() {
-        closeResources(vpnInterface);
-    }
-
-    private static void closeResources(Closeable... resources) {
-        for (Closeable resource : resources)
-        {
-            try {
-                resource.close();
+    private void closeResources() {
+        try {
+            if (vpnFd != 0) {
+                Log.i(TAG, "VPN CLOSE");
+                vpnInterface.close();
+                nxtOff(vpnFd);
+                vpnFd = 0;
             }
-            catch (IOException e) {
-                // Ignore
-            }
-            finally {
-            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error closing vpnFd");
+        } finally {
         }
     }
 
     private static native int nxtOn(int tunFd);
+    private static native int nxtOff(int tunFd);
 }

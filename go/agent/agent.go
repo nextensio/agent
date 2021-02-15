@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"nextensio/agent/shared"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -343,6 +345,7 @@ func AgentInit(lg *log.Logger, direct int) {
 		args()
 		shared.OktaInit(lg, &regInfo, controller, onboarded)
 		go monitorStreams(lg)
+		go perfMonitor(lg, 60)
 		initDone = true
 	}
 	initLock.Unlock()
@@ -357,4 +360,39 @@ func AgentIface(lg *log.Logger, iface *Iface) {
 	f.Dial(appStreams)
 	p := proxy.NewListener(mainCtx, lg, f, iface.IP)
 	go p.Listen(appStreams)
+}
+
+// DEBUG STATS DUMP TO ANALYZE AGENT MEMORY/THREAD USAGE, THIS WILL EVENTUALLY
+// GET TAKEN OUT BEFORE HITTING PRODUCTION
+type Monitor struct {
+	Alloc,
+	TotalAlloc,
+	Sys,
+	Mallocs,
+	Frees,
+	LiveObjects,
+	PauseTotalNs uint64
+	NumGC        uint32
+	NumGoroutine int
+}
+
+func perfMonitor(lg *log.Logger, duration int) {
+	var m Monitor
+	var rtm runtime.MemStats
+	var interval = time.Duration(duration) * time.Second
+	for {
+		<-time.After(interval)
+		runtime.ReadMemStats(&rtm)
+		m.NumGoroutine = runtime.NumGoroutine()
+		m.Alloc = rtm.Alloc
+		m.TotalAlloc = rtm.TotalAlloc
+		m.Sys = rtm.Sys
+		m.Mallocs = rtm.Mallocs
+		m.Frees = rtm.Frees
+		m.LiveObjects = m.Mallocs - m.Frees
+		m.PauseTotalNs = rtm.PauseTotalNs
+		m.NumGC = rtm.NumGC
+		b, _ := json.Marshal(m)
+		lg.Println(string(b))
+	}
 }

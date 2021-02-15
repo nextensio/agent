@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+    "syscall"
 	"nextensio/agent/agent"
 )
 
@@ -35,6 +36,13 @@ func nxtOn(tunFd int32) {
 	l := AndroidLogger{level: C.ANDROID_LOG_ERROR}
 	lg := log.New(&l, "", 0)
 	agent.AgentIface(lg, &iface)
+}
+
+//export nxtOff
+func nxtOff(tunFd int32) {
+    str := "NxtOff: " + fmt.Sprintf("%d", tunFd)
+    C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString(str))
+    syscall.Close(int(tunFd))
 }
 
 func main() {}

@@ -15,3 +15,9 @@ JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOn(JNIEnv *env, j
     nxtOn(tun_fd);
     return 0;
 }
+
+JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOff(JNIEnv *env, jclass c, jint tun_fd)
+{
+    nxtOff(tun_fd);
+    return 0;
+}

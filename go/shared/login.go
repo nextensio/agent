@@ -63,7 +63,7 @@ var loginHtml = `<!doctype html>
                     oktaSignIn.authClient.tokenManager.add('accessToken', accessToken);
                     oktaSignIn.authClient.tokenManager.add('idToken', idToken);
 
-                    document.getElementById("messageBox").innerHTML = "Hello, " + idToken.claims.email + "! You just logged in! :)";
+                    document.getElementById("messageBox").innerHTML = "Hello, " + idToken.claims.email + "! You can now click ON in the Nextensio agent software";
                     document.getElementById("logout").style.display = 'block';
 
                     var xmlHttp = new XMLHttpRequest();
@@ -77,7 +77,7 @@ var loginHtml = `<!doctype html>
             );
         } else {
             oktaSignIn.authClient.token.getUserInfo().then(function (user) {
-                document.getElementById("messageBox").innerHTML = "Hello, " + user.email + "! You are *still* logged in! :)";
+                document.getElementById("messageBox").innerHTML = "Hello, " + user.email + "! You can logout and login again to force Nextensio agent to re-login";
                 document.getElementById("logout").style.display = 'block';
             }, function (error) {
                 oktaSignIn.renderEl(
