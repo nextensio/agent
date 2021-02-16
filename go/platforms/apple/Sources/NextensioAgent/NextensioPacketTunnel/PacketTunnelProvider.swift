@@ -33,7 +33,7 @@ var loggerHandler : logger_cb_t = { context, level, msg in
     let swiftString = String(cString: msg!)
     let tunnelLogLevel = NextensioGoBridgeLogLevel(rawValue: level) ?? .debug
     
-    NSLog("Logger: \(tunnelLogLevel) Msg: \(swiftString)")
+    NSLog("Nextensio logger level \(tunnelLogLevel) msg: \(swiftString)")
 }
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -87,7 +87,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
     
     func setupPacketTunnelNetworkSettings() {
-        
         // the `tunnelRemoteAddress` is meaningless because we are not creating a tunnel.
         let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: self.protocolConfiguration.serverAddress!)
         
@@ -138,15 +137,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        NSLog("tunnel stop")
         super.stopTunnel(with: reason, completionHandler: completionHandler)
-        
         self.turnOffNextensioAgent()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
         NSLog("handleAppMessage")
-        
         if let handler = completionHandler {
             handler(messageData)
         }
@@ -157,6 +153,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func wake() {
+        NSLog("wake")
     }
     
     // Tunnel device file descriptor.
@@ -205,10 +202,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // turn on NextensioAgent .
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        let utunstr = String(format: "%d", tunIf)
-        let interfaceName = self.interfaceName ?? "unknown"
-        NSLog("tunnel, fd = \(interfaceName) \(utunstr)")
-        
         NSLog("calling go-bridge nxtOn... ")
         nxtOn(tunIf)
     }
@@ -216,10 +209,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // turn off NextensioAgent .
     private func turnOffNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        let utunstr = String(format: "%d", tunIf)
-        let interfaceName = self.interfaceName ?? "unknown"
-        NSLog("tunnel, fd = \(interfaceName) \(utunstr)")
-        
         NSLog("calling go-bridge nxtOff... ")
         nxtOff(tunIf)
     }

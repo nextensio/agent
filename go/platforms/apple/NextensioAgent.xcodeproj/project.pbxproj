@@ -235,17 +235,17 @@
 /* End PBXGroup section */
 
 /* Begin PBXLegacyTarget section */
-		6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */ = {
+		6B2042DB25D8A4D1001A7129 /* NextensioGoBridge */ = {
 			isa = PBXLegacyTarget;
 			buildArgumentsString = "$(ACTION)";
-			buildConfigurationList = 6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeIOS" */;
+			buildConfigurationList = 6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridge" */;
 			buildPhases = (
 			);
 			buildToolPath = /usr/bin/make;
 			buildWorkingDirectory = "$(PROJECT_DIR)/Sources/NextensioGoBridge";
 			dependencies = (
 			);
-			name = NextensioGoBridgeIOS;
+			name = NextensioGoBridge;
 			passBuildSettingsInEnvironment = 1;
 			productName = NextensioGoBridgeIOS;
 		};
@@ -378,7 +378,7 @@
 			targets = (
 				6B2D6B9825D113630051991B /* NextensioApp */,
 				6B2D6BB825D114240051991B /* NextensioPacketTunnel */,
-				6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */,
+				6B2042DB25D8A4D1001A7129 /* NextensioGoBridge */,
 				6B0BA58425D8FDE300F3B1C6 /* NextensioAppMacOSX */,
 				6B0BA57425D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX */,
 				6B2042E525D8A664001A7129 /* NextensioGoBridgeMacOSX */,
@@ -479,7 +479,7 @@
 		6BE9E96A25D90EA5006DCD29 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			platformFilter = ios;
-			target = 6B2042DB25D8A4D1001A7129 /* NextensioGoBridgeIOS */;
+			target = 6B2042DB25D8A4D1001A7129 /* NextensioGoBridge */;
 			targetProxy = 6BE9E96925D90EA5006DCD29 /* PBXContainerItemProxy */;
 		};
 		6BF3B7A125D9B4910023DD0B /* PBXTargetDependency */ = {
@@ -954,7 +954,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridgeIOS" */ = {
+		6B2042DC25D8A4D1001A7129 /* Build configuration list for PBXLegacyTarget "NextensioGoBridge" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6B2042DD25D8A4D1001A7129 /* Debug */,
