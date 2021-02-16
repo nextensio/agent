@@ -20,7 +20,7 @@ package main
 import "C"
 import (
     "errors"
-	// "fmt"
+	"fmt"
 	"log"
 	"net"
     "unsafe"
@@ -54,9 +54,10 @@ func nxtInit(direct int) {
 
 //export nxtOn
 func nxtOn(tunFd int32) {
-	// str := "NxtOn: " + fmt.Sprintf("%d", tunFd)
+	str := "NxtOn: " + fmt.Sprintf("%d", tunFd)
 	iface := agent.Iface{Fd: int(tunFd), IP: net.ParseIP("169.254.2.1")}
 	l := CLogger{level: 0}
+        l.Write([]byte(str))
 	lg := log.New(&l, "", 0)
 	agent.AgentIface(lg, &iface)
 }
@@ -70,7 +71,8 @@ func nxtLogger(context, loggerFn uintptr) {
 //export nxtOff
 func nxtOff(tunFd int32) {
     str := "NxtOff: " + fmt.Sprintf("%d", tunFd)
-    C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString(str))
+    l := CLogger{level: 0}
+    l.Write([]byte(str))
     syscall.Close(int(tunFd))
 }
 

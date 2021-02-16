@@ -33,7 +33,7 @@ var loggerHandler : logger_cb_t = { context, level, msg in
     let swiftString = String(cString: msg!)
     let tunnelLogLevel = NextensioGoBridgeLogLevel(rawValue: level) ?? .debug
     
-    NSLog("Logger: \(tunnelLogLevel) Msg: \(swiftString)")
+    NSLog("Nextensio logger level \(tunnelLogLevel) msg: \(swiftString)")
 }
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -87,7 +87,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
     
     func setupPacketTunnelNetworkSettings() {
-        
         // the `tunnelRemoteAddress` is meaningless because we are not creating a tunnel.
         let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: self.protocolConfiguration.serverAddress!)
         
@@ -96,8 +95,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         
         let ipv4Settings = NEIPv4Settings(addresses: ["10.0.0.1"], subnetMasks: ["255.255.0.0"])
         ipv4Settings.includedRoutes = [
-            //NEIPv4Route.default()
-            NEIPv4Route(destinationAddress: "10.0.0.2", subnetMask: "255.255.255.255")
+            NEIPv4Route.default()
+            // NEIPv4Route(destinationAddress: "10.0.0.2", subnetMask: "255.255.255.255")
         ]
         ipv4Settings.excludedRoutes = [
             NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),
@@ -116,6 +115,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.setTunnelNetworkSettings(networkSettings) { error in
             self.pendingStartCompletion?(nil)
             self.pendingStartCompletion = nil
+            
+            // setup and turnon go-bridge apis for nextensio agent
+            self.setupNextensioAgentLogHandler()
+            self.initNextensioAgent()
+            self.turnOnNextensioAgent()
         }
     }
 
@@ -128,25 +132,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         
         //NSLog("tunnel setup packet tunnel network settings")
         self.setupPacketTunnelNetworkSettings()
-        
-        // If you are going to be reading directly from this fd, be aware that iOS's tun implementatio appends a 4-byte protocol information header to each packet. If we had more control we would create the tun with the IFF_NO_PI option to prevent this, but instead we just throw away the first four bytes.
-        
-        let utunstr = String(format: "%d", self.tunnelFileDescriptor!)
-        let interfaceName = self.interfaceName ?? "unknown"
-        NSLog("tunnel, fd = \(interfaceName) \(utunstr)")
-
-        //
-        self.tunProxy()
+    
+        // self.tunProxy()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        NSLog("tunnel stop")
         super.stopTunnel(with: reason, completionHandler: completionHandler)
+        self.turnOffNextensioAgent()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
         NSLog("handleAppMessage")
-        
         if let handler = completionHandler {
             handler(messageData)
         }
@@ -157,14 +153,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func wake() {
+        NSLog("wake")
     }
     
-    /// Tunnel device file descriptor.
+    // Tunnel device file descriptor.
     private var tunnelFileDescriptor: Int32? {
         return self.packetFlow.value(forKeyPath: "socket.fileDescriptor") as? Int32
     }
     
-    public var interfaceName: String? {
+    private var interfaceName: String? {
           guard let tunnelFileDescriptor = self.tunnelFileDescriptor else { return nil }
 
           var buffer = [UInt8](repeating: 0, count: Int(IFNAMSIZ))
@@ -188,14 +185,33 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
           }
     }
     
-    /// Setup NextensioAgent log handler.
-    private func setupLogHandler() {
-        // let context = Unmanaged.passUnretained(self).toOpaque()
-        // nxtLogger(context, loggerHandler)
+    // Setup NextensioAgent log handler.
+    private func setupNextensioAgentLogHandler() {
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        NSLog("calling go-bridge nxtLogger... ")
+        nxtLogger(context, loggerHandler)
     }
-}
-
-public func logHandler(_ ctx: UnsafeMutableRawPointer, _ level: Int32, _ message: UnsafePointer<Int8>) -> Void {
+    
+    // init NextensioAgent .
+    private func initNextensioAgent() {
+        let direct : Int32 = 1
+        NSLog("calling go-bridge enter nxtInit... ")
+        nxtInit(direct)
+    }
+    
+    // turn on NextensioAgent .
+    private func turnOnNextensioAgent() {
+        let tunIf : Int32 = self.tunnelFileDescriptor!
+        NSLog("calling go-bridge nxtOn... ")
+        nxtOn(tunIf)
+    }
+    
+    // turn off NextensioAgent .
+    private func turnOffNextensioAgent() {
+        let tunIf : Int32 = self.tunnelFileDescriptor!
+        NSLog("calling go-bridge nxtOff... ")
+        nxtOff(tunIf)
+    }
 }
 
 private func protocolType(for packet: Data) -> PacketType {
