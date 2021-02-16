@@ -14,8 +14,10 @@ import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
 import android.util.Log;
 import android.net.Uri;
+import android.os.Handler;
 
 // This class is an android 'activity' class, ie this is the one that deals
 // with UI and buttons and stuff. Based on all the UI/button activity it will
@@ -28,6 +30,26 @@ public class NxtAgent extends ActionBarActivity {
     private static final String TAG = "NxtUi";
     private boolean shouldUnbind;
     private NxtAgentService agentService;
+    private Handler handler = new Handler();
+
+    private Runnable runTask = new Runnable() {
+        @Override
+        public void run() {
+            final TextView textview = (TextView)findViewById(R.id.status);
+            String text = String.format("%s to Nextesio\n" + 
+                                        "%d connection flaps to nextensio, last flap %d seconds ago\n" + 
+                                        "Total heap used %d, mallocs %d, frees %d\n" + 
+                                        "Goroutines in use %d, Total GC Pause %d\n",
+                                        (nxtTunConn() == 1 ? "Connected" : "Not Connected"),
+                                        nxtTunDisco(), nxtTunDiscoSecs(),
+                                        nxtHeap(), nxtMallocs(), nxtFrees(),
+                                        nxtGoroutines(), nxtPaused());
+            textview.setText(text);
+                                        
+            // Repeat every 30 secs
+            handler.postDelayed(this, 30000); 
+        }
+    };
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {
 
@@ -194,6 +216,9 @@ public class NxtAgent extends ActionBarActivity {
 
         // Call into the golang agent asking to initialize/start of the world
         nxtInit(0);
+
+        // Schedule a periodic task to collect stats etc.. from the golang world
+        handler.post(runTask);
     }
 
     @Override
@@ -210,4 +235,13 @@ public class NxtAgent extends ActionBarActivity {
     }
     
     private static native int nxtInit(int direct);
+
+    private static native long nxtHeap();
+    private static native long nxtMallocs();
+    private static native long nxtFrees();
+    private static native long nxtPaused();
+    private static native int nxtGoroutines();
+    private static native int nxtTunDisco();
+    private static native int nxtTunConn();
+    private static native int nxtTunDiscoSecs();
 }

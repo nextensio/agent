@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net"
-    "syscall"
 	"nextensio/agent/agent"
+	"syscall"
 )
 
 type AndroidLogger struct {
@@ -40,9 +40,60 @@ func nxtOn(tunFd int32) {
 
 //export nxtOff
 func nxtOff(tunFd int32) {
-    str := "NxtOff: " + fmt.Sprintf("%d", tunFd)
-    C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString(str))
-    syscall.Close(int(tunFd))
+	str := "NxtOff: " + fmt.Sprintf("%d", tunFd)
+	C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString(str))
+	syscall.Close(int(tunFd))
+}
+
+// Debug statistics collection APIs below. Its a TODO to somehow make this one API call
+// and return a java class with all these fields in one shot
+
+//export nxtHeap
+func nxtHeap() uint64 {
+	stats := agent.GetStats()
+	return stats.Alloc
+}
+
+//export nxtMallocs
+func nxtMallocs() uint64 {
+	stats := agent.GetStats()
+	return stats.Mallocs
+}
+
+//export nxtFrees
+func nxtFrees() uint64 {
+	stats := agent.GetStats()
+	return stats.Frees
+}
+
+//export nxtPaused
+func nxtPaused() uint64 {
+	stats := agent.GetStats()
+	return stats.PauseTotalNs
+}
+
+//export nxtGoroutines
+func nxtGoroutines() int {
+	stats := agent.GetStats()
+	return stats.NumGoroutine
+}
+
+//export nxtTunDisco
+func nxtTunDisco() int {
+	stats := agent.GetStats()
+	return stats.TunnelDisconnects
+}
+
+//export nxtTunConn
+func nxtTunConn() int {
+	stats := agent.GetStats()
+	return stats.TunnelConnected
+}
+
+//export nxtTunDiscoSecs
+func nxtTunDiscoSecs() int {
+	stats := agent.GetStats()
+	return stats.TunnelDiscoSecs
 }
 
 func main() {}

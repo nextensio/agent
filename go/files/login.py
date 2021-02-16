@@ -18,7 +18,7 @@ options.add_argument('--disable-dev-shm-usage')
 def okta_status():
     output = b"0"
     try:
-        output = subprocess.check_output(['curl', '-s', '-I', '-o', '/dev/null', '-w', '%{http_code}', "http://localhost:8180"])
+        output = subprocess.check_output(['curl', '-s', '-I', '-o', '/dev/null', '-w', '%{http_code}', "http://localhost:8180/onboardstatus"])
     except subprocess.CalledProcessError as e:
         return output.decode('ascii')
     return output.decode('ascii')

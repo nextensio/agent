@@ -6,6 +6,6 @@
     <string name="stop_agent">Turn OFF</string>
     <string name="action_settings">Settings</string>
     <string name="login">Login</string>
-    <string name="status">Status</string>
+    <string name="status">Not connected to Nextensio yet</string>
 
 </resources>

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -46,6 +45,9 @@ var unique uuid.UUID
 var directMode int
 var initDone bool
 var initLock sync.Mutex
+var tunDisco int
+var tunConn int
+var tunLastDisco time.Time
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -271,12 +273,20 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
 func monitorGw(lg *log.Logger) {
+	var tmp common.Transport
 	for {
 		if gwTun == nil || gwTun.IsClosed() {
+			if gwTun != tmp {
+				tunDisco += 1
+				tunConn = 0
+				tunLastDisco = time.Now()
+				tmp = gwTun
+			}
 			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
 				if shared.OnboardTunnel(lg, newTun, true, &regInfo, unique.String()) == nil {
 					gwTun = newTun
+					tunConn = 1
 					// Note that we are not launching an goroutines to read/write out of this
 					// stream (first stream to the gateway), appToGw() always creates a new
 					// stream over this session. Eventually we will support L3 raw ip pkt mode
@@ -345,7 +355,6 @@ func AgentInit(lg *log.Logger, direct int) {
 		args()
 		shared.OktaInit(lg, &regInfo, controller, onboarded)
 		go monitorStreams(lg)
-		go perfMonitor(lg, 60)
 		initDone = true
 	}
 	initLock.Unlock()
@@ -364,35 +373,37 @@ func AgentIface(lg *log.Logger, iface *Iface) {
 
 // DEBUG STATS DUMP TO ANALYZE AGENT MEMORY/THREAD USAGE, THIS WILL EVENTUALLY
 // GET TAKEN OUT BEFORE HITTING PRODUCTION
-type Monitor struct {
-	Alloc,
-	TotalAlloc,
-	Sys,
-	Mallocs,
-	Frees,
-	LiveObjects,
-	PauseTotalNs uint64
-	NumGC        uint32
-	NumGoroutine int
+type AgentStats struct {
+	Alloc             uint64
+	TotalAlloc        uint64
+	Sys               uint64
+	Mallocs           uint64
+	Frees             uint64
+	PauseTotalNs      uint64
+	NumGC             uint32
+	NumGoroutine      int
+	TunnelDisconnects int
+	TunnelConnected   int
+	TunnelDiscoSecs   int
 }
 
-func perfMonitor(lg *log.Logger, duration int) {
-	var m Monitor
+func GetStats() *AgentStats {
+	var m AgentStats
 	var rtm runtime.MemStats
-	var interval = time.Duration(duration) * time.Second
-	for {
-		<-time.After(interval)
-		runtime.ReadMemStats(&rtm)
-		m.NumGoroutine = runtime.NumGoroutine()
-		m.Alloc = rtm.Alloc
-		m.TotalAlloc = rtm.TotalAlloc
-		m.Sys = rtm.Sys
-		m.Mallocs = rtm.Mallocs
-		m.Frees = rtm.Frees
-		m.LiveObjects = m.Mallocs - m.Frees
-		m.PauseTotalNs = rtm.PauseTotalNs
-		m.NumGC = rtm.NumGC
-		b, _ := json.Marshal(m)
-		lg.Println(string(b))
+	runtime.ReadMemStats(&rtm)
+	m.NumGoroutine = runtime.NumGoroutine()
+	m.Alloc = rtm.Alloc
+	m.TotalAlloc = rtm.TotalAlloc
+	m.Sys = rtm.Sys
+	m.Mallocs = rtm.Mallocs
+	m.Frees = rtm.Frees
+	m.PauseTotalNs = rtm.PauseTotalNs
+	m.NumGC = rtm.NumGC
+
+	m.TunnelDisconnects = tunDisco
+	m.TunnelConnected = tunConn
+	if tunDisco != 0 {
+		m.TunnelDiscoSecs = int(time.Now().Sub(tunLastDisco) / time.Second)
 	}
+	return &m
 }
