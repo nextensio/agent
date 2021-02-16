@@ -23,7 +23,7 @@
 		6B2D6BC425D114240051991B /* NextensioPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
 		6B2D6BCF25D116B20051991B /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2D6BCE25D116B20051991B /* Socket.swift */; platformFilter = ios; };
-		6BE9E9AA25D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BE9E9A925D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist */; platformFilter = maccatalyst; };
+		6BE9E9AA25D91A6B006DCD29 /* Info-MacOSX.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BE9E9A925D91A6B006DCD29 /* Info-MacOSX.plist */; platformFilter = maccatalyst; };
 		6BE9EA4925D989F3006DCD29 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BE9EA3425D989F3006DCD29 /* Assets.xcassets */; };
 		6BF3B78525D99FE60023DD0B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE9EA3325D989F3006DCD29 /* ViewController.swift */; };
 		6BF3B78625D99FE60023DD0B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE9EA3825D989F3006DCD29 /* AppDelegate.swift */; };
@@ -107,7 +107,7 @@
 		6B2D6BC025D114240051991B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6B2D6BCE25D116B20051991B /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
 		6B2D6BD625D11EA30051991B /* NextensioAgent-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "NextensioAgent-Go-Bridge.h"; path = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h"; sourceTree = SOURCE_ROOT; };
-		6BE9E9A925D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "PacketTunnelMacOSX-Info.plist"; sourceTree = "<group>"; };
+		6BE9E9A925D91A6B006DCD29 /* Info-MacOSX.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "Info-MacOSX.plist"; sourceTree = "<group>"; };
 		6BE9EA3325D989F3006DCD29 /* ViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		6BE9EA3425D989F3006DCD29 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6BE9EA3825D989F3006DCD29 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -182,13 +182,13 @@
 			isa = PBXGroup;
 			children = (
 				6B2D6BB325D113DE0051991B /* NextensioApp.entitlements */,
+				6B2D6BAA25D113640051991B /* Info.plist */,
 				6B2D6B9C25D113630051991B /* AppDelegate.swift */,
 				6B2D6B9E25D113630051991B /* SceneDelegate.swift */,
 				6B2D6BA025D113630051991B /* ViewController.swift */,
 				6B2D6BA225D113630051991B /* Main.storyboard */,
 				6B2D6BA525D113640051991B /* Assets.xcassets */,
 				6B2D6BA725D113640051991B /* LaunchScreen.storyboard */,
-				6B2D6BAA25D113640051991B /* Info.plist */,
 			);
 			name = NextensioApp;
 			path = Sources/NextensioAgent/NextensioApp;
@@ -208,11 +208,11 @@
 			children = (
 				6BF3B7C525D9BFD00023DD0B /* NextensioPacketTunnel.entitlements */,
 				6BF3B75B25D99B890023DD0B /* NextensioPacketTunnelMacOSXDebug.entitlements */,
+				6B2D6BC025D114240051991B /* Info.plist */,
+				6BE9E9A925D91A6B006DCD29 /* Info-MacOSX.plist */,
 				6B2D6BD625D11EA30051991B /* NextensioAgent-Go-Bridge.h */,
 				6B2D6BCE25D116B20051991B /* Socket.swift */,
 				6B2D6BBE25D114240051991B /* PacketTunnelProvider.swift */,
-				6BE9E9A925D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist */,
-				6B2D6BC025D114240051991B /* Info.plist */,
 			);
 			name = NextensioPacketTunnel;
 			path = Sources/NextensioAgent/NextensioPacketTunnel;
@@ -391,7 +391,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6BE9E9AA25D91A6B006DCD29 /* PacketTunnelMacOSX-Info.plist in Resources */,
+				6BE9E9AA25D91A6B006DCD29 /* Info-MacOSX.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -518,7 +518,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/PacketTunnelMacOSX-Info.plist";
+				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -554,7 +554,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/PacketTunnelMacOSX-Info.plist";
+				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
