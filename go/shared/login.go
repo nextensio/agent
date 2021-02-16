@@ -63,7 +63,7 @@ var loginHtml = `<!doctype html>
                     oktaSignIn.authClient.tokenManager.add('accessToken', accessToken);
                     oktaSignIn.authClient.tokenManager.add('idToken', idToken);
 
-                    document.getElementById("messageBox").innerHTML = "Hello, " + idToken.claims.email + "! You can now click ON in the Nextensio agent software";
+                    document.getElementById("messageBox").innerHTML = "Hello, " + idToken.claims.email + "! You can now click 'TURN ON' in the Nextensio agent software";
                     document.getElementById("logout").style.display = 'block';
 
                     var xmlHttp = new XMLHttpRequest();

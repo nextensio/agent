@@ -44,6 +44,7 @@ var flows map[flowKey]common.Transport
 var unique uuid.UUID
 var directMode int
 var initDone bool
+var onboardedOnce bool
 var initLock sync.Mutex
 var tunDisco int
 var tunConn int
@@ -304,11 +305,20 @@ func monitorGw(lg *log.Logger) {
 // Onboarding succesfully completed. Now start listening for data from the apps,
 // and establish tunnels to the gateway
 func onboarded(lg *log.Logger) {
-	// We listen for an http proxy request
-	p := webproxy.NewListener(mainCtx, lg, NXT_AGENT_PROXY)
-	go p.Listen(appStreams)
-	// Go get the gateway tunnel up
-	go monitorGw(lg)
+	if !onboardedOnce {
+		// We listen for an http proxy request
+		p := webproxy.NewListener(mainCtx, lg, NXT_AGENT_PROXY)
+		go p.Listen(appStreams)
+		// Go get the gateway tunnel up
+		go monitorGw(lg)
+		onboardedOnce = true
+	} else {
+		// Well if the user is tryng to onboard again, we should disconnect
+		// our gateway tunnels and reconnect with the new onboarding info
+		if gwTun != nil {
+			gwTun.Close()
+		}
+	}
 }
 
 func monitorStreams(lg *log.Logger) {

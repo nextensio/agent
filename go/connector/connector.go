@@ -23,6 +23,7 @@ var mainCtx context.Context
 var gwTun common.Transport
 var gwStreams chan common.NxtStream
 var unique uuid.UUID
+var onboardedOnce bool
 
 // Stream coming from the gateway, create a new tcp/udp socket
 // and send the data over that socket
@@ -145,7 +146,16 @@ func monitorGw(lg *log.Logger) {
 // Onboarding succesfully completed. Now start listening for data from the apps,
 // and establish tunnels to the gateway
 func onboarded(lg *log.Logger) {
-	go monitorGw(lg)
+	if !onboardedOnce {
+		go monitorGw(lg)
+		onboardedOnce = true
+	} else {
+		// Well if the user is tryng to onboard again, we should disconnect
+		// our gateway tunnels and reconnect with the new onboarding info
+		if gwTun != nil {
+			gwTun.Close()
+		}
+	}
 }
 
 func args() {
