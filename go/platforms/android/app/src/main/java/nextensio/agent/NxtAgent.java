@@ -50,7 +50,7 @@ public class NxtAgent extends ActionBarActivity {
             final TextView textview = (TextView)findViewById(R.id.status);
             NxtStats stats = new NxtStats();
             stats.nxtStats();
-            String text = String.format("%s to Nextesio\n" + 
+            String text = String.format("%s to Nextensio\n" + 
                                         "%d connection flaps to nextensio, last flap %d seconds / %d mins ago\n" + 
                                         "Total heap in-use bytes %d, malloc count %d, free count %d (delta = %d)\n" + 
                                         "Goroutines in use %d, Total GC count %d, Total GC Pause Nanosecs %d\n",
