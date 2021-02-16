@@ -74,4 +74,18 @@ func nxtOff(tunFd int32) {
     syscall.Close(int(tunFd))
 }
 
+//export nxtStats
+func nxtStats(s *C.struct_goStats) {
+    stats := agent.GetStats()
+    s.heap = C.longlong(stats.Alloc)
+    s.mallocs = C.longlong(stats.Mallocs)
+    s.frees = C.longlong(stats.Frees)
+    s.paused = C.longlong(stats.PauseTotalNs)
+    s.gc = C.int(stats.NumGC)
+    s.goroutines = C.int(stats.NumGoroutine)
+    s.conn = C.int(stats.TunnelConnected)
+    s.disco = C.int(stats.TunnelDisconnects)
+    s.discoSecs = C.int(stats.TunnelDiscoSecs)
+}
+
 func main() {}
