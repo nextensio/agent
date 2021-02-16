@@ -1,20 +1,27 @@
 #include <jni.h>
 #include <stdlib.h>
 
+// NOTE: This struture has to be in sync with the commented out structure
+// of the same name in apis.go. Those comments are used by cgo to generate
+// a go structure from a C structure, so any change here should reflect in
+// apis.go in those comments too
+struct goStats {
+      long long    heap;
+      long long    mallocs;
+      long long    frees;
+      long long    paused;
+      int         gc;
+      int         goroutines;
+      int         conn;
+      int         disco;
+      int         discoSecs;
+};
+
 extern void nxtInit();
 extern void nxtOn(int tun_fd);
 extern void nxtOff(int tun_fd);
+extern void nxtStats(struct goStats *stats);
 
-// Debug statistics collection APIs below. Its a TODO to somehow make this one API call 
-// and return a java class with all these fields in one shotextern jlong nxtHeap();
-extern jlong nxtHeap();
-extern jlong nxtMallocs();
-extern jlong nxtFrees();
-extern jlong nxtPaused();
-extern jlong nxtGoroutines();
-extern jlong nxtTunDisco();
-extern jlong nxtTunConn();
-extern jlong nxtTunDiscoSecs();
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
@@ -34,46 +41,28 @@ JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOff(JNIEnv *env, 
     return 0;
 }
 
-// Debug statistics collection APIs below. Its a TODO to somehow make this one API call 
-// and return a java class with all these fields in one shot
-
-JNIEXPORT jlong JNICALL Java_nextensio_agent_NxtAgent_nxtHeap(JNIEnv *env, jclass c)
+JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats (JNIEnv *env, jobject obj)
 {
-    return nxtHeap();
-}
+    struct goStats stats = {};
+    nxtStats(&stats);
 
-JNIEXPORT jlong JNICALL Java_nextensio_agent_NxtAgent_nxtMallocs(JNIEnv *env, jclass c)
-{
-    return nxtMallocs();
+    jclass thisObj = (*env)->GetObjectClass(env, obj);
+    jfieldID heap = (*env)->GetFieldID(env, thisObj, "heap", "J");
+    (*env)->SetLongField(env, obj, heap, stats.heap);
+    jfieldID mallocs = (*env)->GetFieldID(env, thisObj, "mallocs", "J");
+    (*env)->SetLongField(env, obj, mallocs, stats.mallocs);
+    jfieldID frees = (*env)->GetFieldID(env, thisObj, "frees", "J");
+    (*env)->SetLongField(env, obj, frees, stats.frees);
+    jfieldID paused = (*env)->GetFieldID(env, thisObj, "paused", "J");
+    (*env)->SetLongField(env, obj, paused, stats.paused);
+    jfieldID gc = (*env)->GetFieldID(env, thisObj, "gc", "I");
+    (*env)->SetIntField(env, obj, gc, stats.gc);
+    jfieldID goroutines = (*env)->GetFieldID(env, thisObj, "goroutines", "I");
+    (*env)->SetIntField(env, obj, goroutines, stats.goroutines);
+    jfieldID conn = (*env)->GetFieldID(env, thisObj, "conn", "I");
+    (*env)->SetIntField(env, obj, conn, stats.conn);
+    jfieldID disco = (*env)->GetFieldID(env, thisObj, "disco", "I");
+    (*env)->SetIntField(env, obj, disco, stats.disco);
+    jfieldID discoSecs = (*env)->GetFieldID(env, thisObj, "discoSecs", "I");
+    (*env)->SetIntField(env, obj, discoSecs, stats.discoSecs);
 }
-
-JNIEXPORT jlong JNICALL Java_nextensio_agent_NxtAgent_nxtFrees(JNIEnv *env, jclass c)
-{
-    return nxtFrees();
-}
-
-JNIEXPORT jlong JNICALL Java_nextensio_agent_NxtAgent_nxtPaused(JNIEnv *env, jclass c)
-{
-    return nxtPaused();
-}
-
-JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtGoroutines(JNIEnv *env, jclass c)
-{
-    return nxtGoroutines();
-}
-
-JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtTunDisco(JNIEnv *env, jclass c)
-{
-    return nxtTunDisco();
-}
-
-JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtTunConn(JNIEnv *env, jclass c)
-{
-    return nxtTunConn();
-}
-
-JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtTunDiscoSecs(JNIEnv *env, jclass c)
-{
-    return nxtTunDiscoSecs();
-}
-

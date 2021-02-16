@@ -371,8 +371,6 @@ func AgentIface(lg *log.Logger, iface *Iface) {
 	go p.Listen(appStreams)
 }
 
-// DEBUG STATS DUMP TO ANALYZE AGENT MEMORY/THREAD USAGE, THIS WILL EVENTUALLY
-// GET TAKEN OUT BEFORE HITTING PRODUCTION
 type AgentStats struct {
 	Alloc             uint64
 	TotalAlloc        uint64

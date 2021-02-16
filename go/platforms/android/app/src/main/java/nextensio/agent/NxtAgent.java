@@ -19,31 +19,45 @@ import android.util.Log;
 import android.net.Uri;
 import android.os.Handler;
 
+class NxtStats {
+    long heap;
+    long mallocs;
+    long frees;
+    long paused;
+    int gc;
+    int goroutines;
+    int conn;
+    int disco;
+    int discoSecs;
+
+    native void nxtStats();
+}
+
 // This class is an android 'activity' class, ie this is the one that deals
 // with UI and buttons and stuff. Based on all the UI/button activity it will
 // then launch a 'service' class in NxtAgentService.java
 public class NxtAgent extends ActionBarActivity {
     private static final int VPN_REQUEST_CODE = 0x0F;
     private boolean goLoaded;
-    private boolean vpnReady;
     private static Context context;
     private static final String TAG = "NxtUi";
-    private boolean shouldUnbind;
-    private NxtAgentService agentService;
+    private NxtAgentService agentService = null;
     private Handler handler = new Handler();
 
     private Runnable runTask = new Runnable() {
         @Override
         public void run() {
             final TextView textview = (TextView)findViewById(R.id.status);
+            NxtStats stats = new NxtStats();
+            stats.nxtStats();
             String text = String.format("%s to Nextesio\n" + 
-                                        "%d connection flaps to nextensio, last flap %d seconds ago\n" + 
-                                        "Total heap used %d, mallocs %d, frees %d\n" + 
-                                        "Goroutines in use %d, Total GC Pause %d\n",
-                                        (nxtTunConn() == 1 ? "Connected" : "Not Connected"),
-                                        nxtTunDisco(), nxtTunDiscoSecs(),
-                                        nxtHeap(), nxtMallocs(), nxtFrees(),
-                                        nxtGoroutines(), nxtPaused());
+                                        "%d connection flaps to nextensio, last flap %d seconds / %d mins ago\n" + 
+                                        "Total heap in-use bytes %d, malloc count %d, free count %d (delta = %d)\n" + 
+                                        "Goroutines in use %d, Total GC count %d, Total GC Pause Nanosecs %d\n",
+                                        (stats.conn == 1 ? "Connected" : "Not Connected"),
+                                        stats.disco, stats.discoSecs, stats.discoSecs/60,
+                                        stats.heap, stats.mallocs, stats.frees, stats.mallocs - stats.frees,
+                                        stats.goroutines, stats.gc, stats.paused);
             textview.setText(text);
                                         
             // Repeat every 30 secs
@@ -58,14 +72,16 @@ public class NxtAgent extends ActionBarActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (NxtAgentService.BROADCAST_VPN_STATE.equals(intent.getAction())) {
-                if (intent.getBooleanExtra("running", false)) {
-                    vpnReady = true;
-                    Log.i(TAG, "Agent Service start success");
-                } else {
-                    vpnReady = false;
-                    Log.e(TAG, "Agent Service start fail");
+                if (intent.getBooleanExtra("destroyed", false)) {
+                    doUnbindService();
+                    Log.i(TAG, "Message: Service destroyed");
+                }  else {
+                    if (agentService != null) {
+                        vpnStatus(agentService.vpnReady);
+                    }
+                    Log.i(TAG, String.format("Message: VPN status %b, bound %b", 
+                                             intent.getBooleanExtra("running", false), (agentService != null)));
                 }
-                vpnStatus(vpnReady);
             }
         }
     };
@@ -78,7 +94,8 @@ public class NxtAgent extends ActionBarActivity {
     private ServiceConnection connection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
             agentService = ((NxtAgentService.NxtAgentServiceBinder)service).getService();
-            Log.i(TAG, "Bound with service " + String.format("%s", className));
+            vpnStatus(agentService.vpnReady);
+            Log.i(TAG, "Bound with service " + String.format("%s, vpn %b", className, agentService.vpnReady));
         }
 
         public void onServiceDisconnected(ComponentName className) {
@@ -97,26 +114,25 @@ public class NxtAgent extends ActionBarActivity {
         // implementation that we know will be running in our own process
         // (and thus won't be supporting component replacement by other
         // applications).
-        if (bindService(new Intent(NxtAgent.this, NxtAgentService.class),
-                connection, Context.BIND_AUTO_CREATE)) {
-            shouldUnbind = true;
-        } else {
+        if (!bindService(new Intent(NxtAgent.this, NxtAgentService.class),
+                connection, 0)) {
             Log.e(TAG, "Bind failed");
         }
     }
 
     void doUnbindService() {
         Log.i(TAG, "Unbind service");
-        if (shouldUnbind) {
+        if (agentService != null) {
             // Release information about the service's state.
             unbindService(connection);
             agentService = null;
-            shouldUnbind = false;
         }
+        vpnStatus(false);
     }
 
     private void vpnStatus(boolean vpnOn) {
         final Button vpnButton = (Button) findViewById(R.id.vpn);
+        vpnButton.setEnabled(true);
         if (vpnOn) {
             vpnButton.setText(R.string.stop_agent);
         } else {
@@ -129,7 +145,7 @@ public class NxtAgent extends ActionBarActivity {
     // result of the user action is sent as a result message to callback onActivityResult()
     // If the user has already allowed the VPN, then we just call the callback right away
     private void toggleVPN() {
-        if (!vpnReady) {
+        if (agentService == null) {
             Intent vpnIntent = VpnService.prepare(this);
             if (vpnIntent != null) {
                 startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
@@ -139,13 +155,9 @@ public class NxtAgent extends ActionBarActivity {
                 Log.i(TAG, "Existing Vpn Intent");
             }
         } else {
-            if (agentService != null) {
-                agentService.stop();
-                doUnbindService();
-                vpnReady = false;
-                vpnStatus(vpnReady);
-                Log.i(TAG, "Stopped VPN");
-            }
+            agentService.stop();
+            doUnbindService();
+            Log.i(TAG, "Stopped VPN");
         }
     }
 
@@ -164,8 +176,7 @@ public class NxtAgent extends ActionBarActivity {
                 doBindService();
                 Log.i(TAG, "VPN result ok");
             } else {
-                vpnReady = false;
-                vpnStatus(vpnReady);
+                doUnbindService();
                 Log.e(TAG, "VPN Result not-ok " + String.format(" = %d", resultCode));
             }
         }
@@ -192,7 +203,7 @@ public class NxtAgent extends ActionBarActivity {
 
         // Setup the button to turn the vpn on/off
         final Button vpnButton = (Button)findViewById(R.id.vpn);
-        vpnButton.setEnabled(true);
+        vpnButton.setEnabled(false);
         vpnButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -224,8 +235,18 @@ public class NxtAgent extends ActionBarActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        vpnStatus(vpnReady);
-        Log.i(TAG, "Resume " + String.format("ready %s", vpnReady));
+        // We start of saying VPN is off, we dont know because this UI element
+        // might have just come back from a paused state whereas service keeps
+        // running, so we try to see if there is a service by binding to it and
+        // is so that will update the true vpn status - so there can be a momentary
+        // (couple seconds at most ?) glitch where the vpn status is incorrect
+        if (agentService == null) {
+            vpnStatus(false);
+            doBindService();
+        } else {
+            vpnStatus(agentService.vpnReady);
+        }
+        Log.i(TAG, "Resume");
     }
 
     @Override
@@ -235,13 +256,4 @@ public class NxtAgent extends ActionBarActivity {
     }
     
     private static native int nxtInit(int direct);
-
-    private static native long nxtHeap();
-    private static native long nxtMallocs();
-    private static native long nxtFrees();
-    private static native long nxtPaused();
-    private static native int nxtGoroutines();
-    private static native int nxtTunDisco();
-    private static native int nxtTunConn();
-    private static native int nxtTunDiscoSecs();
 }

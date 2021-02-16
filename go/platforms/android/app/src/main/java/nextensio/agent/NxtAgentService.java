@@ -30,6 +30,7 @@ public class NxtAgentService extends VpnService {
     private PendingIntent pendingIntent;
     private boolean goLoaded;
     private final IBinder mBinder = new NxtAgentServiceBinder();
+    boolean vpnReady;
 
     // TODO: I am still not clear whether the onCreate here should load the golang libs
     // when the onCreate in NxtAgent.java already does that. But I remember some issues
@@ -44,13 +45,16 @@ public class NxtAgentService extends VpnService {
             SharedLibraryLoader.loadSharedLibrary(this.context, "nxt-go");
             goLoaded = true;
             Log.i(TAG, "Loaded golibs");
-        } try {
+        } 
+        try {
             if (vpnFd != 0) {
                 // Call into the golang agent and ask it to start Rx/Tx on this fd
+                vpnReady = true;
                 nxtOn(vpnFd);
                 LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", true));
                 Log.i(TAG, "VPN Start " + String.format("Fd = %d", vpnFd));
             } else {
+                vpnReady = false;
                 LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", false));
                 stop();
                 Log.i(TAG, "VPN fail");
@@ -102,6 +106,12 @@ public class NxtAgentService extends VpnService {
     }
 
     @Override
+    public void onRevoke () {
+        onDestroy();
+        Log.i(TAG, "Revoked");
+    }
+
+    @Override
     public IBinder onBind(Intent intent) {
         return mBinder;
     }
@@ -114,12 +124,13 @@ public class NxtAgentService extends VpnService {
     @Override
     public void onDestroy() {
         closeResources();
-        LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("running", false));
+        LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(BROADCAST_VPN_STATE).putExtra("destroyed", true));
         Log.i(TAG, "Destroyed");
         super.onDestroy();
     }
 
     private void closeResources() {
+        vpnReady = false;
         try {
             if (vpnFd != 0) {
                 Log.i(TAG, "VPN CLOSE");

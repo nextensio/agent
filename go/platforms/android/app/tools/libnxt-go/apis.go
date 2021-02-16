@@ -2,6 +2,17 @@ package main
 
 // #cgo LDFLAGS: -llog
 // #include <android/log.h>
+// struct goStats {
+//      long long    heap;
+//      long long    mallocs;
+//      long long    frees;
+//      long long    paused;
+//      int         gc;
+//      int         goroutines;
+//      int         conn;
+//      int         disco;
+//      int         discoSecs;
+// };
 import "C"
 import (
 	"fmt"
@@ -45,55 +56,18 @@ func nxtOff(tunFd int32) {
 	syscall.Close(int(tunFd))
 }
 
-// Debug statistics collection APIs below. Its a TODO to somehow make this one API call
-// and return a java class with all these fields in one shot
-
-//export nxtHeap
-func nxtHeap() uint64 {
+//export nxtStats
+func nxtStats(s *C.struct_goStats) {
 	stats := agent.GetStats()
-	return stats.Alloc
-}
-
-//export nxtMallocs
-func nxtMallocs() uint64 {
-	stats := agent.GetStats()
-	return stats.Mallocs
-}
-
-//export nxtFrees
-func nxtFrees() uint64 {
-	stats := agent.GetStats()
-	return stats.Frees
-}
-
-//export nxtPaused
-func nxtPaused() uint64 {
-	stats := agent.GetStats()
-	return stats.PauseTotalNs
-}
-
-//export nxtGoroutines
-func nxtGoroutines() int {
-	stats := agent.GetStats()
-	return stats.NumGoroutine
-}
-
-//export nxtTunDisco
-func nxtTunDisco() int {
-	stats := agent.GetStats()
-	return stats.TunnelDisconnects
-}
-
-//export nxtTunConn
-func nxtTunConn() int {
-	stats := agent.GetStats()
-	return stats.TunnelConnected
-}
-
-//export nxtTunDiscoSecs
-func nxtTunDiscoSecs() int {
-	stats := agent.GetStats()
-	return stats.TunnelDiscoSecs
+	s.heap = C.longlong(stats.Alloc)
+	s.mallocs = C.longlong(stats.Mallocs)
+	s.frees = C.longlong(stats.Frees)
+	s.paused = C.longlong(stats.PauseTotalNs)
+	s.gc = C.int(stats.NumGC)
+	s.goroutines = C.int(stats.NumGoroutine)
+	s.conn = C.int(stats.TunnelConnected)
+	s.disco = C.int(stats.TunnelDisconnects)
+	s.discoSecs = C.int(stats.TunnelDiscoSecs)
 }
 
 func main() {}

@@ -2,6 +2,17 @@ package main
 
 // #include <stdlib.h>
 // #include <sys/types.h>
+// struct goStats {
+//      long long    heap;
+//      long long    mallocs;
+//      long long    frees;
+//      long long    paused;
+//      int         gc;
+//      int         goroutines;
+//      int         conn;
+//      int         disco;
+//      int         discoSecs;
+// };
 // static void callLogger(void *func, void *ctx, int level, const char *msg)
 // {
 //  ((void(*)(void *, int, const char *))func)(ctx, level, msg);
