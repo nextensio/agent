@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
     "unsafe"
+    "syscall"
 	"nextensio/agent/agent"
 )
 
@@ -53,6 +54,13 @@ func nxtOn(tunFd int32) {
 func nxtLogger(context, loggerFn uintptr) {
     loggerCtx = unsafe.Pointer(context)
     loggerFunc = unsafe.Pointer(loggerFn)
+}
+
+//export nxtOff
+func nxtOff(tunFd int32) {
+    str := "NxtOff: " + fmt.Sprintf("%d", tunFd)
+    C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString(str))
+    syscall.Close(int(tunFd))
 }
 
 func main() {}

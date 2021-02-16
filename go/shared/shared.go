@@ -51,9 +51,13 @@ var nxtOnboarded bool
 func oktaLogin(lg *log.Logger) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write([]byte(loginHtml))
+	})
+	// This is used just by testing scripts to know if onboarding was successful
+	mux.HandleFunc("/onboardstatus", func(w http.ResponseWriter, r *http.Request) {
 		if !nxtOnboarded {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Write([]byte(loginHtml))
+			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusCreated)
 		}
