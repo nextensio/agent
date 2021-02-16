@@ -140,6 +140,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         NSLog("tunnel stop")
         super.stopTunnel(with: reason, completionHandler: completionHandler)
+        
+        self.turnOffNextensioAgent()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
@@ -157,7 +159,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     override func wake() {
     }
     
-    /// Tunnel device file descriptor.
+    // Tunnel device file descriptor.
     private var tunnelFileDescriptor: Int32? {
         return self.packetFlow.value(forKeyPath: "socket.fileDescriptor") as? Int32
     }
@@ -193,16 +195,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         nxtLogger(context, loggerHandler)
     }
     
-    // Setup NextensioAgent .
+    // init NextensioAgent .
     private func initNextensioAgent() {
         let direct : Int32 = 1
         NSLog("calling go-bridge enter nxtInit... ")
         nxtInit(direct)
-        NSLog("calling go-bridge exit nxtInit... ")
-
     }
     
-    // Setup NextensioAgent .
+    // turn on NextensioAgent .
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
         let utunstr = String(format: "%d", tunIf)
@@ -211,6 +211,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         
         NSLog("calling go-bridge nxtOn... ")
         nxtOn(tunIf)
+    }
+    
+    // turn off NextensioAgent .
+    private func turnOffNextensioAgent() {
+        let tunIf : Int32 = self.tunnelFileDescriptor!
+        let utunstr = String(format: "%d", tunIf)
+        let interfaceName = self.interfaceName ?? "unknown"
+        NSLog("tunnel, fd = \(interfaceName) \(utunstr)")
+        
+        NSLog("calling go-bridge nxtOff... ")
+        nxtOff(tunIf)
     }
 }
 
