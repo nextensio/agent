@@ -30,7 +30,7 @@ const (
 )
 
 type ConnStats struct {
-	Conn net.Conn
+	Conn common.Transport
 	Rx   uint64
 	Tx   uint64
 }

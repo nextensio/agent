@@ -3,8 +3,6 @@ package agent
 import (
 	"context"
 	"flag"
-	"fmt"
-	"io"
 	"log"
 	"net"
 	"nextensio/agent/shared"
@@ -18,10 +16,16 @@ import (
 	"gitlab.com/nextensio/common/messages/nxthdr"
 	"gitlab.com/nextensio/common/transport/fd"
 	proxy "gitlab.com/nextensio/common/transport/l3proxy"
+	"gitlab.com/nextensio/common/transport/netconn"
 	"gitlab.com/nextensio/common/transport/webproxy"
 )
 
 const NXT_AGENT_PROXY = 8080
+
+type flowInfo struct {
+	app  common.Transport
+	gwRx common.Transport
+}
 
 type flowKey struct {
 	port  uint16
@@ -40,7 +44,7 @@ var gwTun common.Transport
 var gwStreams chan common.NxtStream
 var appStreams chan common.NxtStream
 var flowLock sync.RWMutex
-var flows map[flowKey]common.Transport
+var flows map[flowKey]*flowInfo
 var unique uuid.UUID
 var directMode int
 var initDone bool
@@ -52,22 +56,35 @@ var tunLastDisco time.Time
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
-	flows[key] = tun
+	flows[key] = &flowInfo{app: tun}
 	flowLock.Unlock()
 }
 
-func flowDel(key flowKey, tun common.Transport) {
+func flowDel(key flowKey) {
 	flowLock.Lock()
+	info := flows[key]
+	if info != nil && info.gwRx != nil {
+		info.gwRx.Close()
+	}
 	delete(flows, key)
 	flowLock.Unlock()
 }
 
-func flowGet(key flowKey) common.Transport {
+func flowGet(key flowKey, gwRx common.Transport) common.Transport {
 	var tun common.Transport
 	flowLock.RLock()
-	tun = flows[key]
+	info := flows[key]
+	if info != nil {
+		tun = info.app
+		info.gwRx = gwRx
+	}
 	flowLock.RUnlock()
 	return tun
+}
+
+func directInClose(src *shared.ConnStats, dest common.Transport) {
+	src.Conn.Close()
+	dest.Close()
 }
 
 // As of now we just send dns requests directly out bypassing nextensio. It is a TODO
@@ -76,7 +93,6 @@ func flowGet(key flowKey) common.Transport {
 // that can end up bypassing nextensio
 func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow *nxthdr.NxtFlow) {
 	for {
-		buf := make([]byte, common.MAXBUF)
 		if flow.Proto == common.TCP {
 			src.Conn.SetReadDeadline(time.Now().Add(shared.TCP_AGER))
 		} else {
@@ -84,80 +100,88 @@ func directIn(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow
 		}
 		rx := src.Rx
 		tx := src.Tx
-		n, err := src.Conn.Read(buf)
+		hdr, buf, err := src.Conn.Read()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				// We have not had any rx/tx for the RFC stipulated flow ageout time period,
-				// so close the session, this will trigger a cascade of closes upto the connector
-				if rx == src.Rx && tx == src.Tx {
-					src.Conn.Close()
-					dest.Close()
-					lg.Println("Flow aged out", flow)
-					return
+			ignore := false
+			if err.Err != nil {
+				if e, ok := err.Err.(net.Error); ok && e.Timeout() {
+					// We have not had any rx/tx for the RFC stipulated flow ageout time period,
+					// so close the session, this will trigger a cascade of closes upto the connector
+					if rx == src.Rx && tx == src.Tx {
+						lg.Println("Flow aged out", flow)
+					} else {
+						ignore = true
+					}
 				}
-			} else {
-				// Error can be EOF with valid data (n != 0)
-				if err != io.EOF || n == 0 {
-					src.Conn.Close()
-					dest.Close()
-					return
-				}
+			}
+			if !ignore {
+				directInClose(src, dest)
+				return
 			}
 		}
 		src.Rx += 1
-		hdr := nxthdr.NxtHdr{}
+		hdr = &nxthdr.NxtHdr{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: flow}
-		e := dest.Write(&hdr, net.Buffers{buf[:n]})
+		e := dest.Write(hdr, buf)
 		if e != nil {
-			src.Conn.Close()
-			dest.Close()
+			directInClose(src, dest)
 			return
 		}
+	}
+}
+
+func directOutClose(tun common.Transport, dest shared.ConnStats) {
+	tun.Close()
+	if dest.Conn != nil {
+		dest.Conn.Close()
 	}
 }
 
 func directOut(lg *log.Logger, tun common.Transport, flow *nxthdr.NxtFlow, buf net.Buffers) {
 	var err *common.NxtError
 	var hdr *nxthdr.NxtHdr
+	dest := shared.ConnStats{}
+
 	if flow == nil {
 		hdr, buf, err = tun.Read()
 		if err != nil {
-			tun.Close()
+			directOutClose(tun, dest)
 			return
 		}
 		flow = hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 	}
 
-	var e error
-	dest := shared.ConnStats{}
-	addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
 	if flow.Proto == common.TCP {
-		dest.Conn, e = net.Dial("tcp", addr)
+		dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.Dest, flow.Dport)
 	} else {
-		dest.Conn, e = net.Dial("udp", addr)
+		dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.Dest, flow.Dport)
 	}
+	e := dest.Conn.Dial(appStreams)
 	if e != nil {
-		tun.Close()
+		directOutClose(tun, dest)
 		return
 	}
 	go directIn(lg, &dest, tun, flow)
 
 	for {
-		for _, b := range buf {
-			_, e := dest.Conn.Write(b)
-			if e != nil {
-				tun.Close()
-				dest.Conn.Close()
-				return
-			}
-			dest.Tx += 1
-		}
-		_, buf, err = tun.Read()
-		if err != nil {
-			tun.Close()
-			dest.Conn.Close()
+		e := dest.Conn.Write(hdr, buf)
+		if e != nil {
+			directOutClose(tun, dest)
 			return
 		}
+		dest.Tx += 1
+		_, buf, err = tun.Read()
+		if err != nil {
+			directOutClose(tun, dest)
+			return
+		}
+	}
+}
+
+func gwToAppClose(tun common.Transport, dest common.Transport) {
+	tun.Close()
+	if dest != nil {
+		dest.Close()
 	}
 }
 
@@ -169,30 +193,36 @@ func gwToApp(lg *log.Logger, tun common.Transport) {
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
-			tun.Close()
-			if dest != nil {
-				dest.Close()
-			}
+			gwToAppClose(tun, dest)
 			return
 		}
 		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 		if dest == nil {
 			key := flowKey{port: uint16(flow.Sport), proto: int(flow.Proto)}
-			dest = flowGet(key)
+			dest = flowGet(key, tun)
 			// As of today, agents are expected to only initiate flows, some day when
 			// we allow agent to agent talk, we can do some kind of app lookup here
 			// and create a new session to the app
 			if dest == nil {
-				tun.Close()
+				gwToAppClose(tun, dest)
 				return
 			}
 		}
 		err = dest.Write(hdr, buf)
 		if err != nil {
-			tun.Close()
-			dest.Close()
+			gwToAppClose(tun, dest)
 			return
 		}
+	}
+}
+
+func appToGwClose(tun common.Transport, dest common.Transport, seen bool, key flowKey) {
+	tun.Close()
+	if dest != nil {
+		dest.Close()
+	}
+	if seen {
+		flowDel(key)
 	}
 }
 
@@ -205,23 +235,22 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 	var destAgent string = ""
 
 	if gwTun == nil {
-		tun.Close()
+		appToGwClose(tun, dest, seen, key)
 		return
 	}
 	dest = gwTun.NewStream(nil)
 	if dest == nil {
-		tun.Close()
+		appToGwClose(tun, dest, seen, key)
 		return
 	}
+	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
+	// the close is cascaded to the the cluster
+	dest.CloseCascade(tun)
 
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
-			tun.Close()
-			dest.Close()
-			if seen {
-				flowDel(key, tun)
-			}
+			appToGwClose(tun, dest, seen, key)
 			return
 		}
 		flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
@@ -264,9 +293,7 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 		flow.OriginAgent = regInfo.ConnectID
 		err = dest.Write(hdr, buf)
 		if err != nil {
-			tun.Close()
-			dest.Close()
-			flowDel(key, tun)
+			appToGwClose(tun, dest, seen, key)
 			return
 		}
 	}
@@ -360,7 +387,7 @@ func AgentInit(lg *log.Logger, direct int) {
 		unique = uuid.New()
 		gwStreams = make(chan common.NxtStream)
 		appStreams = make(chan common.NxtStream)
-		flows = make(map[flowKey]common.Transport)
+		flows = make(map[flowKey]*flowInfo)
 
 		args()
 		shared.OktaInit(lg, &regInfo, controller, onboarded)
@@ -389,6 +416,7 @@ type AgentStats struct {
 	Frees             uint64
 	PauseTotalNs      uint64
 	NumGC             uint32
+	NumFlows          int
 	NumGoroutine      int
 	TunnelDisconnects int
 	TunnelConnected   int
@@ -413,5 +441,9 @@ func GetStats() *AgentStats {
 	if tunDisco != 0 {
 		m.TunnelDiscoSecs = int(time.Now().Sub(tunLastDisco) / time.Second)
 	}
+	flowLock.Lock()
+	m.NumFlows = len(flows)
+	flowLock.Unlock()
+
 	return &m
 }

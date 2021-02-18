@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
-	"io"
 	"log"
 	"net"
 	"nextensio/agent/shared"
@@ -15,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/nextensio/common"
 	"gitlab.com/nextensio/common/messages/nxthdr"
+	"gitlab.com/nextensio/common/transport/netconn"
 )
 
 var controller string
@@ -22,66 +21,75 @@ var regInfo shared.RegistrationInfo
 var mainCtx context.Context
 var gwTun common.Transport
 var gwStreams chan common.NxtStream
+var unusedAppStreams chan common.NxtStream
 var unique uuid.UUID
 var onboardedOnce bool
+
+func gwToAppClose(tun common.Transport, dest shared.ConnStats) {
+	tun.Close()
+	if dest.Conn != nil {
+		dest.Conn.Close()
+	}
+}
 
 // Stream coming from the gateway, create a new tcp/udp socket
 // and send the data over that socket
 func gwToApp(lg *log.Logger, tun common.Transport) {
-	dest := shared.ConnStats{}
+	var dest shared.ConnStats
 
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
-			tun.Close()
-			if dest.Conn != nil {
-				dest.Conn.Close()
-			}
+			gwToAppClose(tun, dest)
 			return
 		}
 		if dest.Conn == nil {
 			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-			addr := fmt.Sprintf("%s:%d", flow.Dest, flow.Dport)
-			var e error
 			if flow.Proto == common.TCP {
-				dest.Conn, e = net.Dial("tcp", addr)
+				dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.Dest, flow.Dport)
 			} else {
-				dest.Conn, e = net.Dial("udp", addr)
+				dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.Dest, flow.Dport)
 			}
+			e := dest.Conn.Dial(unusedAppStreams)
 			if e != nil {
-				tun.Close()
+				gwToAppClose(tun, dest)
 				return
 			}
 			newTun := tun.NewStream(nil)
 			if newTun == nil {
-				tun.Close()
-				dest.Conn.Close()
+				gwToAppClose(tun, dest)
 				return
 			}
-			go appToGw(lg, &dest, newTun, *flow)
+			go appToGw(lg, &dest, newTun, *flow, tun)
 		}
-		for _, b := range buf {
-			_, e := dest.Conn.Write(b)
-			if e != nil {
-				tun.Close()
-				dest.Conn.Close()
-				return
-			}
-			dest.Tx += 1
+		e := dest.Conn.Write(hdr, buf)
+		if e != nil {
+			gwToAppClose(tun, dest)
+			return
 		}
+		dest.Tx += 1
 	}
+}
+
+func appToGwClose(src *shared.ConnStats, dest common.Transport, gwRx common.Transport) {
+	src.Conn.Close()
+	dest.Close()
+	gwRx.Close()
 }
 
 // Data coming back from a tcp/udp socket. Send the data over the gateway
 // stream that initially created the socket
-func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow) {
+func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow, gwRx common.Transport) {
 
 	// Swap source and dest agents
 	s, d := flow.SourceAgent, flow.DestAgent
 	flow.SourceAgent, flow.DestAgent = d, s
 
+	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
+	// the close is cascaded to the the cluster
+	dest.CloseCascade(src.Conn)
+
 	for {
-		buf := make([]byte, common.MAXBUF)
 		if flow.Proto == common.TCP {
 			src.Conn.SetReadDeadline(time.Now().Add(shared.TCP_AGER))
 		} else {
@@ -89,33 +97,31 @@ func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow 
 		}
 		rx := src.Rx
 		tx := src.Tx
-		n, err := src.Conn.Read(buf)
+		hdr, buf, err := src.Conn.Read()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				// We have not had any rx/tx for the RFC stipulated flow ageout time period,
-				// so close the session, this will trigger a cascade of closes upto the connector
-				if rx == src.Rx && tx == src.Tx {
-					src.Conn.Close()
-					dest.Close()
-					lg.Println("Flow aged out", flow)
-					return
+			ignore := false
+			if err.Err != nil {
+				if e, ok := err.Err.(net.Error); ok && e.Timeout() {
+					// We have not had any rx/tx for the RFC stipulated flow ageout time period,
+					// so close the session, this will trigger a cascade of closes upto the connector
+					if rx == src.Rx && tx == src.Tx {
+						lg.Println("Flow aged out", flow)
+					} else {
+						ignore = true
+					}
 				}
-			} else {
-				// Error can be EOF with valid data (n != 0)
-				if err != io.EOF || n == 0 {
-					src.Conn.Close()
-					dest.Close()
-					return
-				}
+			}
+			if !ignore {
+				appToGwClose(src, dest, gwRx)
+				return
 			}
 		}
 		src.Rx += 1
-		hdr := nxthdr.NxtHdr{}
+		hdr = &nxthdr.NxtHdr{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
-		e := dest.Write(&hdr, net.Buffers{buf[:n]})
+		e := dest.Write(hdr, buf)
 		if e != nil {
-			src.Conn.Close()
-			dest.Close()
+			appToGwClose(src, dest, gwRx)
 			return
 		}
 	}
@@ -171,6 +177,7 @@ func main() {
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
+	unusedAppStreams = make(chan common.NxtStream)
 	lg := log.New(os.Stdout, "CNTR", 0)
 	args()
 	shared.OktaInit(lg, &regInfo, controller, onboarded)
