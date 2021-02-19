@@ -15,6 +15,8 @@ struct goStats {
       int         conn;
       int         disco;
       int         discoSecs;
+      int         numflows;
+      int         directflows;  
 };
 
 extern void nxtInit();
@@ -65,4 +67,8 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats (JNIEnv *env, jobj
     (*env)->SetIntField(env, obj, disco, stats.disco);
     jfieldID discoSecs = (*env)->GetFieldID(env, thisObj, "discoSecs", "I");
     (*env)->SetIntField(env, obj, discoSecs, stats.discoSecs);
+    jfieldID numflows = (*env)->GetFieldID(env, thisObj, "numflows", "I");
+    (*env)->SetIntField(env, obj, discoSecs, stats.numflows);
+    jfieldID directflows = (*env)->GetFieldID(env, thisObj, "directflows", "I");
+    (*env)->SetIntField(env, obj, discoSecs, stats.directflows);
 }

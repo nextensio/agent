@@ -29,6 +29,8 @@ class NxtStats {
     int conn;
     int disco;
     int discoSecs;
+    int numflows;
+    int directflows;
 
     native void nxtStats();
 }
@@ -54,10 +56,12 @@ public class NxtAgent extends ActionBarActivity {
                                         "%d connection flaps to nextensio, last flap %d seconds / %d mins ago\n" + 
                                         "Total heap in-use bytes %d, malloc count %d, free count %d (delta = %d)\n" + 
                                         "Goroutines in use %d, Total GC count %d, Total GC Pause Nanosecs %d\n",
+                                        "Via Nxt flows %d, Direct internet flows %d\n",
                                         (stats.conn == 1 ? "Connected" : "Not Connected"),
                                         stats.disco, stats.discoSecs, stats.discoSecs/60,
                                         stats.heap, stats.mallocs, stats.frees, stats.mallocs - stats.frees,
-                                        stats.goroutines, stats.gc, stats.paused);
+                                        stats.goroutines, stats.gc, stats.paused,
+                                        stats.numflows, stats.directflows);
             textview.setText(text);
                                         
             // Repeat every 30 secs

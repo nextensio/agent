@@ -12,6 +12,8 @@ package main
 //      int         conn;
 //      int         disco;
 //      int         discoSecs;
+//      int         numflows;
+//      int         directflows;
 // };
 // static void callLogger(void *func, void *ctx, int level, const char *msg)
 // {
@@ -88,6 +90,8 @@ func nxtStats(s *C.struct_goStats) {
     s.conn = C.int(stats.TunnelConnected)
     s.disco = C.int(stats.TunnelDisconnects)
     s.discoSecs = C.int(stats.TunnelDiscoSecs)
+    s.numflows = C.int(stats.NumFlows)
+    s.directflows = C.int(stats.DirectFlows)
 }
 
 func main() {}
