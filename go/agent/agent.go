@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,6 +54,7 @@ var initLock sync.Mutex
 var tunDisco int
 var tunConn int
 var tunLastDisco time.Time
+var directFlows int32
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -135,6 +137,7 @@ func directOutClose(tun common.Transport, dest shared.ConnStats) {
 	if dest.Conn != nil {
 		dest.Conn.Close()
 	}
+	atomic.AddInt32(&directFlows, -1)
 }
 
 func directOut(lg *log.Logger, tun common.Transport, flow *nxthdr.NxtFlow, buf net.Buffers) {
@@ -259,6 +262,7 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 		// flows rather than adding list of if statementes here
 		if flow.Dport == 53 {
 			dest.Close()
+			atomic.AddInt32(&directFlows, 1)
 			// Copy the flow, it points inside a huge data buffer which we dont want to hold up
 			go directOut(lg, tun, &*flow, buf)
 			return
@@ -416,6 +420,7 @@ type AgentStats struct {
 	Frees             uint64
 	PauseTotalNs      uint64
 	NumGC             uint32
+	DirectFlows       int32
 	NumFlows          int
 	NumGoroutine      int
 	TunnelDisconnects int
@@ -444,6 +449,7 @@ func GetStats() *AgentStats {
 	flowLock.Lock()
 	m.NumFlows = len(flows)
 	flowLock.Unlock()
+	m.DirectFlows = directFlows
 
 	return &m
 }
