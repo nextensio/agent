@@ -5,25 +5,25 @@
 // of the same name in apis.go. Those comments are used by cgo to generate
 // a go structure from a C structure, so any change here should reflect in
 // apis.go in those comments too
-struct goStats {
-      long long    heap;
-      long long    mallocs;
-      long long    frees;
-      long long    paused;
-      int         gc;
-      int         goroutines;
-      int         conn;
-      int         disco;
-      int         discoSecs;
-      int         numflows;
-      int         directflows;  
+struct goStats
+{
+    long long heap;
+    long long mallocs;
+    long long frees;
+    long long paused;
+    int gc;
+    int goroutines;
+    int conn;
+    int disco;
+    int discoSecs;
+    int numflows;
+    int directflows;
 };
 
-extern void nxtInit();
+extern void nxtInit(int direct);
 extern void nxtOn(int tun_fd);
 extern void nxtOff(int tun_fd);
 extern void nxtStats(struct goStats *stats);
-
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
@@ -43,7 +43,7 @@ JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOff(JNIEnv *env, 
     return 0;
 }
 
-JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats (JNIEnv *env, jobject obj)
+JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobject obj)
 {
     struct goStats stats = {};
     nxtStats(&stats);
@@ -68,7 +68,7 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats (JNIEnv *env, jobj
     jfieldID discoSecs = (*env)->GetFieldID(env, thisObj, "discoSecs", "I");
     (*env)->SetIntField(env, obj, discoSecs, stats.discoSecs);
     jfieldID numflows = (*env)->GetFieldID(env, thisObj, "numflows", "I");
-    (*env)->SetIntField(env, obj, discoSecs, stats.numflows);
+    (*env)->SetIntField(env, obj, numflows, stats.numflows);
     jfieldID directflows = (*env)->GetFieldID(env, thisObj, "directflows", "I");
-    (*env)->SetIntField(env, obj, discoSecs, stats.directflows);
+    (*env)->SetIntField(env, obj, directflows, stats.directflows);
 }

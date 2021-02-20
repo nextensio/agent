@@ -55,7 +55,7 @@ public class NxtAgent extends ActionBarActivity {
             String text = String.format("%s to Nextensio\n" + 
                                         "%d connection flaps to nextensio, last flap %d seconds / %d mins ago\n" + 
                                         "Total heap in-use bytes %d, malloc count %d, free count %d (delta = %d)\n" + 
-                                        "Goroutines in use %d, Total GC count %d, Total GC Pause Nanosecs %d\n",
+                                        "Goroutines in use %d, Total GC count %d, Total GC Pause Nanosecs %d\n" +
                                         "Via Nxt flows %d, Direct internet flows %d\n",
                                         (stats.conn == 1 ? "Connected" : "Not Connected"),
                                         stats.disco, stats.discoSecs, stats.discoSecs/60,
