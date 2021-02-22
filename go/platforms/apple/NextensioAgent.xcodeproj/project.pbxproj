@@ -832,6 +832,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Sources/NextensioAgent/NextensioApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
@@ -857,6 +858,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Sources/NextensioAgent/NextensioApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
@@ -879,6 +881,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Sources/NextensioAgent/NextensioPacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
@@ -909,6 +912,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Sources/NextensioAgent/NextensioPacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
