@@ -16,11 +16,11 @@ class ViewController: NSViewController {
     // Hard code VPN configurations
     let tunnelBundleId = "com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel"
     let serverAddress = "127.0.0.1"
-    let serverPort = "8888"
-    let mtu = "1400"
-    let ip = "10.0.0.1"
+    let serverPort = "8080"
+    let mtu = "1500"
+    let ip = "169.254.2.1"
     let subnet = "255.255.255.0"
-    let dns = "8.8.8.8,8.4.4.4"
+    let dns = "8.8.8.8"
 
     private func initVPNTunnelProviderManager() {
         NETunnelProviderManager.loadAllFromPreferences { (savedManagers: [NETunnelProviderManager]?, error: Error?) in

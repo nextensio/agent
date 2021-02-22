@@ -21,7 +21,9 @@ struct goStats {
       int         discoSecs;
 };
 
-extern void nxtInit();
+typedef void(*logger_cb_t)(void *context, int level, const char *msg);
+extern void nxtLogger(void *context, logger_cb_t logger_fn);
+extern void nxtInit(int direct);
 extern void nxtOn(int tun_fd);
 extern void nxtOff(int tun_fd);
 extern void nxtStats(struct goStats *stats);

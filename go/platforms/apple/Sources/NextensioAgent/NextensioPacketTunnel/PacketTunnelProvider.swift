@@ -33,7 +33,7 @@ var loggerHandler : logger_cb_t = { context, level, msg in
     let swiftString = String(cString: msg!)
     let tunnelLogLevel = NextensioGoBridgeLogLevel(rawValue: level) ?? .debug
     
-    NSLog("Nextensio logger level \(tunnelLogLevel) msg: \(swiftString)")
+    NSLog("go-bridge level: \(tunnelLogLevel) msg: \(swiftString)")
 }
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -57,7 +57,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     overrideDestAddr(&overridePacket)
                     logPacketSrcDestIP(overridePacket, "mapped")
                     self.packetFlow.writePackets([overridePacket], withProtocols: [proto])
-
                 }
                 else {
                     self.packetFlow.writePackets([packet], withProtocols: [proto])
@@ -93,14 +92,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // Refers to NEIPv4Settings#includedRoutes or NEIPv4Settings#excludedRoutes,
         // which can be used as basic whitelist/blacklist routing.
         
-        let ipv4Settings = NEIPv4Settings(addresses: ["10.0.0.1"], subnetMasks: ["255.255.0.0"])
+        let ipv4Settings = NEIPv4Settings(addresses: ["169.254.2.1"], subnetMasks: ["255.255.255.0"])
+        
         ipv4Settings.includedRoutes = [
             NEIPv4Route.default()
-            // NEIPv4Route(destinationAddress: "10.0.0.2", subnetMask: "255.255.255.255")
         ]
         ipv4Settings.excludedRoutes = [
-            NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),
-            NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),
+            NEIPv4Route(destinationAddress: "127.0.0.1", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
         ]
         networkSettings.ipv4Settings = ipv4Settings
@@ -133,7 +131,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         //NSLog("tunnel setup packet tunnel network settings")
         self.setupPacketTunnelNetworkSettings()
     
-        // self.tunProxy()
+        //self.tunProxy()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
@@ -188,28 +186,28 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // Setup NextensioAgent log handler.
     private func setupNextensioAgentLogHandler() {
         let context = Unmanaged.passUnretained(self).toOpaque()
-        NSLog("calling go-bridge nxtLogger... ")
+        NSLog("go-bridge nxtLogger... ")
         nxtLogger(context, loggerHandler)
     }
     
     // init NextensioAgent .
     private func initNextensioAgent() {
         let direct : Int32 = 1
-        NSLog("calling go-bridge enter nxtInit... ")
+        NSLog("go-bridge nxtInit... ")
         nxtInit(direct)
     }
     
     // turn on NextensioAgent .
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("calling go-bridge nxtOn... ")
+        NSLog("go-bridge nxtOn... ")
         nxtOn(tunIf)
     }
     
     // turn off NextensioAgent .
     private func turnOffNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("calling go-bridge nxtOff... ")
+        NSLog("go-bridge nxtOff... ")
         nxtOff(tunIf)
     }
 }
