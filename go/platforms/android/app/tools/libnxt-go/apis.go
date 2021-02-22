@@ -38,7 +38,7 @@ func nxtInit(direct int) {
 	C.__android_log_write(C.ANDROID_LOG_ERROR, C.CString("NxtGo"), C.CString("NxtInit"))
 	l := AndroidLogger{level: C.ANDROID_LOG_ERROR}
 	lg := log.New(&l, "", 0)
-	agent.AgentInit(lg, direct)
+	agent.AgentInit(lg, 0 /* android */, direct)
 }
 
 //export nxtOn

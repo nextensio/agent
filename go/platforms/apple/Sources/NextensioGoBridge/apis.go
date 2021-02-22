@@ -51,7 +51,7 @@ func (l *CLogger) Write(p []byte) (int, error) {
 func nxtInit(direct int) {
 	l := CLogger{level: 0}
 	lg := log.New(&l, "", 0)
-	agent.AgentInit(lg, direct)
+	agent.AgentInit(lg, 1 /* apple */, direct)
 }
 
 //export nxtOn

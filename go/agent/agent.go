@@ -55,6 +55,7 @@ var tunDisco int
 var tunConn int
 var tunLastDisco time.Time
 var directFlows int32
+var osplatform int
 
 func flowAdd(key flowKey, tun common.Transport) {
 	flowLock.Lock()
@@ -383,7 +384,7 @@ func args() {
 // Various agents like android/ios may end up calling AgentInit multiple times depending
 // on how their UI/Networking components are loaded and in which order etc.., so we ensure
 // the init is done just once
-func AgentInit(lg *log.Logger, direct int) {
+func AgentInit(lg *log.Logger, osplat int, direct int) {
 	initLock.Lock()
 	if !initDone {
 		directMode = direct
@@ -392,6 +393,7 @@ func AgentInit(lg *log.Logger, direct int) {
 		gwStreams = make(chan common.NxtStream)
 		appStreams = make(chan common.NxtStream)
 		flows = make(map[flowKey]*flowInfo)
+		osplatform = osplat
 
 		args()
 		shared.OktaInit(lg, &regInfo, controller, onboarded)
@@ -406,7 +408,7 @@ func AgentIface(lg *log.Logger, iface *Iface) {
 	// terminate them to get tcp/udp out of it and forward them. The l3proxy
 	// is a combination of a source of l3 IP packets (a file descriptor here)
 	// and a proxy that terminates the packets to tcp/udp
-	f := fd.NewClient(mainCtx, lg, uintptr(iface.Fd))
+	f := fd.NewClient(mainCtx, osplatform, lg, uintptr(iface.Fd))
 	f.Dial(appStreams)
 	p := proxy.NewListener(mainCtx, lg, f, iface.IP)
 	go p.Listen(appStreams)
