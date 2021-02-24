@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gitlab.com/nextensio/common"
-	"gitlab.com/nextensio/common/messages/nxthdr"
-	"gitlab.com/nextensio/common/transport/netconn"
+	"gitlab.com/nextensio/common/go"
+	"gitlab.com/nextensio/common/go/messages/nxthdr"
+	"gitlab.com/nextensio/common/go/transport/netconn"
 )
 
 var controller string

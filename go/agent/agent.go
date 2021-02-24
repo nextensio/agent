@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gitlab.com/nextensio/common"
-	"gitlab.com/nextensio/common/messages/nxthdr"
-	"gitlab.com/nextensio/common/transport/fd"
-	proxy "gitlab.com/nextensio/common/transport/l3proxy"
-	"gitlab.com/nextensio/common/transport/netconn"
-	"gitlab.com/nextensio/common/transport/webproxy"
+	"gitlab.com/nextensio/common/go"
+	"gitlab.com/nextensio/common/go/messages/nxthdr"
+	"gitlab.com/nextensio/common/go/transport/fd"
+	proxy "gitlab.com/nextensio/common/go/transport/l3proxy"
+	"gitlab.com/nextensio/common/go/transport/netconn"
+	"gitlab.com/nextensio/common/go/transport/webproxy"
 )
 
 const NXT_AGENT_PROXY = 8080
