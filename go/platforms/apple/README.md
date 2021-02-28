@@ -32,7 +32,13 @@
 ## Source Code 
 
 - NextensioApp - is the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
+- NextensioAppMacOSX - is the macosx main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
 - NextensioPacketTunnel - is the tunnel provider process to handle tunnel packet flow. Main functions are startTunnel() and stopTunnel()
 - NextensioGoBridge - is the go glue code for the agent
 - Files ViewController.swift and PacketProviderTunnel.swift are the two main files that handle the configuration and packet flow
-- Two methods to connect to local agent, 1. through exposing tun fd and WG adaptor, 2. Socket.swift is a raw socket class to connect to local agent (this is WIP)
+
+## Connection
+
+- To connect to nextensio -- change direct var from 1 to 0 in initNextensioAgent() and seconds var to 30.0 in startTunnel
+- To connect to internet directly -- change direct var from 0 to 1 in initNextensioAgent() and seconds var to 0.0 in startTunnel
+- Comming soon: login to okta/IDP to avoid tweaking the seconds var
