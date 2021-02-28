@@ -238,19 +238,6 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 	var seen bool
 	var destAgent string = ""
 
-	if gwTun == nil {
-		appToGwClose(tun, dest, seen, key)
-		return
-	}
-	dest = gwTun.NewStream(nil)
-	if dest == nil {
-		appToGwClose(tun, dest, seen, key)
-		return
-	}
-	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
-	// the close is cascaded to the the cluster
-	dest.CloseCascade(tun)
-
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
@@ -262,13 +249,25 @@ func appToGw(lg *log.Logger, tun common.Transport) {
 		// moment, we need a more nicer way to figure out the bypass-nextensio
 		// flows rather than adding list of if statementes here
 		if flow.Dport == 53 {
-			dest.Close()
 			atomic.AddInt32(&directFlows, 1)
 			// Copy the flow, it points inside a huge data buffer which we dont want to hold up
 			go directOut(lg, tun, &*flow, buf)
 			return
 		}
 		if !seen {
+			if gwTun == nil {
+				appToGwClose(tun, dest, seen, key)
+				return
+			}
+			dest = gwTun.NewStream(nil)
+			if dest == nil {
+				appToGwClose(tun, dest, seen, key)
+				return
+			}
+			// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
+			// the close is cascaded to the the cluster
+			dest.CloseCascade(tun)
+
 			key.port = uint16(flow.Sport)
 			key.proto = int(flow.Proto)
 			flowAdd(key, tun)
