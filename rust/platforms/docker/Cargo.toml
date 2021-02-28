@@ -1,0 +1,9 @@
+[package]
+name = "docker"
+version = "0.1.0"
+authors = ["Nextensio <team@nextensio.net>"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2.86"
+agent = { path = "../../agent" }
