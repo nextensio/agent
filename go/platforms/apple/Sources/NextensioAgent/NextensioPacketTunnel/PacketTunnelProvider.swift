@@ -42,6 +42,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var conf = [String: AnyObject]()
     var pendingStartCompletion: ((NSError?) -> Void)?
     
+    override init() {
+        super.init()
+        
+        NSLog("Initialize Nextensio Agent...")
+        
+        // start the agent first
+        self.setupNextensioAgentLogHandler()
+        self.initNextensioAgent()
+    }
+    
     // These are core methods for Nextensio VPN tunnelling
     //   - read from tun device, override, write to tun device
     func tunProxy() {
@@ -85,7 +95,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // self.connection.send(bytes: message)
     }
     
-    func setupPacketTunnelNetworkSettings() {
+    private func setupPacketTunnelNetworkSettings() {
         // the `tunnelRemoteAddress` is meaningless because we are not creating a tunnel.
         let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: self.protocolConfiguration.serverAddress!)
         
@@ -114,22 +124,24 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             self.pendingStartCompletion?(nil)
             self.pendingStartCompletion = nil
             
-            // setup and turnon go-bridge apis for nextensio agent
-            self.setupNextensioAgentLogHandler()
-            self.initNextensioAgent()
+            // turn on go-bridge apis for nextensio agent
             self.turnOnNextensioAgent()
         }
     }
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
-        NSLog("tunnel getting provider protocol")
-        conf = (self.protocolConfiguration as! NETunnelProviderProtocol).providerConfiguration! as [String : AnyObject]
-
-        NSLog("tunnel saving completion handler")
-        pendingStartCompletion = completionHandler
         
-        //NSLog("tunnel setup packet tunnel network settings")
-        self.setupPacketTunnelNetworkSettings()
+        let seconds = 0.0 // change to 30.0 seconds to allow login to okta
+        NSLog("startTunnel sleep for \(seconds) seconds.... login to okta")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            // Put your code which should be executed with a delay here
+            NSLog("startTunnel setup Network Settings (configuration)")
+            self.conf = (self.protocolConfiguration as! NETunnelProviderProtocol).providerConfiguration! as [String : AnyObject]
+
+            self.pendingStartCompletion = completionHandler
+            self.setupPacketTunnelNetworkSettings()
+        }
     
         //self.tunProxy()
     }
@@ -147,6 +159,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
+        NSLog("sleep")
         completionHandler()
     }
 

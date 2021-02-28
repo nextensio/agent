@@ -12,6 +12,7 @@ class ViewController: NSViewController {
     
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
     @IBOutlet var connectButton: NSButton!
+    @IBOutlet var loginButton: NSButton!
 
     // Hard code VPN configurations
     let tunnelBundleId = "com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel"
@@ -123,6 +124,11 @@ class ViewController: NSViewController {
                 self.vpnManager.connection.stopVPNTunnel()
             }
         }
+    }
+    
+    @IBAction func login_button(_ sender: Any) {
+        print("Login through okta oidc!")
+        // let button = sender as! NSButton
     }
 }
 
