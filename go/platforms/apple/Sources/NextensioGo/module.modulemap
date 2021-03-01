@@ -1,5 +1,0 @@
-module Go {
-    umbrella header "nxt.h"
-    link "nxt-go"
-    export *
-}
