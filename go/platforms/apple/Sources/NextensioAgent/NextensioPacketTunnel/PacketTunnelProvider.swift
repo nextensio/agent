@@ -41,7 +41,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var connection: Socket = Socket()
     var conf = [String: AnyObject]()
     var pendingStartCompletion: ((NSError?) -> Void)?
-    
+
     override init() {
         super.init()
         
@@ -50,6 +50,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // start the agent first
         self.setupNextensioAgentLogHandler()
         self.initNextensioAgent()
+        
     }
     
     // These are core methods for Nextensio VPN tunnelling
@@ -119,6 +120,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         dnsSettings.matchDomains = [""]
         networkSettings.dnsSettings = dnsSettings
         
+        let access = (conf["access"] as! String)
+        let refresh = (conf["refresh"] as! String)
+        NSLog("accessToken: \(access)")
+        NSLog("refreshToken: \(refresh)")
+
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
             self.pendingStartCompletion?(nil)
@@ -131,12 +137,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         
-        let seconds = 0.0 // change to 30.0 seconds to allow login to okta
+        let seconds = 1.0 // change to 30.0 seconds to allow login to okta
         NSLog("startTunnel sleep for \(seconds) seconds.... login to okta")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
             // Put your code which should be executed with a delay here
-            NSLog("startTunnel setup Network Settings (configuration)")
+            NSLog("startTunnel using Network Extension configuration")
             self.conf = (self.protocolConfiguration as! NETunnelProviderProtocol).providerConfiguration! as [String : AnyObject]
 
             self.pendingStartCompletion = completionHandler
@@ -206,7 +212,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // init NextensioAgent .
     private func initNextensioAgent() {
         let direct : Int32 = 1
-        NSLog("go-bridge nxtInit... ")
+        NSLog("go-bridge nxtInit... direct: \(direct)")
         nxtInit(direct)
     }
     
