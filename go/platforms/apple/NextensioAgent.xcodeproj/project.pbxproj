@@ -190,6 +190,7 @@
 		6B2D6B9025D113630051991B = {
 			isa = PBXGroup;
 			children = (
+				6BD1FE8925F571840001CD26 /* Shared */,
 				6BE9EA3225D989F3006DCD29 /* NextensioAppMacOSX */,
 				6B2D6B9B25D113630051991B /* NextensioApp */,
 				6B2D6BBD25D114240051991B /* NextensioPacketTunnel */,
@@ -252,12 +253,19 @@
 			path = Sources/NextensioAgent/NextensioPacketTunnel;
 			sourceTree = "<group>";
 		};
-		6BE9EA3225D989F3006DCD29 /* NextensioAppMacOSX */ = {
+		6BD1FE8925F571840001CD26 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
 				6B9B103B25F3E41B00111392 /* AuthBaseViewController.swift */,
 				6B9B103925F3E41B00111392 /* AuthFlowCoordinator.swift */,
 				6B9B103A25F3E41B00111392 /* AuthFlowCoordinatorProtocol.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		6BE9EA3225D989F3006DCD29 /* NextensioAppMacOSX */ = {
+			isa = PBXGroup;
+			children = (
 				6BCD944525F3E2DD00A5BD46 /* SignInViewController.swift */,
 				6BCD943D25F32EFB00A5BD46 /* Okta.plist */,
 				6BF3B7C425D9BEAE0023DD0B /* NextensioAppMacOSXDebug.entitlements */,
