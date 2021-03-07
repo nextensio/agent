@@ -7,11 +7,21 @@
 - Download xcode latest from Apple App Store 
 - iOS version 13.0 and above
 - MacOS version 11.1 and above
+- Install cocoapod: https://cocoapods.org/
 
 ## Apple Developer License
 
 - Register your apple developer account through Xcode preferences -> Account
 - Open NextensioAgent.xcodeproj file, go to nxtapp and nxtTunnel targets -> Sign & Capabilities to change the respective Team in order to build the apps with Network Extension successfully
+
+## Podfile
+
+- Okta SDK uses CocoaPod for installation
+- pod install, will download OktaAuth, OktaJWT and OktaOIDC and create new xcode workspace file
+
+## XCode Workspace
+
+- Open NextensioAgent.xcworkspace (don't use NextensioAgent.xcodeproj)
 
 ## Building iOS target in Xcode
 
