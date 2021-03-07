@@ -47,8 +47,10 @@
 - NextensioGoBridge - is the go glue code for the agent
 - Files ViewController.swift and PacketProviderTunnel.swift are the two main files that handle the configuration and packet flow
 
-## Connection
+## Connect 
 
+- By default, the code will connect directly to internet -- direct variable set to 1 in initNextensioAgent() and seconds var to 1.0 in startTunnel
 - To connect to nextensio -- change direct var from 1 to 0 in initNextensioAgent() and seconds var to 30.0 in startTunnel
-- To connect to internet directly -- change direct var from 0 to 1 in initNextensioAgent() and seconds var to 0.0 in startTunnel
-- Comming soon: login to okta/IDP to avoid tweaking the seconds var
+
+## Todo
+- Future: Use Nextensio IDP login and password, pass accessToken to gateway
