@@ -13,29 +13,6 @@ go/shared/go.sum
 go/platforms/docker/docker
 go/platforms/docker/go.sum
 
-go/platforms/android/app/.cxx
-go/platforms/android/.gradle/
-go/platforms/android/.idea/*.xml
-go/platforms/android/.idea/*.iml
-go/platforms/android/.idea/caches/
-go/platforms/android/.idea/modules/
-go/platforms/android/.idea/dictionaries/
-go/platforms/android/.idea/libraries/
-go/platforms/android/captures/
-go/platforms/android/local.properties
-go/platforms/android/.DS_Store
-go/platforms/android/.cxx/
-go/platforms/android/Thumbs.db
-go/platforms/android/build/
-go/platforms/android/app/build/
-go/platforms/android/*.apk
-go/platforms/android/*.class
-go/platforms/android/*.dex
-go/platforms/android/*.iml
-go/platforms/android/*.jks
-go/platforms/android/keystore.properties
-go/platforms/android/gradlew.bat
-
 js/node_modules
 js/npm-debug.log
 

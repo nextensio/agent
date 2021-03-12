@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "agent",
+    "platforms/docker",
+]
+resolver = "2"
+
+# The development profile, used for `cargo build`
+[profile.dev]
+opt-level = 0  # Controls the --opt-level the compiler builds with
+debug = true   # Controls whether the compiler passes `-g`
+
+[profile.release]
+opt-level = "z"
+lto = true
+
