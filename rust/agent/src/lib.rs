@@ -9,17 +9,19 @@ use common::{
 use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
-use log::{debug, Level};
+use log::{error, Level};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
 use std::collections::VecDeque;
 use std::net::Ipv4Addr;
+use std::time::SystemTime;
 use std::{collections::HashMap, time::Duration, time::Instant};
 use std::{sync::atomic::AtomicI32, thread};
 use websock::WebSession;
 
 // These are atomic because rust will complain loudly about mutable global variables
 static APPFD: AtomicI32 = AtomicI32::new(0);
+static INITED: AtomicI32 = AtomicI32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
 
 const _UNUSED_IDX: usize = 0;
@@ -200,7 +202,7 @@ fn flow_new(
         };
         match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
             Err(e) => {
-                debug!("Direct transport register failed {}", format!("{}", e));
+                error!("Direct transport register failed {}", format!("{}", e));
                 tun.tun.close(0).ok();
                 return;
             }
@@ -258,7 +260,7 @@ fn dial_gateway(reginfo: &RegistrationInfo) -> WebSession {
     loop {
         match websocket.dial(None) {
             Err(e) => {
-                debug!(
+                error!(
                     "Dial gateway {} failed: {}, sleeping 2 seconds",
                     &reginfo.host, e.detail
                 );
@@ -295,12 +297,12 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
                 false
             }
             _ => {
-                debug!("Onboard fail {}", e.detail);
+                error!("Onboard fail {}", e.detail);
                 false
             }
         },
         Ok(_) => {
-            debug!("Onboard success");
+            error!("Onboard success");
             true
         }
     }
@@ -395,7 +397,7 @@ fn gwtun_rx(
                         match hdr.hdr.as_ref().unwrap() {
                             Hdr::Onboard(onb) => {
                                 assert_eq!(stream, 0);
-                                debug!(
+                                error!(
                                     "Got onboard response, user {}, uuid {}",
                                     onb.userid, onb.uuid
                                 );
@@ -669,12 +671,12 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 
     match tun.tun.event_register(GWTUN, poll, RegType::Reg) {
         Err(e) => {
-            debug!("Gateway transport register failed {}", format!("{}", e));
+            error!("Gateway transport register failed {}", format!("{}", e));
             tun.tun.close(0).ok();
             return;
         }
         Ok(_) => {
-            debug!("Gateway Transport Registered");
+            error!("Gateway Transport Registered");
             agent.tuns.insert(GWTUN_IDX, tun);
         }
     }
@@ -683,7 +685,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
         if gw_tun.tun.is_closed(0) {
-            debug!("Gateway transport closed, try opening again");
+            error!("Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
             gw_tun.tun.event_register(GWTUN, poll, RegType::Dereg).ok();
             close_gateway_flows(&mut agent.flows, gw_tun);
@@ -704,7 +706,7 @@ fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
     let mut app_tun = Fd::new_client(fd, platform);
     match app_tun.dial(None) {
         Err(e) => {
-            debug!("app dial failed {}", e.detail);
+            error!("app dial failed {}", e.detail);
         }
         _ => (),
     }
@@ -714,7 +716,12 @@ fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
 fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
     let fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
     if agent.app_fd != 0 && (agent.app_fd != fd || agent.app_tun.tun.is_closed(0)) {
-        debug!("App transport closed, try opening again");
+        error!(
+            "App transport closed, try opening again {}/{}/{}",
+            agent.app_fd,
+            fd,
+            agent.app_tun.tun.is_closed(0)
+        );
         agent.app_tun.tun.close(0).ok();
         agent
             .app_tun
@@ -738,13 +745,13 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
         };
         match tun.tun.event_register(APPTUN, poll, RegType::Reg) {
             Err(e) => {
-                debug!("App transport register failed {}", format!("{}", e));
+                error!("App transport register failed {}", format!("{}", e));
                 agent.app_tun.tun.close(0).ok();
                 agent.app_fd = 0;
                 return;
             }
             _ => {
-                debug!("App Transport Registered {}", fd);
+                error!("App Transport Registered {}/{}", agent.app_fd, fd);
                 agent.app_tun = tun;
                 agent.app_fd = fd;
                 ()
@@ -762,7 +769,7 @@ fn monitor_flows(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, Tun>,
 ) {
-    debug!("Total flows {}", flows.len());
+    error!("Total flows {}", flows.len());
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
@@ -836,7 +843,11 @@ fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap
 
 fn agent_main_thread(direct: usize, platform: usize) -> std::io::Result<()> {
     #[cfg(target_os = "android")]
-    android_logger::init_once(Config::default().with_min_level(Level::Trace));
+    android_logger::init_once(
+        Config::default()
+            .with_min_level(Level::Info)
+            .with_tag("NxtAgentLib"),
+    );
 
     let mut poll = Poll::new()?;
     let mut events = Events::with_capacity(2048);
@@ -928,18 +939,26 @@ fn agent_main_thread(direct: usize, platform: usize) -> std::io::Result<()> {
 
 #[no_mangle]
 pub unsafe extern "C" fn agent_init(platform: usize, direct: usize) {
-    thread::spawn(move || {
-        agent_main_thread(direct, platform).ok();
-    });
+    if INITED.load(std::sync::atomic::Ordering::Relaxed) == 0 {
+        error!("Agent init called {:?}", SystemTime::now());
+        thread::spawn(move || {
+            agent_main_thread(direct, platform).ok();
+        });
+        INITED.store(1, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 // We EXPECT the fd provied to us to be already non blocking
 #[no_mangle]
 pub unsafe extern "C" fn agent_on(fd: i32) {
+    let old_fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
+    error!("Agent on, old {}, new {}", old_fd, fd);
     APPFD.store(fd, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn agent_off() {
+    let fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
+    error!("Agent off {}", fd);
     APPFD.store(0, std::sync::atomic::Ordering::Relaxed);
 }
