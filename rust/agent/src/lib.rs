@@ -865,7 +865,10 @@ fn agent_main_thread(direct: usize, platform: usize) -> std::io::Result<()> {
     let mut monitor_ager = Instant::now();
     loop {
         let two_secs = Duration::new(2, 0);
-        poll.poll(&mut events, Some(two_secs))?;
+        match poll.poll(&mut events, Some(two_secs)) {
+            Err(e) => error!("Error polling {:?}, retrying", e),
+            Ok(_) => {}
+        }
 
         for event in events.iter() {
             match event.token() {
