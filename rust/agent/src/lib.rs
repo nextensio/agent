@@ -841,7 +841,7 @@ fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap
     }
 }
 
-fn agent_main_thread(direct: usize, platform: usize) -> std::io::Result<()> {
+fn agent_main_thread(direct: usize, platform: usize) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -849,7 +849,10 @@ fn agent_main_thread(direct: usize, platform: usize) -> std::io::Result<()> {
             .with_tag("NxtAgentLib"),
     );
 
-    let mut poll = Poll::new()?;
+    let mut poll = match Poll::new() {
+        Err(e) => panic!("Cannot create a poller"),
+        Ok(p) => p,
+    };
     let mut events = Events::with_capacity(2048);
 
     let mut agent = AgentInfo::default();
@@ -945,7 +948,7 @@ pub unsafe extern "C" fn agent_init(platform: usize, direct: usize) {
     if INITED.load(std::sync::atomic::Ordering::Relaxed) == 0 {
         error!("Agent init called {:?}", SystemTime::now());
         thread::spawn(move || {
-            agent_main_thread(direct, platform).ok();
+            agent_main_thread(direct, platform);
         });
         INITED.store(1, std::sync::atomic::Ordering::Relaxed);
     }
