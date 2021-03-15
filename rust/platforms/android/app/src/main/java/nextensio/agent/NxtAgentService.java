@@ -7,7 +7,6 @@ import android.os.ParcelFileDescriptor;
 import android.support.v4.content.LocalBroadcastManager;
 import android.content.pm.PackageManager;
 import android.util.Log;
-import android.content.Context;
 import android.os.Binder;
 import android.os.IBinder;
 import android.system.Os;
@@ -24,28 +23,16 @@ public class NxtAgentService extends VpnService {
     private static final String VPN_ADDRESS = "169.254.2.1"; // Select a link local IP
     private static final String VPN_ROUTE = "0.0.0.0"; 
     public static final String BROADCAST_VPN_STATE = "nextensio.agent.VPN_STATE";
-    private static Context context;
     private ParcelFileDescriptor vpnInterface;
     private int vpnFd = 0;
     private PendingIntent pendingIntent;
-    private boolean goLoaded;
     private final IBinder mBinder = new NxtAgentServiceBinder();
     boolean vpnReady;
 
-    // TODO: I am still not clear whether the onCreate here should load the golang libs
-    // when the onCreate in NxtAgent.java already does that. But I remember some issues
-    // with java complaining JNI not found unless its done in both places, not sure how
-    // this class can be launched before NxtAgent is launched and has done its onCreate()
     @Override
     public void onCreate() {
         super.onCreate();
         setupVPN();
-        if (!goLoaded) {
-            this.context = getApplicationContext();
-            SharedLibraryLoader.loadSharedLibrary(this.context, "nxt");
-            goLoaded = true;
-            Log.i(TAG, "Loaded golibs");
-        } 
         try {
             if (vpnFd != 0) {
                 // Call into the golang agent and ask it to start Rx/Tx on this fd

@@ -40,8 +40,6 @@ class NxtStats {
 // then launch a 'service' class in NxtAgentService.java
 public class NxtAgent extends ActionBarActivity {
     private static final int VPN_REQUEST_CODE = 0x0F;
-    private boolean goLoaded;
-    private static Context context;
     private static final String TAG = "NxtUi";
     private NxtAgentService agentService = null;
     private Handler handler = new Handler();
@@ -188,28 +186,12 @@ public class NxtAgent extends ActionBarActivity {
 
     // When the app is created, android calls onCreate() followed by onResume().
     // onResume() is also called when the app goes from background to foreground.
-    // When the app is created, we just load the go libraries and setup the buttons
-    // and other UI elements. After that when the user clicks the buttons etc..,
-    // the registered callbacks are invoked and sets in motion the rest of the things
+    // When the app is created, we just setup the buttons and other UI elements. 
+    // After that when the user clicks the buttons etc.., the registered callbacks 
+    // are invoked and sets in motion the rest of the things
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Load the golang agent lib
-        if (!goLoaded) {
-            this.context = getApplicationContext();
-            SharedLibraryLoader.loadSharedLibrary(this.context, "nxt");
-            goLoaded = true;
-            Log.i(TAG, "Loaded golibs");
-            new Thread(new Runnable() {
-                public void run() {
-                    Thread.currentThread().setName("nextensio.agent");
-                    // Call into the rust agent asking to initialize/start of the world
-                    nxtInit(0);                    
-                }
-            }).start();
-        }
-
         setContentView(R.layout.activity_nextensio);
 
         // Setup the button to turn the vpn on/off
@@ -262,7 +244,5 @@ public class NxtAgent extends ActionBarActivity {
     protected void onDestroy() {
         super.onDestroy();
         doUnbindService();
-    }
-    
-    private static native int nxtInit(int direct);
+    }    
 }

@@ -5,7 +5,7 @@ extern void agent_init(int platform, int direct);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 
-JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtInit(JNIEnv *env, jclass c, jint direct)
+JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
     agent_init(0 /*android*/, 1/*direct*/);
     return 0;
