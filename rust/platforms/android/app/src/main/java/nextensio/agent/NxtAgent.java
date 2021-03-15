@@ -201,6 +201,13 @@ public class NxtAgent extends ActionBarActivity {
             SharedLibraryLoader.loadSharedLibrary(this.context, "nxt");
             goLoaded = true;
             Log.i(TAG, "Loaded golibs");
+            new Thread(new Runnable() {
+                public void run() {
+                    Thread.currentThread().setName("nextensio.agent");
+                    // Call into the rust agent asking to initialize/start of the world
+                    nxtInit(0);                    
+                }
+            }).start();
         }
 
         setContentView(R.layout.activity_nextensio);
@@ -229,8 +236,6 @@ public class NxtAgent extends ActionBarActivity {
         LocalBroadcastManager.getInstance(this).registerReceiver(vpnStateReceiver,
                 new IntentFilter(NxtAgentService.BROADCAST_VPN_STATE));
 
-        // Call into the golang agent asking to initialize/start of the world
-        nxtInit(0);
 
         // Schedule a periodic task to collect stats etc.. from the golang world
         handler.post(runTask);

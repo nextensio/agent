@@ -849,8 +849,10 @@ fn agent_main_thread(direct: usize, platform: usize) {
             .with_tag("NxtAgentLib"),
     );
 
+    error!("Agent init called {:?}", SystemTime::now());
+
     let mut poll = match Poll::new() {
-        Err(e) => panic!("Cannot create a poller"),
+        Err(e) => panic!("Cannot create a poller {:?}", e),
         Ok(p) => p,
     };
     let mut events = Events::with_capacity(2048);
@@ -931,6 +933,7 @@ fn agent_main_thread(direct: usize, platform: usize) {
         // Note that we have a poll timeout of two seconds, but packets can keep the loop busy
         // so make sure we monitor only every two secs
         if monitor_ager.elapsed() >= Duration::from_secs(2) {
+            assert!(INITED.load(std::sync::atomic::Ordering::Relaxed) == 0);
             monitor_gw(&mut agent, &mut poll);
             monitor_appfd(&mut agent, &mut poll);
             monitor_ager = Instant::now();
@@ -943,14 +946,18 @@ fn agent_main_thread(direct: usize, platform: usize) {
     }
 }
 
+// NOTE: This is a for-ever loop inside, so call this from a seperate thread in
+// the platform (android/ios/linux/windows). We can launch a thread right in here
+// and that works, but at least on android there is this problem of that thread
+// mysteriously vanishing after a few hours, maybe its becuase the thread created
+// here might not be the right priority etc.. ? The thread created from android
+// itself seems to work fine and hence we are leaving the thread creation to the
+// platform so it can choose the right priority etc..
 #[no_mangle]
 pub unsafe extern "C" fn agent_init(platform: usize, direct: usize) {
     if INITED.load(std::sync::atomic::Ordering::Relaxed) == 0 {
-        error!("Agent init called {:?}", SystemTime::now());
-        thread::spawn(move || {
-            agent_main_thread(direct, platform);
-        });
-        INITED.store(1, std::sync::atomic::Ordering::Relaxed);
+        agent_main_thread(direct, platform);
+        INITED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

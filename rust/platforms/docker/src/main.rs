@@ -46,10 +46,7 @@ fn main() {
     config_tun();
 
     unsafe {
-      agent_on(fd);
-      agent_init(1, 0);
-    }
-    loop {
-        thread::sleep(time::Duration::from_secs(1000000));
+        agent_on(fd);
+        agent_init(1, 0);
     }
 }
