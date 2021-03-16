@@ -4,7 +4,7 @@ import android.util.Log;
 
 public class NxtApp extends Application {
 
-    private static final String TAG = "NxtUi";
+    private static final String TAG = "NxtApp";
 
     public NxtApp() {
         // this method fires only once per application start. 
