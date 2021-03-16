@@ -97,13 +97,12 @@ struct AgentInfo {
     flows: HashMap<FlowV4Key, FlowV4>,
     tuns: HashMap<usize, Tun>,
     next_tun_idx: usize,
-    gw_tun: Tun,
     app_tun: Tun,
 }
 
 fn dummy_onboard(agent: &mut AgentInfo) {
     // TODO: do proper okta onboarding
-    agent.idp_onboarded = false;
+    agent.idp_onboarded = true;
     agent.reginfo = RegistrationInfo {
         host: "gatewaytesta.nextensio.net".to_string(),
         access_token: "foobar".to_string(),
@@ -317,7 +316,7 @@ fn flow_rx_data(
     tun: &mut Tun,
     key: &FlowV4Key,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
-    data: NxtBufs,
+    mut data: NxtBufs,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
@@ -333,6 +332,9 @@ fn flow_rx_data(
                     _ => {}
                 }
             }
+            // We dont need any nextensio headers at this point, so why waste memory
+            // if this gets queued up for long ? Set it to None
+            data.hdr = None;
             flow.pending_rx.push_back(data);
             flow_alive(&key, flow, true);
             flow_data_from_gateway(&key, flow, &mut tun.tun, app_rx, poll);
@@ -494,8 +496,9 @@ fn flow_data_to_gateway(
                 },
             }
         }
-        if flow.tx_stream == GWTUN_IDX as u64 {
+        if flow.tx_socket == GWTUN_IDX {
             let mut hdr = key_to_hdr(key);
+            hdr.streamid = flow.tx_stream;
             hdr.streamop = StreamOp::Noop as i32;
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
@@ -720,10 +723,10 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 TunFlow::OneToMany(ref mut tun_flows) => tun_flows.shrink_to_fit(),
                 _ => {}
             }
-            return;
         }
+    } else {
+        new_gw(agent, poll);
     }
-    new_gw(agent, poll);
 }
 
 fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
@@ -873,6 +876,9 @@ fn agent_main_thread(direct: usize, platform: usize) {
             .with_tag("NxtAgentLib"),
     );
 
+    #[cfg(target_os = "linux")]
+    stderrlog::new().module(module_path!()).init().unwrap();
+
     error!("Agent init called");
 
     let mut poll = match Poll::new() {
@@ -952,7 +958,9 @@ fn agent_main_thread(direct: usize, platform: usize) {
         }
 
         if !agent.gw_onboarded && agent.idp_onboarded {
-            agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut agent.gw_tun);
+            if let Some(mut gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
+                agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut gw_tun);
+            }
         }
 
         // Note that we have a poll timeout of two seconds, but packets can keep the loop busy

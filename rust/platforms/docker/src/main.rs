@@ -1,8 +1,6 @@
 use nextensio::{agent_init, agent_on};
 use std::ffi::CString;
 use std::process::Command;
-use std::thread;
-use std::time;
 
 const TUNSETIFF: u64 = 1074025674;
 
@@ -47,6 +45,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(1, 0);
+        agent_init(0 /*direct*/, 0 /*platform*/);
     }
 }
