@@ -1,8 +1,13 @@
 use nextensio::{agent_init, agent_on};
+use rouille::{router, Response};
 use std::ffi::CString;
 use std::process::Command;
+use std::{sync::atomic::AtomicI32, thread};
 
 const TUNSETIFF: u64 = 1074025674;
+const NXT_OKTA_RESULTS: usize = 8081;
+const NXT_OKTA_LOGIN: usize = 8180;
+const onboarded: AtomicI32 = AtomicI32::new(0);
 
 fn cmd(cmd: &str) {
     let mut shell = Command::new("bash");
@@ -39,12 +44,60 @@ fn create_tun() -> Result<i32, std::io::Error> {
         Ok(fd)
     }
 }
+
+fn okta_login() {
+    rouille::start_server(format!("localhost:{}", NXT_OKTA_LOGIN), move |request| {
+        router!(request,
+            (GET) (/) => {
+                println!("Hit login root");
+                let mut response = Response::html(login::LOGIN);
+                response.status_code = 200;
+                response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
+                response
+            },
+            (GET) (/onboardstatus) => {
+                println!("Hit login check");
+                if onboarded.load(std::sync::atomic::Ordering::Relaxed) == 0 {
+                    let mut response = Response::text("");
+                    response.status_code = 201;
+                    response
+                } else {
+                    let mut response = Response::text("");
+                    response.status_code = 200;
+                    response
+                }
+            },
+            _ => rouille::Response::empty_404(),
+        )
+    });
+}
+
+fn okta_results() {
+    rouille::start_server(format!("localhost:{}", NXT_OKTA_RESULTS), move |request| {
+        router!(request,
+            (GET) (/accessid/{access: String}/{id: String}) => {
+                println!("Access token {}, id token {}", access, id);
+                let mut response = Response::text("");
+                response.status_code = 200;
+                response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
+                response
+            },
+            _ => rouille::Response::empty_404(),
+        )
+    });
+}
+
 fn main() {
     let fd = create_tun().unwrap();
     config_tun();
+
+    thread::spawn(move || okta_login());
+    thread::spawn(move || okta_results());
 
     unsafe {
         agent_on(fd);
         agent_init(0 /*direct*/, 0 /*platform*/);
     }
 }
+
+mod login;
