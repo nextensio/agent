@@ -163,8 +163,8 @@ fn okta_results(controller: String, services: String) {
 }
 
 fn main() {
-    //let fd = create_tun().unwrap();
-    //config_tun();
+    let fd = create_tun().unwrap();
+    config_tun();
 
     let controller = "172.18.0.2:8080";
 
@@ -172,7 +172,7 @@ fn main() {
     thread::spawn(move || okta_results(controller.to_string(), "".to_string()));
 
     unsafe {
-        //agent_on(fd);
+        agent_on(fd);
         agent_init(0 /*direct*/, 0 /*platform*/);
     }
 }
