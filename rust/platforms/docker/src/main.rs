@@ -1,13 +1,42 @@
 use nextensio::{agent_init, agent_on};
 use rouille::{router, Response};
+use serde::Deserialize;
 use std::ffi::CString;
+use std::fmt;
+use std::io::Read;
 use std::process::Command;
-use std::{sync::atomic::AtomicI32, thread};
+use std::{sync::atomic::AtomicBool, thread};
 
 const TUNSETIFF: u64 = 1074025674;
 const NXT_OKTA_RESULTS: usize = 8081;
 const NXT_OKTA_LOGIN: usize = 8180;
-const onboarded: AtomicI32 = AtomicI32::new(0);
+static ONBOARDED: AtomicBool = AtomicBool::new(false);
+
+#[derive(Deserialize)]
+struct OnboardInfo {
+    Result: String,
+    userid: String,
+    tenant: String,
+    gateway: String,
+    domains: Vec<String>,
+    connectid: String,
+    cacert: Vec<u8>,
+}
+
+impl fmt::Display for OnboardInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "userid: {}, tenant: {}, gateway: {}, connectid: {}",
+            self.userid, self.tenant, self.gateway, self.connectid
+        )
+        .ok();
+        for d in self.domains.iter() {
+            write!(f, " {}", d).ok();
+        }
+        Ok(())
+    }
+}
 
 fn cmd(cmd: &str) {
     let mut shell = Command::new("bash");
@@ -45,38 +74,84 @@ fn create_tun() -> Result<i32, std::io::Error> {
     }
 }
 
+fn login_page() -> rouille::Response {
+    let mut response = Response::html(login::LOGIN);
+    response.status_code = 200;
+    response
+        .headers
+        .push(("Access-Control-Allow-Origin".into(), "*".into()));
+    response
+}
+
+fn onboard_status() -> rouille::Response {
+    if ONBOARDED.load(std::sync::atomic::Ordering::Relaxed) == false {
+        let mut response = Response::text("");
+        response.status_code = 201;
+        response
+    } else {
+        let mut response = Response::text("");
+        response.status_code = 200;
+        response
+    }
+}
+
 fn okta_login() {
     rouille::start_server(format!("localhost:{}", NXT_OKTA_LOGIN), move |request| {
         router!(request,
             (GET) (/) => {
-                println!("Hit login root");
-                let mut response = Response::html(login::LOGIN);
-                response.status_code = 200;
-                response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
-                response
+                login_page()
+            },
+            (HEAD) (/) => {
+                login_page()
             },
             (GET) (/onboardstatus) => {
-                println!("Hit login check");
-                if onboarded.load(std::sync::atomic::Ordering::Relaxed) == 0 {
-                    let mut response = Response::text("");
-                    response.status_code = 201;
-                    response
-                } else {
-                    let mut response = Response::text("");
-                    response.status_code = 200;
-                    response
-                }
+                onboard_status()
             },
-            _ => rouille::Response::empty_404(),
+            (HEAD) (/onboardstatus) => {
+                onboard_status()
+            },
+            _ => {
+                println!("Nonexistant path: {:?}", request);
+                rouille::Response::empty_404()
+            },
         )
     });
 }
 
-fn okta_results() {
+fn okta_results(controller: String, services: String) {
     rouille::start_server(format!("localhost:{}", NXT_OKTA_RESULTS), move |request| {
         router!(request,
             (GET) (/accessid/{access: String}/{id: String}) => {
-                println!("Access token {}, id token {}", access, id);
+                // TODO: Once we start using proper certs for our production clusters, make this
+                // accept_invalid_certs true only for test environment. Even test environments ideally
+                // should have verifiable certs via a test.nextensio.net domain or something
+                let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
+                let get_url = format!("https://{}/api/v1/onboard/{}", controller, access);
+                let bearer = format!("Bearer {}", access);
+                let resp = client.get(&get_url).header("Authorization", bearer).send();
+                match resp {
+                    Ok(mut res) => {
+                        if res.status().is_success() {
+                            let onb: Result<OnboardInfo, reqwest::Error> = res.json();
+                            match onb {
+                                Ok(o) => {
+                                    if o.Result != "ok" {
+                                        println!("Result from controller not ok {}", o.Result);
+                                    } else {
+                                        println!("Onboarded {}", o);
+                                        ONBOARDED.store(true, std::sync::atomic::Ordering::Relaxed);
+                                    }
+                                },
+                                Err(e) => {println!("HTTP body failed {:?}", e);},
+                            }
+                        } else {
+                            println!("HTTP Get result {}, failed", res.status());
+                        }
+                    },
+                    Err(e) => {println!("HTTP Get failed {:?}", e);},
+                }
+
+
                 let mut response = Response::text("");
                 response.status_code = 200;
                 response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
@@ -88,14 +163,16 @@ fn okta_results() {
 }
 
 fn main() {
-    let fd = create_tun().unwrap();
-    config_tun();
+    //let fd = create_tun().unwrap();
+    //config_tun();
+
+    let controller = "172.18.0.2:8080";
 
     thread::spawn(move || okta_login());
-    thread::spawn(move || okta_results());
+    thread::spawn(move || okta_results(controller.to_string(), "".to_string()));
 
     unsafe {
-        agent_on(fd);
+        //agent_on(fd);
         agent_init(0 /*direct*/, 0 /*platform*/);
     }
 }

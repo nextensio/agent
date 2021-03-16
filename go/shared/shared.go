@@ -71,10 +71,9 @@ func oktaLogin(lg *log.Logger) {
 
 func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
 	for {
-		// TODO: This is purely for the time being where we dont have proper certificates,
-		// we work with self signed certs. And its difficult to get that into the android/ios
-		// agents, so we just turn it off altogether, at any rate there is no production
-		// image without proper certs, so this needs to be removed at that time
+		// TODO: Once we start using proper certs for our production clusters, make this
+		// accept_invalid_certs true only for test environment. Even test environments ideally
+		// should have verifiable certs via a test.nextensio.net domain or something
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
