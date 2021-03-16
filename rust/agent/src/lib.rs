@@ -2,20 +2,20 @@
 use android_logger::Config;
 use common::as_u32_be;
 use common::{
-    decode_ipv4,
+    decode_ipv4, key_to_hdr,
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
     FlowV4Key, NxtBufs, NxtErr, RegType, Transport,
 };
 use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
-use log::{error, Level};
+use log::error;
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
-use std::collections::VecDeque;
+use std::fs::File;
 use std::net::Ipv4Addr;
-use std::time::SystemTime;
 use std::{collections::HashMap, time::Duration, time::Instant};
+use std::{collections::VecDeque, io::Read};
 use std::{sync::atomic::AtomicI32, thread};
 use websock::WebSession;
 
@@ -108,11 +108,15 @@ fn dummy_onboard(agent: &mut AgentInfo) {
         host: "gatewaytesta.nextensio.net".to_string(),
         access_token: "foobar".to_string(),
         connect_id: "test1-nextensio-net".to_string(),
-        domains: Vec::new(),
-        ca_cert: vec![1, 2, 3, 4],
+        domains: vec!["kismis.org".to_string()],
+        ca_cert: Vec::new(),
         userid: "test1@nextensio.net".to_string(),
         uuid: "123e4567-e89b-12d3-a456-426655440000".to_string(),
         services: vec!["test1-nextensio-net".to_string()],
+    };
+    match File::open("/tmp/nextensio.crt") {
+        Ok(mut file) => file.read_to_end(&mut agent.reginfo.ca_cert).ok(),
+        Err(_) => Some(0),
     };
 }
 
@@ -255,7 +259,8 @@ fn dial_gateway(reginfo: &RegistrationInfo) -> WebSession {
         "x-nextensio-connect".to_string(),
         reginfo.connect_id.clone(),
     );
-    let mut websocket = WebSession::new_client(vec![0], &reginfo.host, 443, headers, true);
+    let mut websocket =
+        WebSession::new_client(reginfo.ca_cert.clone(), &reginfo.host, 443, headers, true);
     loop {
         match websocket.dial(None) {
             Err(e) => {
@@ -447,12 +452,12 @@ fn gwtun_rx(
     }
 }
 
-fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>) {
+fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>, reginfo: &RegistrationInfo) {
     while let Some(key) = tun.pending_tx.pop_front() {
         if let Some(flow) = flows.get_mut(&key) {
             if !flow.dead {
                 flow.pending_tx_qed = false;
-                flow_data_to_gateway(&key, flow, tun);
+                flow_data_to_gateway(&key, flow, tun, reginfo);
                 // If the flow is back to waiting state then we cant send any more
                 // on this tunnel, so break out and try next time
                 if flow.pending_tx.is_some() {
@@ -467,9 +472,14 @@ fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>) {
 // Now lets see if the smoltcp FSM deems that we have a payload to
 // be read. Before that see if we had any payload pending to be processed
 // and if so process it. The payload might be sent to the gateway or direct.
-fn flow_data_to_gateway(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Tun) {
+fn flow_data_to_gateway(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    tx_socket: &mut Tun,
+    reginfo: &RegistrationInfo,
+) {
     while tx_socket.tx_ready {
-        let tx;
+        let mut tx;
         if flow.pending_tx.is_some() {
             tx = flow.pending_tx.take().unwrap();
         } else {
@@ -484,6 +494,20 @@ fn flow_data_to_gateway(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Tun)
                 },
             }
         }
+        if flow.tx_stream == GWTUN_IDX as u64 {
+            let mut hdr = key_to_hdr(key);
+            hdr.streamop = StreamOp::Noop as i32;
+            match hdr.hdr.as_mut().unwrap() {
+                Hdr::Flow(ref mut f) => {
+                    f.source_agent = reginfo.connect_id.clone();
+                    f.origin_agent = reginfo.connect_id.clone();
+                    f.dest_agent = "default-internet".to_string();
+                }
+                _ => {}
+            }
+            tx.hdr = Some(hdr);
+        }
+
         // Now try writing the payload to the destination socket. If the destination
         // socket says EWOULDBLOCK, then queue up the data as pending and try next time
         match tx_socket.tun.write(flow.tx_stream, tx) {
@@ -580,6 +604,7 @@ fn apptun_rx(
     next_tun_idx: &mut usize,
     poll: &mut Poll,
     gw_onboarded: bool,
+    reginfo: &RegistrationInfo,
 ) {
     let ret = tun.tun.read();
     match ret {
@@ -611,7 +636,7 @@ fn apptun_rx(
                             flow.rx_socket.poll(app_rx, app_tx);
                             assert!(app_rx.len() == 0);
                             if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                flow_data_to_gateway(&key, flow, tx_sock);
+                                flow_data_to_gateway(&key, flow, tx_sock, reginfo);
                                 flow_data_from_gateway(&key, flow, &mut tx_sock.tun, app_rx, poll);
                             }
                             // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
@@ -887,6 +912,7 @@ fn agent_main_thread(direct: usize, platform: usize) {
                             &mut agent.next_tun_idx,
                             &mut poll,
                             agent.gw_onboarded,
+                            &agent.reginfo,
                         );
                         agent
                             .app_tun
@@ -911,7 +937,7 @@ fn agent_main_thread(direct: usize, platform: usize) {
                         }
                         if event.is_writable() {
                             tun.tx_ready = true;
-                            gwtun_tx(tun, &mut agent.flows);
+                            gwtun_tx(tun, &mut agent.flows, &agent.reginfo);
                         }
                     }
                 }
