@@ -9,7 +9,7 @@ use common::{
 use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
-use log::error;
+use log::{error, Level};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
 use std::fs::File;
