@@ -165,6 +165,7 @@ fn flow_new(
     if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
         direct = true;
     }
+
     // TODO: let all dns go direct as of today, need a better dns story in future,
     // like for private domains how do we deal with dns ?
     if key.dport == 53 {
