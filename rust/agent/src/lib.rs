@@ -12,7 +12,6 @@ use l3proxy::Socket;
 use log::{error, Level};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
-use std::fs::File;
 use std::net::Ipv4Addr;
 use std::{collections::HashMap, time::Duration, time::Instant};
 use std::{collections::VecDeque, io::Read};
@@ -22,6 +21,8 @@ use websock::WebSession;
 // These are atomic because rust will complain loudly about mutable global variables
 static APPFD: AtomicI32 = AtomicI32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
+
+const HTTP_OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 
 const _UNUSED_IDX: usize = 0;
 const APPTUN_IDX: usize = 1;
@@ -102,7 +103,7 @@ struct AgentInfo {
 
 fn dummy_onboard(agent: &mut AgentInfo) {
     // TODO: do proper okta onboarding
-    agent.idp_onboarded = true;
+    //agent.idp_onboarded = true;
     agent.reginfo = RegistrationInfo {
         host: "gatewaytesta.nextensio.net".to_string(),
         access_token: "foobar".to_string(),
@@ -112,10 +113,6 @@ fn dummy_onboard(agent: &mut AgentInfo) {
         userid: "test1@nextensio.net".to_string(),
         uuid: "123e4567-e89b-12d3-a456-426655440000".to_string(),
         services: vec!["test1-nextensio-net".to_string()],
-    };
-    match File::open("/tmp/nextensio.crt") {
-        Ok(mut file) => file.read_to_end(&mut agent.reginfo.ca_cert).ok(),
-        Err(_) => Some(0),
     };
 }
 
@@ -157,7 +154,7 @@ fn flow_close(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Box<dyn Transp
 }
 
 fn flow_new(
-    key: FlowV4Key,
+    key: &FlowV4Key,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, Tun>,
     next_tun_idx: &mut usize,
@@ -178,17 +175,9 @@ fn flow_new(
     let tx_stream;
     if direct {
         tx_socket = *next_tun_idx;
-        let dest = Ipv4Addr::new(
-            ((key.dip >> 24) & 0xFF) as u8,
-            ((key.dip >> 16) & 0xFF) as u8,
-            ((key.dip >> 8) & 0xFF) as u8,
-            (key.dip & 0xFF) as u8,
-        );
-        let mut tun = NetConn::new_client(dest, key.dport as usize, key.proto, true);
-        // TODO: The 200ms is a random timeout. We are not really expected to send anything
-        // out via direct, this agent is for via-nextensio apps. So this shouldnt matter for
-        // the time being
-        match tun.dial(Some(Duration::from_millis(200))) {
+        let dest: Ipv4Addr = key.dip.parse().unwrap();
+        let mut tun = NetConn::new_client(dest, key.dport as usize, key.proto, true, None);
+        match tun.dial() {
             Err(_) => {
                 return;
             }
@@ -200,7 +189,7 @@ fn flow_new(
             tun: Box::new(tun),
             pending_tx: VecDeque::with_capacity(1),
             tx_ready: true,
-            flows: TunFlow::OneToOne(key),
+            flows: TunFlow::OneToOne(key.clone()),
         };
         match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
             Err(e) => {
@@ -217,7 +206,7 @@ fn flow_new(
             tx_stream = gw_tun.tun.new_stream();
             match gw_tun.flows {
                 TunFlow::OneToMany(ref mut tun_flows) => {
-                    tun_flows.insert(tx_stream, key);
+                    tun_flows.insert(tx_stream, key.clone());
                 }
                 _ => panic!("We expect a hashmap for gateway flows"),
             }
@@ -247,7 +236,7 @@ fn flow_new(
         dead: false,
         pending_tx_qed: false,
     };
-    flows.insert(key, f);
+    flows.insert(key.clone(), f);
 }
 
 // Today this dials websocket, in future with different possible transports,
@@ -261,7 +250,7 @@ fn dial_gateway(reginfo: &RegistrationInfo) -> WebSession {
     let mut websocket =
         WebSession::new_client(reginfo.ca_cert.clone(), &reginfo.host, 443, headers, true);
     loop {
-        match websocket.dial(None) {
+        match websocket.dial() {
             Err(e) => {
                 error!(
                     "Dial gateway {} failed: {}, sleeping 2 seconds",
@@ -327,7 +316,7 @@ fn flow_rx_data(
                 flow.rx_stream = Some(stream);
                 match tun.flows {
                     TunFlow::OneToMany(ref mut tun_flows) => {
-                        tun_flows.insert(stream, *key);
+                        tun_flows.insert(stream, key.clone());
                     }
                     _ => {}
                 }
@@ -419,7 +408,7 @@ fn gwtun_rx(
                                     return;
                                 }
                                 let sip = as_u32_be(&sipb.unwrap().octets());
-                                let dip = as_u32_be(&dipb.unwrap().octets());
+                                let dip = dipb.unwrap().to_string();
                                 let key = FlowV4Key {
                                     sip,
                                     dip,
@@ -435,7 +424,7 @@ fn gwtun_rx(
                     let key;
                     match tun.flows {
                         TunFlow::OneToOne(ref k) => {
-                            key = *k;
+                            key = k.clone();
                         }
                         _=> panic!("We either need an nxthdr to identify the flow or we need the tun to map 1:1 to the flow"),
                     }
@@ -522,7 +511,7 @@ fn flow_data_to_gateway(
                         // Well The tx socket is not ready, so queue ourselves
                         // upto be called when the tx socket becomes ready and
                         // get out of the loop.
-                        tx_socket.pending_tx.push_back(*key);
+                        tx_socket.pending_tx.push_back(key.clone());
                         flow.pending_tx_qed = true;
                     }
                     return;
@@ -626,7 +615,7 @@ fn apptun_rx(
                 if let Some(key) = decode_ipv4(&b[data.headroom..]) {
                     let mut f = flows.get_mut(&key);
                     if f.is_none() {
-                        flow_new(key, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                        flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
                         f = flows.get_mut(&key);
                     }
                     if let Some(flow) = f {
@@ -731,7 +720,7 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 
 fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
     let mut app_tun = Fd::new_client(fd, platform);
-    match app_tun.dial(None) {
+    match app_tun.dial() {
         Err(e) => {
             error!("app dial failed {}", e.detail);
         }
@@ -827,7 +816,7 @@ fn monitor_flows(
                     tuns.remove(&f.tx_socket);
                 }
             }
-            keys.push(*k);
+            keys.push(k.clone());
         }
     }
     for k in keys {
@@ -859,7 +848,7 @@ fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap
             if let Some(tun) = tuns.get_mut(&f.tx_socket) {
                 flow_close(k, f, &mut tun.tun);
                 tuns.remove(&f.tx_socket);
-                keys.push(*k);
+                keys.push(k.clone());
             }
         }
     }

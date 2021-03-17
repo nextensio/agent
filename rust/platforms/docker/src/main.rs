@@ -3,7 +3,6 @@ use rouille::{router, Response};
 use serde::Deserialize;
 use std::ffi::CString;
 use std::fmt;
-use std::io::Read;
 use std::process::Command;
 use std::{sync::atomic::AtomicBool, thread};
 
@@ -173,7 +172,7 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*direct*/, 0 /*platform*/);
+        agent_init(0 /*platform*/, 1 /*direct*/);
     }
 }
 
