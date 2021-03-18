@@ -610,13 +610,28 @@ fn flow_data_from_gateway(
     }
 }
 
-fn proxyclient_close(tun: &mut Tun, tun_idx: usize, poll: &mut Poll) {
+fn proxyclient_close(
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    tuns: &mut HashMap<usize, TunInfo>,
+    tun: &mut Tun,
+    tun_idx: Token,
+    poll: &mut Poll,
+) {
     // The proxy client session might close even before sending a CONNECT <host> HTTP/1.1, in which
     // case we have not yet identified a flow and hence cant realy on the flow closing the session etc..
-    tun.tun
-        .event_register(Token(tun_idx), poll, RegType::Dereg)
-        .ok();
+    tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
     tun.tun.close(0).ok();
+    match tun.flows {
+        TunFlow::OneToOne(ref k) => {
+            if let Some(f) = flows.get_mut(k) {
+                if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
+                    let tx_socket = tx_socket.tun();
+                    flow_close(k, f, &mut tx_socket.tun);
+                }
+            }
+        }
+        _ => { /* Not associated to a flow yet */ }
+    }
 }
 
 fn proxyclient_rx(
@@ -640,7 +655,7 @@ fn proxyclient_rx(
                     return true;
                 }
                 _ => {
-                    proxyclient_close(tun, tun_idx.0, poll);
+                    proxyclient_close(flows, tuns, tun, tun_idx, poll);
                     return false;
                 }
             },
@@ -651,7 +666,7 @@ fn proxyclient_rx(
                             tun.flows = TunFlow::OneToOne(key);
                         } else {
                             // We have to get a key for the proxy client, otherwise its unusable
-                            proxyclient_close(tun, tun_idx.0, poll);
+                            proxyclient_close(flows, tuns, tun, tun_idx, poll);
                             return false;
                         }
                     }
