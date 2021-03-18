@@ -119,13 +119,13 @@ struct AgentInfo {
     gw_onboarded: bool,
     platform: usize,
     reginfo: RegistrationInfo,
-    app_fd: i32,
-    app_tx: VecDeque<(usize, Vec<u8>)>,
-    app_rx: VecDeque<(usize, Vec<u8>)>,
+    vpn_fd: i32,
+    vpn_tx: VecDeque<(usize, Vec<u8>)>,
+    vpn_rx: VecDeque<(usize, Vec<u8>)>,
     flows: HashMap<FlowV4Key, FlowV4>,
     tuns: HashMap<usize, TunInfo>,
     next_tun_idx: usize,
-    app_tun: Tun,
+    vpn_tun: Tun,
     proxy_tun: Tun,
 }
 
@@ -345,8 +345,8 @@ fn flow_rx_data(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, TunInfo>,
     mut data: NxtBufs,
-    app_rx: &mut VecDeque<(usize, Vec<u8>)>,
-    app_tx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
 ) -> bool {
     if let Some(flow) = flows.get_mut(key) {
@@ -367,9 +367,9 @@ fn flow_rx_data(
             flow_alive(&key, flow, true);
             flow_data_from_external(&key, flow, tuns, poll);
             // this call will generate packets to be sent out back to the kernel
-            // into the app_tx queue which will be processed in vpntun_tx
-            flow.rx_socket.poll(app_rx, app_tx);
-            assert!(app_rx.len() == 0);
+            // into the vpn_tx queue which will be processed in vpntun_tx
+            flow.rx_socket.poll(vpn_rx, vpn_tx);
+            assert!(vpn_rx.len() == 0);
             return true;
         }
     }
@@ -388,8 +388,8 @@ fn external_sock_rx(
     tun_idx: Token,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, TunInfo>,
-    app_rx: &mut VecDeque<(usize, Vec<u8>)>,
-    app_tx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
 ) {
     match tun.flows {
@@ -447,7 +447,7 @@ fn external_sock_rx(
                                 let mut found = false;
                                 if let Some(key) = hdr_to_key(&hdr) {
                                     found = flow_rx_data(
-                                        stream, tun, &key, flows, tuns, data, app_rx, app_tx, poll,
+                                        stream, tun, &key, flows, tuns, data, vpn_rx, vpn_tx, poll,
                                     );
                                 }
                                 if !found {
@@ -465,7 +465,7 @@ fn external_sock_rx(
                         _=> panic!("We either need an nxthdr to identify the flow or we need the tun to map 1:1 to the flow"),
                     }
                     let found =
-                        flow_rx_data(stream, tun, &key, flows, tuns, data, app_rx, app_tx, poll);
+                        flow_rx_data(stream, tun, &key, flows, tuns, data, vpn_rx, vpn_tx, poll);
                     if !found {
                         tun.tun.close(stream).ok();
                     }
@@ -605,7 +605,7 @@ fn flow_data_from_external(
             },
             Ok(_) => {
                 // See if the data we just gave the tcp/udp stack will be spit out
-                // by the stack as packets to be sent in the app_tx queue
+                // by the stack as packets to be sent in the vpn_tx queue
             }
         }
     }
@@ -711,11 +711,11 @@ fn proxyclient_tx(
 }
 
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
-// will read from the app_rx queue and potentially write data back to app_tx queue. app_rx and app_tx are just
-// a set of global queues shared by all flows. Its easy to understand why app_tx is global since Tx from all
-// flows have to go out of the same tun back to the kernel anyways. The reason app_rx is also global is because
-// really nothing remains 'pending' in the app_rx queue after the poll below is called, the smoltcp stack will
-// consume the pkt regardless of whether it could process it or not. So after the poll, the app_rx queue goes
+// will read from the vpn_rx queue and potentially write data back to vpn_tx queue. vpn_rx and vpn_tx are just
+// a set of global queues shared by all flows. Its easy to understand why vpn_tx is global since Tx from all
+// flows have to go out of the same tun back to the kernel anyways. The reason vpn_rx is also global is because
+// really nothing remains 'pending' in the vpn_rx queue after the poll below is called, the smoltcp stack will
+// consume the pkt regardless of whether it could process it or not. So after the poll, the vpn_rx queue goes
 // empty, so why have one queue per flow !
 // NOTE1: At a later point if we have some other tcp/udp stack that does things differently, we can always have
 // one rx queue per flow, its just saving some memory by having a global queue, thats about it
@@ -728,8 +728,8 @@ fn vpntun_rx(
     max_pkts: usize,
     tun: &mut Tun,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
-    app_rx: &mut VecDeque<(usize, Vec<u8>)>,
-    app_tx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
     tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
@@ -771,23 +771,23 @@ fn vpntun_rx(
                                 flow_alive(&key, flow, true);
                                 // This is any kind of tcp/udp packet - payload or control - like it can be just
                                 // a TCP ack. the socket.poll() below will figure all that out
-                                app_rx.push_back((data.headroom, b));
+                                vpn_rx.push_back((data.headroom, b));
                                 // polling to handle the rx packet which is payload/control/both. Polling can also
                                 // generate payload/control/both packets to be sent out back to the kernel into
-                                // the app_tx queue and that will be processed in vpntun_tx.
+                                // the vpn_tx queue and that will be processed in vpntun_tx.
                                 // The payload if any in the rx packet will be available for "receiving" post poll,
                                 // in the call to flow_data_to_external() below. Also a received packet like a tcp
                                 // ACK might make more room for data from external queued up to be sent to the app
                                 // so also attempt a flow_data_from_external call
-                                flow.rx_socket.poll(app_rx, app_tx);
-                                assert!(app_rx.len() == 0);
+                                flow.rx_socket.poll(vpn_rx, vpn_tx);
+                                assert!(vpn_rx.len() == 0);
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                     flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo);
                                     flow_data_from_external(&key, flow, tuns, poll);
                                 }
                                 // poll again to see if packets from external can be sent back to the flow/app via agent_tx
-                                flow.rx_socket.poll(app_rx, app_tx);
-                                assert!(app_rx.len() == 0);
+                                flow.rx_socket.poll(vpn_rx, vpn_tx);
+                                assert!(vpn_rx.len() == 0);
                             }
                         }
                     }
@@ -800,8 +800,8 @@ fn vpntun_rx(
     tun.tun.event_register(VPNTUN, poll, RegType::Rereg).ok();
 }
 
-fn vpntun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
-    while let Some((headroom, tx)) = app_tx.pop_front() {
+fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Vec<u8>)>) {
+    while let Some((headroom, tx)) = vpn_tx.pop_front() {
         match tun.tun.write(
             0,
             NxtBufs {
@@ -815,7 +815,7 @@ fn vpntun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
                     tun.tx_ready = false;
                     // Return the data to the head again
                     let mut data = data.unwrap();
-                    app_tx.push_front((data.headroom, data.bufs.pop().unwrap()));
+                    vpn_tx.push_front((data.headroom, data.bufs.pop().unwrap()));
                     return;
                 }
                 _ => {
@@ -827,7 +827,7 @@ fn vpntun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
             Ok(_) => {}
         }
     }
-    app_tx.shrink_to_fit();
+    vpn_tx.shrink_to_fit();
 }
 
 fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
@@ -878,42 +878,42 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 }
 
 fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
-    let mut app_tun = Fd::new_client(fd, platform);
-    match app_tun.dial() {
+    let mut vpn_tun = Fd::new_client(fd, platform);
+    match vpn_tun.dial() {
         Err(e) => {
             error!("app dial failed {}", e.detail);
         }
         _ => (),
     }
-    Box::new(app_tun)
+    Box::new(vpn_tun)
 }
 
 fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
     let fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
-    if agent.app_fd != 0 && (agent.app_fd != fd || agent.app_tun.tun.is_closed(0)) {
+    if agent.vpn_fd != 0 && (agent.vpn_fd != fd || agent.vpn_tun.tun.is_closed(0)) {
         error!(
             "App transport closed, try opening again {}/{}/{}",
-            agent.app_fd,
+            agent.vpn_fd,
             fd,
-            agent.app_tun.tun.is_closed(0)
+            agent.vpn_tun.tun.is_closed(0)
         );
-        agent.app_tun.tun.close(0).ok();
+        agent.vpn_tun.tun.close(0).ok();
         agent
-            .app_tun
+            .vpn_tun
             .tun
             .event_register(VPNTUN, poll, RegType::Dereg)
             .ok();
-        agent.app_fd = 0;
+        agent.vpn_fd = 0;
         if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
             close_gateway_flows(&mut agent.flows, &mut gw_tun.tun());
         }
         // After closing gateway flows, what is left is direct flows
         close_direct_flows(&mut agent.flows, &mut agent.tuns);
     }
-    if agent.app_fd != fd {
-        let app_tun = app_transport(fd, agent.platform);
+    if agent.vpn_fd != fd {
+        let vpn_tun = app_transport(fd, agent.platform);
         let mut tun = Tun {
-            tun: app_tun,
+            tun: vpn_tun,
             pending_tx: VecDeque::with_capacity(1),
             tx_ready: true,
             flows: TunFlow::NoFlow,
@@ -922,14 +922,14 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
         match tun.tun.event_register(VPNTUN, poll, RegType::Reg) {
             Err(e) => {
                 error!("App transport register failed {}", format!("{}", e));
-                agent.app_tun.tun.close(0).ok();
-                agent.app_fd = 0;
+                agent.vpn_tun.tun.close(0).ok();
+                agent.vpn_fd = 0;
                 return;
             }
             _ => {
-                error!("App Transport Registered {}/{}", agent.app_fd, fd);
-                agent.app_tun = tun;
-                agent.app_fd = fd;
+                error!("App Transport Registered {}/{}", agent.vpn_fd, fd);
+                agent.vpn_tun = tun;
+                agent.vpn_fd = fd;
                 ()
             }
         }
@@ -1119,10 +1119,10 @@ fn agent_main_thread(platform: usize, direct: usize) {
                     if event.is_readable() {
                         vpntun_rx(
                             10, /* Read 10 packets and yield for other activities */
-                            &mut agent.app_tun,
+                            &mut agent.vpn_tun,
                             &mut agent.flows,
-                            &mut agent.app_rx,
-                            &mut agent.app_tx,
+                            &mut agent.vpn_rx,
+                            &mut agent.vpn_tx,
                             &mut agent.tuns,
                             &mut agent.next_tun_idx,
                             &mut poll,
@@ -1131,7 +1131,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                         );
                     }
                     if event.is_writable() {
-                        agent.app_tun.tx_ready = true;
+                        agent.vpn_tun.tx_ready = true;
                     }
                 }
                 WEBPROXY => {
@@ -1189,8 +1189,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                     idx,
                                     &mut agent.flows,
                                     &mut agent.tuns,
-                                    &mut agent.app_rx,
-                                    &mut agent.app_tx,
+                                    &mut agent.vpn_rx,
+                                    &mut agent.vpn_tx,
                                     &mut poll,
                                 );
                             }
@@ -1210,8 +1210,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
             // Note that write-ready is a single shot event and it will continue to be write-ready
             // till we get an will-block return value on attempting some write. So as long as things
             // are write-ready, see if we have any pending data to Tx to the app tunnel or the gateway
-            if agent.app_tun.tx_ready {
-                vpntun_tx(&mut agent.app_tun, &mut agent.app_tx);
+            if agent.vpn_tun.tx_ready {
+                vpntun_tx(&mut agent.vpn_tun, &mut agent.vpn_tx);
             }
         }
 
