@@ -20,9 +20,13 @@ use std::{sync::atomic::AtomicI32, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
 
-// Note on "Rx" and "Tx" in this file: The "Rx" and "Tx" is from the perspective of the
+// Note1: About "Rx" and "Tx" in this file: The "Rx" and "Tx" is from the perspective of the
 // device, lets say a mobile phone. Rx is anything that comes INTO the phone and Tx is
 // anything that goes OUT of the phone.
+//
+// Note2: The "vpn" seen in this file refers to the tun interface from the OS on the device
+// to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
+// in ios.
 
 // These are atomic because rust will complain loudly about mutable global variables
 static APPFD: AtomicI32 = AtomicI32::new(0);
