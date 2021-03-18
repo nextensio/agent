@@ -1060,6 +1060,7 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         flows: TunFlow::NoFlow,
         proxy_client: false,
     };
+    agent.proxy_tun.tun.listen().ok();
     agent
         .proxy_tun
         .tun
