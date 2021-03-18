@@ -352,19 +352,22 @@ fn flow_rx_data(
 fn gwtun_rx(
     max_pkts: usize,
     tun: &mut Tun,
+    tun_idx: Token,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
-) -> bool {
+) {
     match tun.flows {
         TunFlow::OneToOne(ref k) => {
             // If its a 1:1 tunnel, and if we already have a backlog of data, then dont pull in more
             // If its a 1:many tunnel, we will send a flow control message back to the sender indicating
-            // receive readiness, see api flow_rx_data()
+            // receive readiness, see api flow_rx_data(). Dont even bother reading a packet, just return
             if let Some(flow) = flows.get_mut(k) {
                 if flow.pending_rx.len() > 1 {
-                    return true;
+                    // We read max_pkts and looks like we have more to read, yield and reregister
+                    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+                    return;
                 }
             }
         }
@@ -375,12 +378,12 @@ fn gwtun_rx(
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
-                    return false;
+                    return;
                 }
                 _ => {
                     // This will trigger monitor_gw() to cleanup flows etc.
                     tun.tun.close(0).ok();
-                    return false;
+                    return;
                 }
             },
             Ok((stream, data)) => {
@@ -429,14 +432,17 @@ fn gwtun_rx(
                     // receive readiness, see api flow_rx_data()
                     if let Some(flow) = flows.get_mut(&key) {
                         if flow.pending_rx.len() > 1 {
-                            return true;
+                            // We read max_pkts and looks like we have more to read, yield and reregister
+                            tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+                            return;
                         }
                     }
                 }
             }
         }
     }
-    return true;
+    // We read max_pkts and looks like we have more to read, yield and reregister
+    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
 }
 
 fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>, reginfo: &RegistrationInfo) {
@@ -587,22 +593,22 @@ fn proxyclient_rx(
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     tuns: &mut HashMap<usize, Tun>,
-    tun_idx: usize,
+    tun_idx: Token,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-) -> bool {
+) {
     for _ in 0..max_pkts {
         let ret = tun.tun.read();
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
-                    return false;
+                    return;
                 }
                 _ => {
-                    proxyclient_close(tun, tuns, tun_idx, poll);
-                    return false;
+                    proxyclient_close(tun, tuns, tun_idx.0, poll);
+                    return;
                 }
             },
             Ok((_, mut data)) => {
@@ -612,8 +618,8 @@ fn proxyclient_rx(
                             tun.flows = TunFlow::OneToOne(key);
                         } else {
                             // We have to get a key for the proxy client, otherwise its unusable
-                            proxyclient_close(tun, tuns, tun_idx, poll);
-                            return false;
+                            proxyclient_close(tun, tuns, tun_idx.0, poll);
+                            return;
                         }
                     }
                     _ => {}
@@ -628,12 +634,6 @@ fn proxyclient_rx(
                         if let Some(flow) = f {
                             if !flow.dead {
                                 flow_alive(&key, flow, true);
-                                app_rx.push_back((data.headroom, b));
-                                // polling to see if the rx data will be available to be sent to the gateway below.
-                                // The poll() call will also generate packets to be sent out back to the kernel
-                                // into the app_tx queue which will be processed in apptun_tx
-                                flow.rx_socket.poll(app_rx, app_tx);
-                                assert!(app_rx.len() == 0);
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                     flow_data_to_gateway(&key, flow, tx_sock, reginfo);
                                     flow_data_from_gateway(
@@ -655,7 +655,8 @@ fn proxyclient_rx(
             }
         }
     }
-    return true;
+    // We read max_pkts and looks like we have more to read, yield and reregister
+    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
 }
 
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
@@ -683,18 +684,18 @@ fn apptun_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-) -> bool {
+) {
     for _ in 0..max_pkts {
         let ret = tun.tun.read();
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
-                    return false;
+                    return;
                 }
                 _ => {
                     // This will trigger monitor_appfd() to close and cleanup etc..
                     tun.tun.close(0).ok();
-                    return false;
+                    return;
                 }
             },
             Ok((_, mut data)) => {
@@ -735,7 +736,8 @@ fn apptun_rx(
             }
         }
     }
-    return true;
+    // We read max_pkts and looks like we have more to read, yield and reregister
+    tun.tun.event_register(APPTUN, poll, RegType::Rereg).ok();
 }
 
 fn apptun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
@@ -1045,8 +1047,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
             match event.token() {
                 APPTUN => {
                     if event.is_readable() {
-                        let rereg = apptun_rx(
-                            10, /* Read 10 packets and give up for other activities */
+                        apptun_rx(
+                            10, /* Read 10 packets and yield for other activities */
                             &mut agent.app_tun,
                             &mut agent.flows,
                             &mut agent.app_rx,
@@ -1057,13 +1059,6 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             agent.gw_onboarded,
                             &agent.reginfo,
                         );
-                        if rereg {
-                            agent
-                                .app_tun
-                                .tun
-                                .event_register(APPTUN, &mut poll, RegType::Rereg)
-                                .ok();
-                        }
                     }
                     if event.is_writable() {
                         agent.app_tun.tx_ready = true;
@@ -1080,17 +1075,16 @@ fn agent_main_thread(platform: usize, direct: usize) {
                     }
                 }
                 idx => {
-                    let mut rereg = false;
                     if let Some(mut tun) = agent.tuns.remove(&idx.0) {
                         if tun.proxy_client {
-                            rereg = proxyclient_rx(
-                                10, /* Read 10 packets and give up for other activities */
+                            proxyclient_rx(
+                                10, /* Read 10 packets and yield for other activities */
                                 &mut tun,
                                 &mut agent.flows,
                                 &mut agent.app_rx,
                                 &mut agent.app_tx,
                                 &mut agent.tuns,
-                                idx.0,
+                                idx,
                                 &mut agent.next_tun_idx,
                                 &mut poll,
                                 agent.gw_onboarded,
@@ -1098,9 +1092,10 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             );
                         } else {
                             if event.is_readable() {
-                                rereg = gwtun_rx(
+                                gwtun_rx(
                                     10, /* Read 10 packets and give up for other activities */
                                     &mut tun,
+                                    idx,
                                     &mut agent.flows,
                                     &mut agent.app_rx,
                                     &mut agent.app_tx,
@@ -1111,9 +1106,6 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 tun.tx_ready = true;
                                 gwtun_tx(&mut tun, &mut agent.flows, &agent.reginfo);
                             }
-                        }
-                        if rereg {
-                            tun.tun.event_register(idx, &mut poll, RegType::Rereg).ok();
                         }
                         // This remove+re-insert keeps rust happy about mutable borrows etc..
                         // Might be a bit costlier than just referencing into the hash table, but I cant
