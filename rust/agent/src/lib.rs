@@ -1,6 +1,5 @@
 #[cfg(target_os = "android")]
 use android_logger::Config;
-use common::as_u32_be;
 use common::{
     decode_ipv4, hdr_to_key, key_to_hdr,
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
@@ -16,6 +15,7 @@ use std::net::Ipv4Addr;
 use std::{collections::HashMap, time::Duration, time::Instant};
 use std::{collections::VecDeque, io::Read};
 use std::{sync::atomic::AtomicI32, thread};
+use webproxy::WebProxy;
 use websock::WebSession;
 
 // These are atomic because rust will complain loudly about mutable global variables
@@ -23,13 +23,16 @@ static APPFD: AtomicI32 = AtomicI32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
 
 const HTTP_OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+const NXT_AGENT_PROXY: usize = 8080;
 
 const _UNUSED_IDX: usize = 0;
 const APPTUN_IDX: usize = 1;
-const GWTUN_IDX: usize = 2;
-const TUN_START: usize = 3;
-const GWTUN: Token = Token(GWTUN_IDX);
+const PROXY_IDX: usize = 2;
+const GWTUN_IDX: usize = 3;
+const TUN_START: usize = 4;
 const APPTUN: Token = Token(APPTUN_IDX);
+const APPPROXY: Token = Token(PROXY_IDX);
+const GWTUN: Token = Token(GWTUN_IDX);
 
 const CLEANUP_NOW: usize = 5; // 5 seconds
 const CLEANUP_TCP_HALFOPEN: usize = 30; // 30 seconds
@@ -73,6 +76,7 @@ struct Tun {
     pending_tx: VecDeque<FlowV4Key>,
     tx_ready: bool,
     flows: TunFlow,
+    proxy_client: bool,
 }
 
 impl Default for Tun {
@@ -82,6 +86,7 @@ impl Default for Tun {
             pending_tx: VecDeque::with_capacity(0),
             tx_ready: true,
             flows: TunFlow::NoFlow,
+            proxy_client: false,
         }
     }
 }
@@ -99,6 +104,7 @@ struct AgentInfo {
     tuns: HashMap<usize, Tun>,
     next_tun_idx: usize,
     app_tun: Tun,
+    proxy_tun: Tun,
 }
 
 fn dummy_onboard(agent: &mut AgentInfo) {
@@ -191,6 +197,7 @@ fn flow_new(
             pending_tx: VecDeque::with_capacity(1),
             tx_ready: true,
             flows: TunFlow::OneToOne(key.clone()),
+            proxy_client: false,
         };
         match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
             Err(e) => {
@@ -398,7 +405,7 @@ fn gwtun_rx(
                                     onb.userid, onb.uuid
                                 );
                             }
-                            Hdr::Flow(flow) => {
+                            Hdr::Flow(_) => {
                                 if let Some(key) = hdr_to_key(&hdr) {
                                     flow_rx_data(
                                         stream, tun, &key, flows, data, app_rx, app_tx, poll,
@@ -670,6 +677,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         pending_tx: VecDeque::with_capacity(1),
         tx_ready: true,
         flows: TunFlow::OneToMany(HashMap::new()),
+        proxy_client: false,
     };
 
     match tun.tun.event_register(GWTUN, poll, RegType::Reg) {
@@ -745,6 +753,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
             pending_tx: VecDeque::with_capacity(1),
             tx_ready: true,
             flows: TunFlow::NoFlow,
+            proxy_client: false,
         };
         match tun.tun.event_register(APPTUN, poll, RegType::Reg) {
             Err(e) => {
@@ -844,7 +853,51 @@ fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap
     }
 }
 
-fn agent_main_thread(direct: usize, platform: usize) {
+fn proxy_listener(
+    proxy: &mut Tun,
+    tuns: &mut HashMap<usize, Tun>,
+    next_tun_idx: &mut usize,
+    poll: &mut Poll,
+) {
+    match proxy.tun.listen() {
+        Ok(client) => {
+            let tx_socket = *next_tun_idx;
+            *next_tun_idx = tx_socket + 1;
+            let mut tun = Tun {
+                tun: client,
+                pending_tx: VecDeque::with_capacity(1),
+                tx_ready: true,
+                flows: TunFlow::NoFlow,
+                proxy_client: true,
+            };
+            match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
+                Err(e) => {
+                    error!("Direct transport register failed {}", format!("{}", e));
+                    tun.tun.close(0).ok();
+                    return;
+                }
+                Ok(_) => {}
+            }
+            tuns.insert(tx_socket, tun);
+        }
+        Err(e) => match e.code {
+            NxtErr::EWOULDBLOCK => {}
+            _ => error!("Proxy server error {}", e),
+        },
+    }
+}
+
+fn proxy_init(agent: &mut AgentInfo) {
+    agent.proxy_tun = Tun {
+        tun: Box::new(WebProxy::new_client(NXT_AGENT_PROXY)),
+        pending_tx: VecDeque::with_capacity(0),
+        tx_ready: true,
+        flows: TunFlow::NoFlow,
+        proxy_client: false,
+    };
+}
+
+fn agent_main_thread(platform: usize, direct: usize) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -871,6 +924,7 @@ fn agent_main_thread(direct: usize, platform: usize) {
     agent.next_tun_idx = TUN_START;
 
     dummy_onboard(&mut agent);
+    proxy_init(&mut agent);
 
     let mut flow_ager = Instant::now();
     let mut monitor_ager = Instant::now();
@@ -906,20 +960,32 @@ fn agent_main_thread(direct: usize, platform: usize) {
                         agent.app_tun.tx_ready = true;
                     }
                 }
+                APPPROXY => {
+                    if event.is_readable() {
+                        proxy_listener(
+                            &mut agent.proxy_tun,
+                            &mut agent.tuns,
+                            &mut agent.next_tun_idx,
+                            &mut poll,
+                        )
+                    }
+                }
                 idx => {
                     if let Some(tun) = agent.tuns.get_mut(&idx.0) {
-                        if event.is_readable() {
-                            gwtun_rx(
-                                tun,
-                                &mut agent.flows,
-                                &mut agent.app_rx,
-                                &mut agent.app_tx,
-                                &mut poll,
-                            );
-                        }
-                        if event.is_writable() {
-                            tun.tx_ready = true;
-                            gwtun_tx(tun, &mut agent.flows, &agent.reginfo);
+                        if !tun.proxy_client {
+                            if event.is_readable() {
+                                gwtun_rx(
+                                    tun,
+                                    &mut agent.flows,
+                                    &mut agent.app_rx,
+                                    &mut agent.app_tx,
+                                    &mut poll,
+                                );
+                            }
+                            if event.is_writable() {
+                                tun.tx_ready = true;
+                                gwtun_tx(tun, &mut agent.flows, &agent.reginfo);
+                            }
                         }
                     }
                 }
@@ -965,7 +1031,7 @@ fn agent_main_thread(direct: usize, platform: usize) {
 // platform so it can choose the right priority etc..
 #[no_mangle]
 pub unsafe extern "C" fn agent_init(platform: usize, direct: usize) {
-    agent_main_thread(direct, platform);
+    agent_main_thread(platform, direct);
 }
 
 // We EXPECT the fd provied to us to be already non blocking
