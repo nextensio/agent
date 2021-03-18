@@ -105,14 +105,6 @@ impl TunInfo {
             panic!("Not a tun")
         }
     }
-
-    fn flow(&mut self) -> &mut FlowV4Key {
-        if let TunInfo::Flow(f) = self {
-            f
-        } else {
-            panic!("Not a flow")
-        }
-    }
 }
 
 #[derive(Default)]
@@ -185,6 +177,7 @@ fn flow_close(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Box<dyn Transp
 
 fn flow_new(
     key: &FlowV4Key,
+    rx_socket: Box<dyn Transport>,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
@@ -258,7 +251,7 @@ fn flow_new(
     }
 
     let f = FlowV4 {
-        rx_socket: Box::new(Socket::new_client(key, 1500)),
+        rx_socket,
         rx_socket_idx: UNUSED_IDX,
         rx_stream: None,
         tx_stream,
@@ -360,7 +353,7 @@ fn flow_rx_data(
             data.hdr = None;
             flow.pending_rx.push_back(data);
             flow_alive(&key, flow, true);
-            flow_data_from_gateway(&key, flow, &mut tun.tun, app_rx, poll);
+            flow_data_from_external(&key, flow, Some(&mut tun.tun), poll);
             // this call will generate packets to be sent out back to the kernel
             // into the app_tx queue which will be processed in apptun_tx
             flow.rx_socket.poll(app_rx, app_tx);
@@ -377,7 +370,7 @@ fn flow_rx_data(
 // to the gateway, so we wont have a situation of a flow having too much stuff backed up.
 // But for direct flows if we find that our flow is getting backed up, we just stop reading
 // from the direct socket anymore till the flow queue gets drained
-fn gwtun_rx(
+fn external_sock_rx(
     max_pkts: usize,
     tun: &mut Tun,
     tun_idx: Token,
@@ -480,12 +473,18 @@ fn gwtun_rx(
     tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
 }
 
-fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>, reginfo: &RegistrationInfo) {
+fn external_sock_tx(
+    tun: &mut Tun,
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    reginfo: &RegistrationInfo,
+) {
+    tun.tx_ready = true;
+
     while let Some(key) = tun.pending_tx.pop_front() {
         if let Some(flow) = flows.get_mut(&key) {
             if !flow.dead {
                 flow.pending_tx_qed = false;
-                flow_data_to_gateway(&key, flow, tun, reginfo);
+                flow_data_to_external(&key, flow, tun, reginfo);
                 // If the flow is back to waiting state then we cant send any more
                 // on this tunnel, so break out and try next time
                 if flow.pending_tx.is_some() {
@@ -500,7 +499,7 @@ fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>, reginfo: &Reg
 // Now lets see if the smoltcp FSM deems that we have a payload to
 // be read. Before that see if we had any payload pending to be processed
 // and if so process it. The payload might be sent to the gateway or direct.
-fn flow_data_to_gateway(
+fn flow_data_to_external(
     key: &FlowV4Key,
     flow: &mut FlowV4,
     tx_socket: &mut Tun,
@@ -566,11 +565,10 @@ fn flow_data_to_gateway(
 // Check if the flow has payload from the gateway (or direct) queued up in its
 // pending_rx queue and if so try to give it to the tcp/udp stack and then if the
 // stack spits that data out to be sent as packets to the app, do so by calling poll()
-fn flow_data_from_gateway(
+fn flow_data_from_external(
     key: &FlowV4Key,
     flow: &mut FlowV4,
-    gateway_sock: &mut Box<dyn Transport>,
-    app_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    external_sock: Option<&mut Box<dyn Transport>>,
     poll: &mut Poll,
 ) {
     if flow.dead {
@@ -582,18 +580,16 @@ fn flow_data_from_gateway(
                 NxtErr::EWOULDBLOCK => {
                     // The stack cant accept these pkts now, return the data to the head again
                     flow.pending_rx.push_front(data.unwrap());
-                    assert!(app_rx.len() == 0);
                     return;
                 }
                 _ => {
-                    flow_close(key, flow, gateway_sock);
+                    flow_close(key, flow, external_sock);
                     return;
                 }
             },
             Ok(_) => {
                 // See if the data we just gave the tcp/udp stack will be spit out
                 // by the stack as packets to be sent in the app_tx queue
-                assert!(app_rx.len() == 0);
             }
         }
     }
@@ -603,110 +599,89 @@ fn flow_data_from_gateway(
             // TODO: Send a flow control message to flow.rx_stream signalling
             // the other end to send more data
         } else {
-            gateway_sock
+            external_sock
                 .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
                 .ok();
         }
     }
 }
 
-fn proxyclient_close(
-    flows: &mut HashMap<FlowV4Key, FlowV4>,
-    tuns: &mut HashMap<usize, TunInfo>,
-    tun: &mut Tun,
-    tun_idx: Token,
-    poll: &mut Poll,
-) -> bool {
-    match tun.flows {
-        TunFlow::OneToOne(ref k) => {
-            if let Some(f) = flows.get_mut(k) {
-                if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
-                    let tx_socket = tx_socket.tun();
-                    flow_close(k, f, &mut tx_socket.tun);
-                }
-            }
-        }
-        _ => {
-            // The proxy client session might close even before sending a CONNECT <host> HTTP/1.1, in which
-            // case we have not yet identified a flow and hence cant realy on the flow closing the session etc..
-            tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
-            tun.tun.close(0).ok();
-            return false;
-        }
-    }
-    return true;
-}
-
 fn proxyclient_rx(
-    max_pkts: usize,
-    tun: &mut Tun,
+    tun_info: TunInfo,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
-    app_rx: &mut VecDeque<(usize, Vec<u8>)>,
-    app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     tuns: &mut HashMap<usize, TunInfo>,
     tun_idx: Token,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-) -> bool {
-    for _ in 0..max_pkts {
-        let ret = tun.tun.read();
-        match ret {
-            Err(x) => match x.code {
-                NxtErr::EWOULDBLOCK => {
-                    return true;
-                }
-                _ => {
-                    return proxyclient_close(flows, tuns, tun, tun_idx, poll);
-                }
-            },
-            Ok((_, mut data)) => {
-                match tun.flows {
-                    TunFlow::NoFlow => {
-                        if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
-                            tun.flows = TunFlow::OneToOne(key);
-                        } else {
-                            // We have to get a key for the proxy client, otherwise its unusable
-                            return proxyclient_close(flows, tuns, tun, tun_idx, poll);
-                        }
+) -> Option<TunInfo> {
+    match tun_info {
+        TunInfo::Tun(mut tun) => loop {
+            let ret = tun.tun.read();
+            match ret {
+                Err(x) => match x.code {
+                    NxtErr::EWOULDBLOCK => {
+                        return Some(TunInfo::Tun(tun));
                     }
-                    _ => {}
-                }
-                for b in data.bufs {
-                    if let Some(key) = decode_ipv4(&b[data.headroom..]) {
-                        let mut f = flows.get_mut(&key);
-                        if f.is_none() {
-                            flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
-                            f = flows.get_mut(&key);
-                        }
-                        if let Some(flow) = f {
-                            if !flow.dead {
-                                flow_alive(&key, flow, true);
-                                if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                    flow_data_to_gateway(&key, flow, &mut tx_sock.tun(), reginfo);
-                                    flow_data_from_gateway(
-                                        &key,
-                                        flow,
-                                        &mut tx_sock.tun().tun,
-                                        app_rx,
-                                        poll,
-                                    );
-                                }
-                                // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
-                                flow.rx_socket.poll(app_rx, app_tx);
-                                assert!(app_rx.len() == 0);
-                            }
-                        }
+                    _ => {
+                        tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
+                        tun.tun.close(0).ok();
+                        return None;
                     }
-                    data.headroom = 0;
+                },
+                Ok((_, data)) => {
+                    if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
+                        flow_new(&key, tun.tun, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                        // Send an HTTP-OK back to the client
+                        if let Some(flow) = flows.get_mut(&key) {
+                            flow.pending_rx.push_back(NxtBufs {
+                                hdr: None,
+                                bufs: vec![HTTP_OK.as_bytes().to_vec()],
+                                headroom: 0,
+                            });
+                        }
+                        return Some(TunInfo::Flow(key));
+                    } else {
+                        // We have to get a key for the proxy client, otherwise its unusable
+                        tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
+                        tun.tun.close(0).ok();
+                        return None;
+                    }
                 }
+            }
+        },
+        TunInfo::Flow(ref key) => {
+            if let Some(flow) = flows.get_mut(&key) {
+                if !flow.dead {
+                    if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
+                        flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo);
+                    }
+
+                    // We read max_pkts and looks like we have more to read, yield and reregister
+                    flow.rx_socket
+                        .event_register(tun_idx, poll, RegType::Rereg)
+                        .ok();
+                }
+            } else {
+                panic!("Got an rx event for proxy client with no associated flow");
             }
         }
     }
-    // We read max_pkts and looks like we have more to read, yield and reregister
-    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
-    return true;
+    return Some(tun_info);
+}
+
+fn proxyclient_tx(tun_info: TunInfo, flows: &mut HashMap<FlowV4Key, FlowV4>, poll: &mut Poll) {
+    match tun_info {
+        TunInfo::Flow(ref key) => {
+            if let Some(flow) = flows.get_mut(&key) {
+                if !flow.dead {
+                    flow_data_from_external(key, flow, None, poll);
+                }
+            }
+        }
+        _ => { /* Not yet ready for tx, we havent received the connect request yet */ }
+    }
 }
 
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
@@ -753,29 +728,38 @@ fn apptun_rx(
                     if let Some(key) = decode_ipv4(&b[data.headroom..]) {
                         let mut f = flows.get_mut(&key);
                         if f.is_none() {
-                            flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                            let rx_socket = Box::new(Socket::new_client(&key, 1500));
+                            flow_new(
+                                &key,
+                                rx_socket,
+                                flows,
+                                tuns,
+                                next_tun_idx,
+                                poll,
+                                gw_onboarded,
+                            );
                             f = flows.get_mut(&key);
                         }
                         if let Some(flow) = f {
                             if !flow.dead {
                                 flow_alive(&key, flow, true);
+                                // This is any kind of tcp/udp packet - payload or control - like it can be just
+                                // a TCP ack. the socket.poll() below will figure all that out
                                 app_rx.push_back((data.headroom, b));
-                                // polling to see if the rx data will be available to be sent to the gateway below.
-                                // The poll() call will also generate packets to be sent out back to the kernel
-                                // into the app_tx queue which will be processed in apptun_tx
+                                // polling to handle the rx packet which is payload/control/both. Polling can also
+                                // generate payload/control/both packets to be sent out back to the kernel into
+                                // the app_tx queue and that will be processed in apptun_tx.
+                                // The payload if any in the rx packet will be available for "receiving" post poll,
+                                // in the call to flow_data_to_external() below. Also a received packet like a tcp
+                                // ACK might make more room for data from external queued up to be sent to the app
+                                // so also attempt a flow_data_from_external call
                                 flow.rx_socket.poll(app_rx, app_tx);
                                 assert!(app_rx.len() == 0);
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                    flow_data_to_gateway(&key, flow, &mut tx_sock.tun(), reginfo);
-                                    flow_data_from_gateway(
-                                        &key,
-                                        flow,
-                                        &mut tx_sock.tun().tun,
-                                        app_rx,
-                                        poll,
-                                    );
+                                    flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo);
+                                    flow_data_from_external(&key, flow, None, poll);
                                 }
-                                // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
+                                // poll again to see if packets from external can be sent back to the flow/app via agent_tx
                                 flow.rx_socket.poll(app_rx, app_tx);
                                 assert!(app_rx.len() == 0);
                             }
@@ -954,7 +938,7 @@ fn monitor_flows(
                 }
                 if f.pending_tx.is_some() {
                     // The flow key might be queued up in tx_socket.pending_tx, that will
-                    // get removed in the next iteration of gwtun_tx()
+                    // get removed in the next iteration of external_sock_tx()
                     f.pending_tx_qed = false;
                     f.pending_tx = None;
                 }
@@ -1134,30 +1118,39 @@ fn agent_main_thread(platform: usize, direct: usize) {
                     }
                 }
                 idx => {
-                    if let Some(mut tun) = agent.tuns.remove(&idx.0) {
-                        if tun.tun().proxy_client {
-                            let success = proxyclient_rx(
-                                10, /* Read 10 packets and yield for other activities */
-                                &mut tun.tun(),
-                                &mut agent.flows,
-                                &mut agent.app_rx,
-                                &mut agent.app_tx,
-                                &mut agent.tuns,
-                                idx,
-                                &mut agent.next_tun_idx,
-                                &mut poll,
-                                agent.gw_onboarded,
-                                &agent.reginfo,
-                            );
-                            if success {
-                                // Remove re-insert to keep rust borrow checker happy
-                                agent.tuns.insert(idx.0, tun);
+                    if let Some(mut tun_info) = agent.tuns.remove(&idx.0) {
+                        let mut proxy = false;
+                        match tun_info {
+                            TunInfo::Tun(ref tun) => {
+                                if tun.proxy_client {
+                                    proxy = true;
+                                }
+                            }
+                            TunInfo::Flow(_) => {
+                                proxy = true;
+                            }
+                        }
+                        if proxy {
+                            if event.is_readable() {
+                                proxyclient_rx(
+                                    tun_info,
+                                    &mut agent.flows,
+                                    &mut agent.tuns,
+                                    idx,
+                                    &mut agent.next_tun_idx,
+                                    &mut poll,
+                                    agent.gw_onboarded,
+                                    &agent.reginfo,
+                                );
+                            }
+                            if event.is_writable() {
+                                proxyclient_tx(tun_info, &mut agent.flows, &mut poll);
                             }
                         } else {
                             if event.is_readable() {
-                                gwtun_rx(
-                                    10, /* Read 10 packets and give up for other activities */
-                                    &mut tun.tun(),
+                                external_sock_rx(
+                                    10, /* Read 10 packets and yield for other activities */
+                                    &mut tun_info.tun(),
                                     idx,
                                     &mut agent.flows,
                                     &mut agent.app_rx,
@@ -1166,11 +1159,13 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 );
                             }
                             if event.is_writable() {
-                                tun.tun().tx_ready = true;
-                                gwtun_tx(&mut tun.tun(), &mut agent.flows, &agent.reginfo);
+                                external_sock_tx(
+                                    &mut tun_info.tun(),
+                                    &mut agent.flows,
+                                    &agent.reginfo,
+                                );
                             }
-                            // Remove re-insert to keep rust borrow checker happy
-                            agent.tuns.insert(idx.0, tun);
+                            agent.tuns.insert(idx.0, tun_info);
                         }
                     }
                 }
@@ -1185,7 +1180,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
         }
 
         if !agent.gw_onboarded && agent.idp_onboarded {
-            if let Some(mut gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
+            if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
                 agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut gw_tun.tun());
             }
         }
