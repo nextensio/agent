@@ -30,11 +30,11 @@ const HTTP_OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 const NXT_AGENT_PROXY: usize = 8080;
 
 const UNUSED_IDX: usize = 0;
-const APPTUN_IDX: usize = 1;
+const VPNTUN_IDX: usize = 1;
 const PROXY_IDX: usize = 2;
 const GWTUN_IDX: usize = 3;
 const TUN_START: usize = 4;
-const APPTUN: Token = Token(APPTUN_IDX);
+const VPNTUN: Token = Token(VPNTUN_IDX);
 const APPPROXY: Token = Token(PROXY_IDX);
 const GWTUN: Token = Token(GWTUN_IDX);
 
@@ -360,7 +360,7 @@ fn flow_rx_data(
             flow_alive(&key, flow, true);
             flow_data_from_external(&key, flow, tuns, poll);
             // this call will generate packets to be sent out back to the kernel
-            // into the app_tx queue which will be processed in apptun_tx
+            // into the app_tx queue which will be processed in vpntun_tx
             flow.rx_socket.poll(app_rx, app_tx);
             assert!(app_rx.len() == 0);
             return true;
@@ -717,7 +717,7 @@ fn proxyclient_tx(
 // loads than processing a bunch of rx packets together. That might also be because the smoltcp stack
 // will just drop rx packets if they exceed the smoltcp rx buffer size, so if we try to do a bunch of
 // rx packets, maybe that just translates into lost packets
-fn apptun_rx(
+fn vpntun_rx(
     max_pkts: usize,
     tun: &mut Tun,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
@@ -767,7 +767,7 @@ fn apptun_rx(
                                 app_rx.push_back((data.headroom, b));
                                 // polling to handle the rx packet which is payload/control/both. Polling can also
                                 // generate payload/control/both packets to be sent out back to the kernel into
-                                // the app_tx queue and that will be processed in apptun_tx.
+                                // the app_tx queue and that will be processed in vpntun_tx.
                                 // The payload if any in the rx packet will be available for "receiving" post poll,
                                 // in the call to flow_data_to_external() below. Also a received packet like a tcp
                                 // ACK might make more room for data from external queued up to be sent to the app
@@ -790,10 +790,10 @@ fn apptun_rx(
         }
     }
     // We read max_pkts and looks like we have more to read, yield and reregister
-    tun.tun.event_register(APPTUN, poll, RegType::Rereg).ok();
+    tun.tun.event_register(VPNTUN, poll, RegType::Rereg).ok();
 }
 
-fn apptun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
+fn vpntun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
     while let Some((headroom, tx)) = app_tx.pop_front() {
         match tun.tun.write(
             0,
@@ -894,7 +894,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
         agent
             .app_tun
             .tun
-            .event_register(APPTUN, poll, RegType::Dereg)
+            .event_register(VPNTUN, poll, RegType::Dereg)
             .ok();
         agent.app_fd = 0;
         if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
@@ -912,7 +912,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
             flows: TunFlow::NoFlow,
             proxy_client: false,
         };
-        match tun.tun.event_register(APPTUN, poll, RegType::Reg) {
+        match tun.tun.event_register(VPNTUN, poll, RegType::Reg) {
             Err(e) => {
                 error!("App transport register failed {}", format!("{}", e));
                 agent.app_tun.tun.close(0).ok();
@@ -1063,7 +1063,7 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
     agent
         .proxy_tun
         .tun
-        .event_register(APPTUN, poll, RegType::Reg)
+        .event_register(VPNTUN, poll, RegType::Reg)
         .ok();
 }
 
@@ -1107,9 +1107,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
         for event in events.iter() {
             match event.token() {
-                APPTUN => {
+                VPNTUN => {
                     if event.is_readable() {
-                        apptun_rx(
+                        vpntun_rx(
                             10, /* Read 10 packets and yield for other activities */
                             &mut agent.app_tun,
                             &mut agent.flows,
@@ -1200,7 +1200,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
             // till we get an will-block return value on attempting some write. So as long as things
             // are write-ready, see if we have any pending data to Tx to the app tunnel or the gateway
             if agent.app_tun.tx_ready {
-                apptun_tx(&mut agent.app_tun, &mut agent.app_tx);
+                vpntun_tx(&mut agent.app_tun, &mut agent.app_tx);
             }
         }
 
