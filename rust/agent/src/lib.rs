@@ -610,22 +610,13 @@ fn flow_data_from_gateway(
     }
 }
 
-fn proxyclient_close(
-    tun: &mut Tun,
-    tuns: &mut HashMap<usize, TunInfo>,
-    tun_idx: usize,
-    poll: &mut Poll,
-) {
+fn proxyclient_close(tun: &mut Tun, tun_idx: usize, poll: &mut Poll) {
+    // The proxy client session might close even before sending a CONNECT <host> HTTP/1.1, in which
+    // case we have not yet identified a flow and hence cant realy on the flow closing the session etc..
+    tun.tun
+        .event_register(Token(tun_idx), poll, RegType::Dereg)
+        .ok();
     tun.tun.close(0).ok();
-    match tun.flows {
-        TunFlow::NoFlow => {
-            tuns.remove(&tun_idx);
-            tun.tun
-                .event_register(Token(tun_idx), poll, RegType::Dereg)
-                .ok();
-        }
-        _ => { /* Flow close will do all the above */ }
-    }
 }
 
 fn proxyclient_rx(
@@ -640,17 +631,17 @@ fn proxyclient_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-) {
+) -> bool {
     for _ in 0..max_pkts {
         let ret = tun.tun.read();
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
-                    return;
+                    return true;
                 }
                 _ => {
-                    proxyclient_close(tun, tuns, tun_idx.0, poll);
-                    return;
+                    proxyclient_close(tun, tun_idx.0, poll);
+                    return false;
                 }
             },
             Ok((_, mut data)) => {
@@ -660,8 +651,8 @@ fn proxyclient_rx(
                             tun.flows = TunFlow::OneToOne(key);
                         } else {
                             // We have to get a key for the proxy client, otherwise its unusable
-                            proxyclient_close(tun, tuns, tun_idx.0, poll);
-                            return;
+                            proxyclient_close(tun, tun_idx.0, poll);
+                            return false;
                         }
                     }
                     _ => {}
@@ -699,6 +690,7 @@ fn proxyclient_rx(
     }
     // We read max_pkts and looks like we have more to read, yield and reregister
     tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+    return true;
 }
 
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
@@ -1128,7 +1120,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                 idx => {
                     if let Some(mut tun) = agent.tuns.remove(&idx.0) {
                         if tun.tun().proxy_client {
-                            proxyclient_rx(
+                            let success = proxyclient_rx(
                                 10, /* Read 10 packets and yield for other activities */
                                 &mut tun.tun(),
                                 &mut agent.flows,
@@ -1141,6 +1133,10 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 agent.gw_onboarded,
                                 &agent.reginfo,
                             );
+                            if success {
+                                // Remove re-insert to keep rust borrow checker happy
+                                agent.tuns.insert(idx.0, tun);
+                            }
                         } else {
                             if event.is_readable() {
                                 gwtun_rx(
@@ -1157,11 +1153,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 tun.tun().tx_ready = true;
                                 gwtun_tx(&mut tun.tun(), &mut agent.flows, &agent.reginfo);
                             }
+                            // Remove re-insert to keep rust borrow checker happy
+                            agent.tuns.insert(idx.0, tun);
                         }
-                        // This remove+re-insert keeps rust happy about mutable borrows etc..
-                        // Might be a bit costlier than just referencing into the hash table, but I cant
-                        // imagine it being that costy either
-                        agent.tuns.insert(idx.0, tun);
                     }
                 }
             }
