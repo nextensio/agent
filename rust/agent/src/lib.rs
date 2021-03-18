@@ -92,6 +92,29 @@ impl Default for Tun {
     }
 }
 
+enum TunInfo {
+    Tun(Tun),
+    Flow(FlowV4Key),
+}
+
+impl TunInfo {
+    fn tun(&mut self) -> &mut Tun {
+        if let TunInfo::Tun(t) = self {
+            t
+        } else {
+            panic!("Not a tun")
+        }
+    }
+
+    fn flow(&mut self) -> &mut FlowV4Key {
+        if let TunInfo::Flow(f) = self {
+            f
+        } else {
+            panic!("Not a flow")
+        }
+    }
+}
+
 #[derive(Default)]
 struct AgentInfo {
     idp_onboarded: bool,
@@ -102,7 +125,7 @@ struct AgentInfo {
     app_tx: VecDeque<(usize, Vec<u8>)>,
     app_rx: VecDeque<(usize, Vec<u8>)>,
     flows: HashMap<FlowV4Key, FlowV4>,
-    tuns: HashMap<usize, Tun>,
+    tuns: HashMap<usize, TunInfo>,
     next_tun_idx: usize,
     app_tun: Tun,
     proxy_tun: Tun,
@@ -163,7 +186,7 @@ fn flow_close(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Box<dyn Transp
 fn flow_new(
     key: &FlowV4Key,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
-    tuns: &mut HashMap<usize, Tun>,
+    tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
     gw_onboarded: bool,
@@ -208,10 +231,11 @@ fn flow_new(
             }
             Ok(_) => {}
         }
-        tuns.insert(tx_socket, tun);
+        tuns.insert(tx_socket, TunInfo::Tun(tun));
     } else if gw_onboarded {
         tx_socket = GWTUN_IDX;
         if let Some(gw_tun) = tuns.get_mut(&GWTUN_IDX) {
+            let gw_tun = &mut gw_tun.tun();
             tx_stream = gw_tun.tun.new_stream();
             match gw_tun.flows {
                 TunFlow::OneToMany(ref mut tun_flows) => {
@@ -588,7 +612,7 @@ fn flow_data_from_gateway(
 
 fn proxyclient_close(
     tun: &mut Tun,
-    tuns: &mut HashMap<usize, Tun>,
+    tuns: &mut HashMap<usize, TunInfo>,
     tun_idx: usize,
     poll: &mut Poll,
 ) {
@@ -610,7 +634,7 @@ fn proxyclient_rx(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
-    tuns: &mut HashMap<usize, Tun>,
+    tuns: &mut HashMap<usize, TunInfo>,
     tun_idx: Token,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
@@ -653,11 +677,11 @@ fn proxyclient_rx(
                             if !flow.dead {
                                 flow_alive(&key, flow, true);
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                    flow_data_to_gateway(&key, flow, tx_sock, reginfo);
+                                    flow_data_to_gateway(&key, flow, &mut tx_sock.tun(), reginfo);
                                     flow_data_from_gateway(
                                         &key,
                                         flow,
-                                        &mut tx_sock.tun,
+                                        &mut tx_sock.tun().tun,
                                         app_rx,
                                         poll,
                                     );
@@ -697,7 +721,7 @@ fn apptun_rx(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
-    tuns: &mut HashMap<usize, Tun>,
+    tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
     gw_onboarded: bool,
@@ -734,11 +758,11 @@ fn apptun_rx(
                                 flow.rx_socket.poll(app_rx, app_tx);
                                 assert!(app_rx.len() == 0);
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                    flow_data_to_gateway(&key, flow, tx_sock, reginfo);
+                                    flow_data_to_gateway(&key, flow, &mut tx_sock.tun(), reginfo);
                                     flow_data_from_gateway(
                                         &key,
                                         flow,
-                                        &mut tx_sock.tun,
+                                        &mut tx_sock.tun().tun,
                                         app_rx,
                                         poll,
                                     );
@@ -809,13 +833,14 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         }
         Ok(_) => {
             error!("Gateway Transport Registered");
-            agent.tuns.insert(GWTUN_IDX, tun);
+            agent.tuns.insert(GWTUN_IDX, TunInfo::Tun(tun));
         }
     }
 }
 
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
+        let gw_tun = &mut gw_tun.tun();
         if gw_tun.tun.is_closed(0) {
             error!("Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
@@ -862,7 +887,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
             .ok();
         agent.app_fd = 0;
         if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
-            close_gateway_flows(&mut agent.flows, gw_tun);
+            close_gateway_flows(&mut agent.flows, &mut gw_tun.tun());
         }
         // After closing gateway flows, what is left is direct flows
         close_direct_flows(&mut agent.flows, &mut agent.tuns);
@@ -900,7 +925,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
 fn monitor_flows(
     poll: &mut Poll,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
-    tuns: &mut HashMap<usize, Tun>,
+    tuns: &mut HashMap<usize, TunInfo>,
 ) {
     error!("Total flows {}", flows.len());
 
@@ -908,6 +933,7 @@ fn monitor_flows(
     for (k, f) in flows.iter_mut() {
         if f.dead_time.elapsed() > Duration::from_secs(f.cleanup_after as u64) {
             if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
+                let tx_socket = tx_socket.tun();
                 flow_close(k, f, &mut tx_socket.tun);
                 match tx_socket.flows {
                     TunFlow::OneToMany(ref mut sock_flows) => {
@@ -965,12 +991,12 @@ fn close_gateway_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tun: &mut Tun) {
     }
 }
 
-fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap<usize, Tun>) {
+fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap<usize, TunInfo>) {
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
         if f.tx_socket != GWTUN_IDX {
             if let Some(tun) = tuns.get_mut(&f.tx_socket) {
-                flow_close(k, f, &mut tun.tun);
+                flow_close(k, f, &mut tun.tun().tun);
                 tuns.remove(&f.tx_socket);
                 keys.push(k.clone());
             }
@@ -983,7 +1009,7 @@ fn close_direct_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tuns: &mut HashMap
 
 fn proxy_listener(
     proxy: &mut Tun,
-    tuns: &mut HashMap<usize, Tun>,
+    tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
 ) {
@@ -1006,7 +1032,7 @@ fn proxy_listener(
                 }
                 Ok(_) => {}
             }
-            tuns.insert(tx_socket, tun);
+            tuns.insert(tx_socket, TunInfo::Tun(tun));
         }
         Err(e) => match e.code {
             NxtErr::EWOULDBLOCK => {}
@@ -1101,10 +1127,10 @@ fn agent_main_thread(platform: usize, direct: usize) {
                 }
                 idx => {
                     if let Some(mut tun) = agent.tuns.remove(&idx.0) {
-                        if tun.proxy_client {
+                        if tun.tun().proxy_client {
                             proxyclient_rx(
                                 10, /* Read 10 packets and yield for other activities */
-                                &mut tun,
+                                &mut tun.tun(),
                                 &mut agent.flows,
                                 &mut agent.app_rx,
                                 &mut agent.app_tx,
@@ -1119,7 +1145,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             if event.is_readable() {
                                 gwtun_rx(
                                     10, /* Read 10 packets and give up for other activities */
-                                    &mut tun,
+                                    &mut tun.tun(),
                                     idx,
                                     &mut agent.flows,
                                     &mut agent.app_rx,
@@ -1128,8 +1154,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 );
                             }
                             if event.is_writable() {
-                                tun.tx_ready = true;
-                                gwtun_tx(&mut tun, &mut agent.flows, &agent.reginfo);
+                                tun.tun().tx_ready = true;
+                                gwtun_tx(&mut tun.tun(), &mut agent.flows, &agent.reginfo);
                             }
                         }
                         // This remove+re-insert keeps rust happy about mutable borrows etc..
@@ -1150,7 +1176,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
         if !agent.gw_onboarded && agent.idp_onboarded {
             if let Some(mut gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
-                agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut gw_tun);
+                agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut gw_tun.tun());
             }
         }
 
