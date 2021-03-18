@@ -617,10 +617,6 @@ fn proxyclient_close(
     tun_idx: Token,
     poll: &mut Poll,
 ) {
-    // The proxy client session might close even before sending a CONNECT <host> HTTP/1.1, in which
-    // case we have not yet identified a flow and hence cant realy on the flow closing the session etc..
-    tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
-    tun.tun.close(0).ok();
     match tun.flows {
         TunFlow::OneToOne(ref k) => {
             if let Some(f) = flows.get_mut(k) {
@@ -630,7 +626,12 @@ fn proxyclient_close(
                 }
             }
         }
-        _ => { /* Not associated to a flow yet */ }
+        _ => {
+            // The proxy client session might close even before sending a CONNECT <host> HTTP/1.1, in which
+            // case we have not yet identified a flow and hence cant realy on the flow closing the session etc..
+            tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
+            tun.tun.close(0).ok();
+        }
     }
 }
 
