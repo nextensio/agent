@@ -567,6 +567,85 @@ fn flow_data_from_gateway(
     }
 }
 
+fn proxyclient_close(
+    tun: &mut Tun,
+    tuns: &mut HashMap<usize, Tun>,
+    tun_idx: usize,
+    poll: &mut Poll,
+) {
+    tun.tun.close(0).ok();
+    tuns.remove(&tun_idx);
+    tun.tun.event_register(GWTUN, poll, RegType::Dereg).ok();
+}
+
+fn proxyclient_rx(
+    tun: &mut Tun,
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    app_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    app_tx: &mut VecDeque<(usize, Vec<u8>)>,
+    tuns: &mut HashMap<usize, Tun>,
+    tun_idx: usize,
+    next_tun_idx: &mut usize,
+    poll: &mut Poll,
+    gw_onboarded: bool,
+    reginfo: &RegistrationInfo,
+) {
+    let ret = tun.tun.read();
+    match ret {
+        Err(x) => match x.code {
+            NxtErr::EWOULDBLOCK => {
+                return;
+            }
+            _ => {
+                proxyclient_close(tun, tuns, tun_idx, poll);
+                return;
+            }
+        },
+        Ok((_, mut data)) => {
+            match tun.flows {
+                TunFlow::NoFlow => {
+                    if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
+                        tun.flows = TunFlow::OneToOne(key);
+                    } else {
+                        // We have to get a key for the proxy client, otherwise its unusable
+                        proxyclient_close(tun, tuns, tun_idx, poll);
+                        return;
+                    }
+                }
+                _ => {}
+            }
+            for b in data.bufs {
+                if let Some(key) = decode_ipv4(&b[data.headroom..]) {
+                    let mut f = flows.get_mut(&key);
+                    if f.is_none() {
+                        flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                        f = flows.get_mut(&key);
+                    }
+                    if let Some(flow) = f {
+                        if !flow.dead {
+                            flow_alive(&key, flow, true);
+                            app_rx.push_back((data.headroom, b));
+                            // polling to see if the rx data will be available to be sent to the gateway below.
+                            // The poll() call will also generate packets to be sent out back to the kernel
+                            // into the app_tx queue which will be processed in apptun_tx
+                            flow.rx_socket.poll(app_rx, app_tx);
+                            assert!(app_rx.len() == 0);
+                            if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
+                                flow_data_to_gateway(&key, flow, tx_sock, reginfo);
+                                flow_data_from_gateway(&key, flow, &mut tx_sock.tun, app_rx, poll);
+                            }
+                            // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
+                            flow.rx_socket.poll(app_rx, app_tx);
+                            assert!(app_rx.len() == 0);
+                        }
+                    }
+                }
+                data.headroom = 0;
+            }
+        }
+    }
+}
+
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
 // will read from the app_rx queue and potentially write data back to app_tx queue. app_rx and app_tx are just
 // a set of global queues shared by all flows. Its easy to understand why app_tx is global since Tx from all
@@ -872,7 +951,7 @@ fn proxy_listener(
             };
             match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
                 Err(e) => {
-                    error!("Direct transport register failed {}", format!("{}", e));
+                    error!("Proxy transport register failed {}", format!("{}", e));
                     tun.tun.close(0).ok();
                     return;
                 }
@@ -887,7 +966,7 @@ fn proxy_listener(
     }
 }
 
-fn proxy_init(agent: &mut AgentInfo) {
+fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
     agent.proxy_tun = Tun {
         tun: Box::new(WebProxy::new_client(NXT_AGENT_PROXY)),
         pending_tx: VecDeque::with_capacity(0),
@@ -895,6 +974,11 @@ fn proxy_init(agent: &mut AgentInfo) {
         flows: TunFlow::NoFlow,
         proxy_client: false,
     };
+    agent
+        .proxy_tun
+        .tun
+        .event_register(APPTUN, poll, RegType::Reg)
+        .ok();
 }
 
 fn agent_main_thread(platform: usize, direct: usize) {
@@ -924,7 +1008,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
     agent.next_tun_idx = TUN_START;
 
     dummy_onboard(&mut agent);
-    proxy_init(&mut agent);
+    proxy_init(&mut agent, &mut poll);
 
     let mut flow_ager = Instant::now();
     let mut monitor_ager = Instant::now();
@@ -971,11 +1055,25 @@ fn agent_main_thread(platform: usize, direct: usize) {
                     }
                 }
                 idx => {
-                    if let Some(tun) = agent.tuns.get_mut(&idx.0) {
-                        if !tun.proxy_client {
+                    if let Some(mut tun) = agent.tuns.remove(&idx.0) {
+                        if tun.proxy_client {
+                            proxyclient_rx(
+                                &mut tun,
+                                &mut agent.flows,
+                                &mut agent.app_rx,
+                                &mut agent.app_tx,
+                                &mut agent.tuns,
+                                idx.0,
+                                &mut agent.next_tun_idx,
+                                &mut poll,
+                                agent.gw_onboarded,
+                                &agent.reginfo,
+                            );
+                            tun.tun.event_register(idx, &mut poll, RegType::Rereg).ok();
+                        } else {
                             if event.is_readable() {
                                 gwtun_rx(
-                                    tun,
+                                    &mut tun,
                                     &mut agent.flows,
                                     &mut agent.app_rx,
                                     &mut agent.app_tx,
@@ -984,9 +1082,13 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             }
                             if event.is_writable() {
                                 tun.tx_ready = true;
-                                gwtun_tx(tun, &mut agent.flows, &agent.reginfo);
+                                gwtun_tx(&mut tun, &mut agent.flows, &agent.reginfo);
                             }
                         }
+                        // This remove+re-insert keeps rust happy about mutable borrows etc..
+                        // Might be a bit costlier than just referencing into the hash table, but I cant
+                        // imagine it being that costy either
+                        agent.tuns.insert(idx.0, tun);
                     }
                 }
             }
