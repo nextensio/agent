@@ -31,11 +31,11 @@ const NXT_AGENT_PROXY: usize = 8080;
 
 const UNUSED_IDX: usize = 0;
 const VPNTUN_IDX: usize = 1;
-const PROXY_IDX: usize = 2;
+const WEBPROXY_IDX: usize = 2;
 const GWTUN_IDX: usize = 3;
 const TUN_START: usize = 4;
 const VPNTUN: Token = Token(VPNTUN_IDX);
-const APPPROXY: Token = Token(PROXY_IDX);
+const WEBPROXY: Token = Token(WEBPROXY_IDX);
 const GWTUN: Token = Token(GWTUN_IDX);
 
 const CLEANUP_NOW: usize = 5; // 5 seconds
@@ -1126,7 +1126,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                         agent.app_tun.tx_ready = true;
                     }
                 }
-                APPPROXY => {
+                WEBPROXY => {
                     if event.is_readable() {
                         proxy_listener(
                             &mut agent.proxy_tun,
