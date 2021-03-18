@@ -11,12 +11,16 @@ use l3proxy::Socket;
 use log::{error, Level};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
+use std::collections::VecDeque;
 use std::net::Ipv4Addr;
 use std::{collections::HashMap, time::Duration, time::Instant};
-use std::{collections::VecDeque, io::Read};
 use std::{sync::atomic::AtomicI32, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
+
+// Note on "Rx" and "Tx" in this file: The "Rx" and "Tx" is from the perspective of the
+// device, lets say a mobile phone. Rx is anything that comes INTO the phone and Tx is
+// anything that goes OUT of the phone.
 
 // These are atomic because rust will complain loudly about mutable global variables
 static APPFD: AtomicI32 = AtomicI32::new(0);
@@ -332,6 +336,7 @@ fn flow_rx_data(
     tun: &mut Tun,
     key: &FlowV4Key,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    tuns: &mut HashMap<usize, TunInfo>,
     mut data: NxtBufs,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
@@ -353,7 +358,7 @@ fn flow_rx_data(
             data.hdr = None;
             flow.pending_rx.push_back(data);
             flow_alive(&key, flow, true);
-            flow_data_from_external(&key, flow, Some(&mut tun.tun), poll);
+            flow_data_from_external(&key, flow, tuns, poll);
             // this call will generate packets to be sent out back to the kernel
             // into the app_tx queue which will be processed in apptun_tx
             flow.rx_socket.poll(app_rx, app_tx);
@@ -375,6 +380,7 @@ fn external_sock_rx(
     tun: &mut Tun,
     tun_idx: Token,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    tuns: &mut HashMap<usize, TunInfo>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
@@ -434,7 +440,7 @@ fn external_sock_rx(
                                 let mut found = false;
                                 if let Some(key) = hdr_to_key(&hdr) {
                                     found = flow_rx_data(
-                                        stream, tun, &key, flows, data, app_rx, app_tx, poll,
+                                        stream, tun, &key, flows, tuns, data, app_rx, app_tx, poll,
                                     );
                                 }
                                 if !found {
@@ -451,7 +457,8 @@ fn external_sock_rx(
                         }
                         _=> panic!("We either need an nxthdr to identify the flow or we need the tun to map 1:1 to the flow"),
                     }
-                    let found = flow_rx_data(stream, tun, &key, flows, data, app_rx, app_tx, poll);
+                    let found =
+                        flow_rx_data(stream, tun, &key, flows, tuns, data, app_rx, app_tx, poll);
                     if !found {
                         tun.tun.close(stream).ok();
                     }
@@ -568,7 +575,7 @@ fn flow_data_to_external(
 fn flow_data_from_external(
     key: &FlowV4Key,
     flow: &mut FlowV4,
-    external_sock: Option<&mut Box<dyn Transport>>,
+    tuns: &mut HashMap<usize, TunInfo>,
     poll: &mut Poll,
 ) {
     if flow.dead {
@@ -583,7 +590,9 @@ fn flow_data_from_external(
                     return;
                 }
                 _ => {
-                    flow_close(key, flow, external_sock);
+                    if let Some(tx_socket) = tuns.get_mut(&flow.tx_socket) {
+                        flow_close(key, flow, &mut tx_socket.tun().tun);
+                    }
                     return;
                 }
             },
@@ -599,9 +608,13 @@ fn flow_data_from_external(
             // TODO: Send a flow control message to flow.rx_stream signalling
             // the other end to send more data
         } else {
-            external_sock
-                .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
-                .ok();
+            if let Some(tx_socket) = tuns.get_mut(&flow.tx_socket) {
+                tx_socket
+                    .tun()
+                    .tun
+                    .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
+                    .ok();
+            }
         }
     }
 }
@@ -671,12 +684,18 @@ fn proxyclient_rx(
     return Some(tun_info);
 }
 
-fn proxyclient_tx(tun_info: TunInfo, flows: &mut HashMap<FlowV4Key, FlowV4>, poll: &mut Poll) {
+fn proxyclient_tx(
+    tun_info: &TunInfo,
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    tuns: &mut HashMap<usize, TunInfo>,
+
+    poll: &mut Poll,
+) {
     match tun_info {
         TunInfo::Flow(ref key) => {
             if let Some(flow) = flows.get_mut(&key) {
                 if !flow.dead {
-                    flow_data_from_external(key, flow, None, poll);
+                    flow_data_from_external(key, flow, tuns, poll);
                 }
             }
         }
@@ -757,7 +776,7 @@ fn apptun_rx(
                                 assert!(app_rx.len() == 0);
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                     flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo);
-                                    flow_data_from_external(&key, flow, None, poll);
+                                    flow_data_from_external(&key, flow, tuns, poll);
                                 }
                                 // poll again to see if packets from external can be sent back to the flow/app via agent_tx
                                 flow.rx_socket.poll(app_rx, app_tx);
@@ -1131,6 +1150,14 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             }
                         }
                         if proxy {
+                            if event.is_writable() {
+                                proxyclient_tx(
+                                    &tun_info,
+                                    &mut agent.flows,
+                                    &mut agent.tuns,
+                                    &mut poll,
+                                );
+                            }
                             if event.is_readable() {
                                 proxyclient_rx(
                                     tun_info,
@@ -1143,9 +1170,6 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                     &agent.reginfo,
                                 );
                             }
-                            if event.is_writable() {
-                                proxyclient_tx(tun_info, &mut agent.flows, &mut poll);
-                            }
                         } else {
                             if event.is_readable() {
                                 external_sock_rx(
@@ -1153,6 +1177,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                     &mut tun_info.tun(),
                                     idx,
                                     &mut agent.flows,
+                                    &mut agent.tuns,
                                     &mut agent.app_rx,
                                     &mut agent.app_tx,
                                     &mut poll,
