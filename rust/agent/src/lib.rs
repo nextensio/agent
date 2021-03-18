@@ -676,12 +676,12 @@ fn proxyclient_rx(
                         .event_register(tun_idx, poll, RegType::Rereg)
                         .ok();
                 }
+                return Some(tun_info);
             } else {
                 panic!("Got an rx event for proxy client with no associated flow");
             }
         }
     }
-    return Some(tun_info);
 }
 
 fn proxyclient_tx(
@@ -1159,7 +1159,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 );
                             }
                             if event.is_readable() {
-                                proxyclient_rx(
+                                let rereg = proxyclient_rx(
                                     tun_info,
                                     &mut agent.flows,
                                     &mut agent.tuns,
@@ -1169,6 +1169,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                     agent.gw_onboarded,
                                     &agent.reginfo,
                                 );
+                                if rereg.is_some() {
+                                    agent.tuns.insert(idx.0, rereg.unwrap());
+                                }
                             }
                         } else {
                             if event.is_readable() {
