@@ -25,7 +25,7 @@ static DIRECT: AtomicI32 = AtomicI32::new(0);
 const HTTP_OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 const NXT_AGENT_PROXY: usize = 8080;
 
-const _UNUSED_IDX: usize = 0;
+const UNUSED_IDX: usize = 0;
 const APPTUN_IDX: usize = 1;
 const PROXY_IDX: usize = 2;
 const GWTUN_IDX: usize = 3;
@@ -54,6 +54,7 @@ pub struct RegistrationInfo {
 
 struct FlowV4 {
     rx_socket: Box<dyn Transport>,
+    rx_socket_idx: usize,
     rx_stream: Option<u64>,
     tx_stream: u64,
     tx_socket: usize,
@@ -152,11 +153,11 @@ fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4, alive: bool) {
 
 fn flow_close(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Box<dyn Transport>) {
     flow.rx_socket.close(0).ok();
-    flow_alive(key, flow, false);
     tx_socket.close(flow.tx_stream).ok();
     if let Some(rx_stream) = flow.rx_stream {
         tx_socket.close(rx_stream).ok();
     }
+    flow_alive(key, flow, false);
 }
 
 fn flow_new(
@@ -234,6 +235,7 @@ fn flow_new(
 
     let f = FlowV4 {
         rx_socket: Box::new(Socket::new_client(key, 1500)),
+        rx_socket_idx: UNUSED_IDX,
         rx_stream: None,
         tx_stream,
         tx_socket,
@@ -317,7 +319,7 @@ fn flow_rx_data(
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
-) {
+) -> bool {
     if let Some(flow) = flows.get_mut(key) {
         if !flow.dead {
             if flow.rx_stream.is_none() && stream != flow.tx_stream {
@@ -339,8 +341,10 @@ fn flow_rx_data(
             // into the app_tx queue which will be processed in apptun_tx
             flow.rx_socket.poll(app_rx, app_tx);
             assert!(app_rx.len() == 0);
+            return true;
         }
     }
+    return false;
 }
 
 // Read in data coming in from gateway (or direct), find the corresponding flow
@@ -410,10 +414,14 @@ fn gwtun_rx(
                                 );
                             }
                             Hdr::Flow(_) => {
+                                let mut found = false;
                                 if let Some(key) = hdr_to_key(&hdr) {
-                                    flow_rx_data(
+                                    found = flow_rx_data(
                                         stream, tun, &key, flows, data, app_rx, app_tx, poll,
                                     );
+                                }
+                                if !found {
+                                    tun.tun.close(stream).ok();
                                 }
                             }
                         }
@@ -426,7 +434,10 @@ fn gwtun_rx(
                         }
                         _=> panic!("We either need an nxthdr to identify the flow or we need the tun to map 1:1 to the flow"),
                     }
-                    flow_rx_data(stream, tun, &key, flows, data, app_rx, app_tx, poll);
+                    let found = flow_rx_data(stream, tun, &key, flows, data, app_rx, app_tx, poll);
+                    if !found {
+                        tun.tun.close(stream).ok();
+                    }
                     // If its a 1:1 tunnel, and if we already have a backlog of data, then dont pull in more
                     // If its a 1:many tunnel, we will send a flow control message back to the sender indicating
                     // receive readiness, see api flow_rx_data()
@@ -582,8 +593,15 @@ fn proxyclient_close(
     poll: &mut Poll,
 ) {
     tun.tun.close(0).ok();
-    tuns.remove(&tun_idx);
-    tun.tun.event_register(GWTUN, poll, RegType::Dereg).ok();
+    match tun.flows {
+        TunFlow::NoFlow => {
+            tuns.remove(&tun_idx);
+            tun.tun
+                .event_register(Token(tun_idx), poll, RegType::Dereg)
+                .ok();
+        }
+        _ => { /* Flow close will do all the above */ }
+    }
 }
 
 fn proxyclient_rx(
@@ -901,18 +919,25 @@ fn monitor_flows(
                     _ => {}
                 }
                 if f.pending_tx.is_some() {
-                    tx_socket.pending_tx.remove(f.tx_socket);
+                    // The flow key might be queued up in tx_socket.pending_tx, that will
+                    // get removed in the next iteration of gwtun_tx()
                     f.pending_tx_qed = false;
                     f.pending_tx = None;
                 }
                 if f.tx_socket != GWTUN_IDX {
                     // Gateway socket is monitored seperately, if the flow is dead, just
-                    // deregister the direct sockets
+                    // deregister the tx socket if its a 1:1 (direct flow case) socket
                     tx_socket
                         .tun
                         .event_register(Token(f.tx_socket), poll, RegType::Dereg)
                         .ok();
                     tuns.remove(&f.tx_socket);
+                }
+                if f.rx_socket_idx != UNUSED_IDX {
+                    f.rx_socket
+                        .event_register(Token(f.rx_socket_idx), poll, RegType::Dereg)
+                        .ok();
+                    tuns.remove(&f.rx_socket_idx);
                 }
             }
             keys.push(k.clone());
