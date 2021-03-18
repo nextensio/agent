@@ -350,12 +350,13 @@ fn flow_rx_data(
 // But for direct flows if we find that our flow is getting backed up, we just stop reading
 // from the direct socket anymore till the flow queue gets drained
 fn gwtun_rx(
+    max_pkts: usize,
     tun: &mut Tun,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
     app_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
-) {
+) -> bool {
     match tun.flows {
         TunFlow::OneToOne(ref k) => {
             // If its a 1:1 tunnel, and if we already have a backlog of data, then dont pull in more
@@ -363,23 +364,23 @@ fn gwtun_rx(
             // receive readiness, see api flow_rx_data()
             if let Some(flow) = flows.get_mut(k) {
                 if flow.pending_rx.len() > 1 {
-                    return;
+                    return true;
                 }
             }
         }
         _ => {}
     }
-    loop {
+    for _ in 0..max_pkts {
         let ret = tun.tun.read();
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
-                    return;
+                    return false;
                 }
                 _ => {
                     // This will trigger monitor_gw() to cleanup flows etc.
                     tun.tun.close(0).ok();
-                    return;
+                    return false;
                 }
             },
             Ok((stream, data)) => {
@@ -428,13 +429,14 @@ fn gwtun_rx(
                     // receive readiness, see api flow_rx_data()
                     if let Some(flow) = flows.get_mut(&key) {
                         if flow.pending_rx.len() > 1 {
-                            return;
+                            return true;
                         }
                     }
                 }
             }
         }
     }
+    return true;
 }
 
 fn gwtun_tx(tun: &mut Tun, flows: &mut HashMap<FlowV4Key, FlowV4>, reginfo: &RegistrationInfo) {
@@ -579,6 +581,7 @@ fn proxyclient_close(
 }
 
 fn proxyclient_rx(
+    max_pkts: usize,
     tun: &mut Tun,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
@@ -589,61 +592,70 @@ fn proxyclient_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-) {
-    let ret = tun.tun.read();
-    match ret {
-        Err(x) => match x.code {
-            NxtErr::EWOULDBLOCK => {
-                return;
-            }
-            _ => {
-                proxyclient_close(tun, tuns, tun_idx, poll);
-                return;
-            }
-        },
-        Ok((_, mut data)) => {
-            match tun.flows {
-                TunFlow::NoFlow => {
-                    if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
-                        tun.flows = TunFlow::OneToOne(key);
-                    } else {
-                        // We have to get a key for the proxy client, otherwise its unusable
-                        proxyclient_close(tun, tuns, tun_idx, poll);
-                        return;
-                    }
+) -> bool {
+    for _ in 0..max_pkts {
+        let ret = tun.tun.read();
+        match ret {
+            Err(x) => match x.code {
+                NxtErr::EWOULDBLOCK => {
+                    return false;
                 }
-                _ => {}
-            }
-            for b in data.bufs {
-                if let Some(key) = decode_ipv4(&b[data.headroom..]) {
-                    let mut f = flows.get_mut(&key);
-                    if f.is_none() {
-                        flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
-                        f = flows.get_mut(&key);
-                    }
-                    if let Some(flow) = f {
-                        if !flow.dead {
-                            flow_alive(&key, flow, true);
-                            app_rx.push_back((data.headroom, b));
-                            // polling to see if the rx data will be available to be sent to the gateway below.
-                            // The poll() call will also generate packets to be sent out back to the kernel
-                            // into the app_tx queue which will be processed in apptun_tx
-                            flow.rx_socket.poll(app_rx, app_tx);
-                            assert!(app_rx.len() == 0);
-                            if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                flow_data_to_gateway(&key, flow, tx_sock, reginfo);
-                                flow_data_from_gateway(&key, flow, &mut tx_sock.tun, app_rx, poll);
-                            }
-                            // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
-                            flow.rx_socket.poll(app_rx, app_tx);
-                            assert!(app_rx.len() == 0);
+                _ => {
+                    proxyclient_close(tun, tuns, tun_idx, poll);
+                    return false;
+                }
+            },
+            Ok((_, mut data)) => {
+                match tun.flows {
+                    TunFlow::NoFlow => {
+                        if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
+                            tun.flows = TunFlow::OneToOne(key);
+                        } else {
+                            // We have to get a key for the proxy client, otherwise its unusable
+                            proxyclient_close(tun, tuns, tun_idx, poll);
+                            return false;
                         }
                     }
+                    _ => {}
                 }
-                data.headroom = 0;
+                for b in data.bufs {
+                    if let Some(key) = decode_ipv4(&b[data.headroom..]) {
+                        let mut f = flows.get_mut(&key);
+                        if f.is_none() {
+                            flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                            f = flows.get_mut(&key);
+                        }
+                        if let Some(flow) = f {
+                            if !flow.dead {
+                                flow_alive(&key, flow, true);
+                                app_rx.push_back((data.headroom, b));
+                                // polling to see if the rx data will be available to be sent to the gateway below.
+                                // The poll() call will also generate packets to be sent out back to the kernel
+                                // into the app_tx queue which will be processed in apptun_tx
+                                flow.rx_socket.poll(app_rx, app_tx);
+                                assert!(app_rx.len() == 0);
+                                if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
+                                    flow_data_to_gateway(&key, flow, tx_sock, reginfo);
+                                    flow_data_from_gateway(
+                                        &key,
+                                        flow,
+                                        &mut tx_sock.tun,
+                                        app_rx,
+                                        poll,
+                                    );
+                                }
+                                // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
+                                flow.rx_socket.poll(app_rx, app_tx);
+                                assert!(app_rx.len() == 0);
+                            }
+                        }
+                    }
+                    data.headroom = 0;
+                }
             }
         }
     }
+    return true;
 }
 
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
@@ -661,6 +673,7 @@ fn proxyclient_rx(
 // will just drop rx packets if they exceed the smoltcp rx buffer size, so if we try to do a bunch of
 // rx packets, maybe that just translates into lost packets
 fn apptun_rx(
+    max_pkts: usize,
     tun: &mut Tun,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     app_rx: &mut VecDeque<(usize, Vec<u8>)>,
@@ -670,50 +683,59 @@ fn apptun_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-) {
-    let ret = tun.tun.read();
-    match ret {
-        Err(x) => match x.code {
-            NxtErr::EWOULDBLOCK => {
-                return;
-            }
-            _ => {
-                // This will trigger monitor_appfd() to close and cleanup etc..
-                tun.tun.close(0).ok();
-                return;
-            }
-        },
-        Ok((_, mut data)) => {
-            for b in data.bufs {
-                if let Some(key) = decode_ipv4(&b[data.headroom..]) {
-                    let mut f = flows.get_mut(&key);
-                    if f.is_none() {
-                        flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
-                        f = flows.get_mut(&key);
-                    }
-                    if let Some(flow) = f {
-                        if !flow.dead {
-                            flow_alive(&key, flow, true);
-                            app_rx.push_back((data.headroom, b));
-                            // polling to see if the rx data will be available to be sent to the gateway below.
-                            // The poll() call will also generate packets to be sent out back to the kernel
-                            // into the app_tx queue which will be processed in apptun_tx
-                            flow.rx_socket.poll(app_rx, app_tx);
-                            assert!(app_rx.len() == 0);
-                            if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                flow_data_to_gateway(&key, flow, tx_sock, reginfo);
-                                flow_data_from_gateway(&key, flow, &mut tx_sock.tun, app_rx, poll);
+) -> bool {
+    for _ in 0..max_pkts {
+        let ret = tun.tun.read();
+        match ret {
+            Err(x) => match x.code {
+                NxtErr::EWOULDBLOCK => {
+                    return false;
+                }
+                _ => {
+                    // This will trigger monitor_appfd() to close and cleanup etc..
+                    tun.tun.close(0).ok();
+                    return false;
+                }
+            },
+            Ok((_, mut data)) => {
+                for b in data.bufs {
+                    if let Some(key) = decode_ipv4(&b[data.headroom..]) {
+                        let mut f = flows.get_mut(&key);
+                        if f.is_none() {
+                            flow_new(&key, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                            f = flows.get_mut(&key);
+                        }
+                        if let Some(flow) = f {
+                            if !flow.dead {
+                                flow_alive(&key, flow, true);
+                                app_rx.push_back((data.headroom, b));
+                                // polling to see if the rx data will be available to be sent to the gateway below.
+                                // The poll() call will also generate packets to be sent out back to the kernel
+                                // into the app_tx queue which will be processed in apptun_tx
+                                flow.rx_socket.poll(app_rx, app_tx);
+                                assert!(app_rx.len() == 0);
+                                if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
+                                    flow_data_to_gateway(&key, flow, tx_sock, reginfo);
+                                    flow_data_from_gateway(
+                                        &key,
+                                        flow,
+                                        &mut tx_sock.tun,
+                                        app_rx,
+                                        poll,
+                                    );
+                                }
+                                // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
+                                flow.rx_socket.poll(app_rx, app_tx);
+                                assert!(app_rx.len() == 0);
                             }
-                            // poll again to see if packets from gateway can be sent back to the flow/app via agent_tx
-                            flow.rx_socket.poll(app_rx, app_tx);
-                            assert!(app_rx.len() == 0);
                         }
                     }
+                    data.headroom = 0;
                 }
-                data.headroom = 0;
             }
         }
     }
+    return true;
 }
 
 fn apptun_tx(tun: &mut Tun, app_tx: &mut VecDeque<(usize, Vec<u8>)>) {
@@ -1023,7 +1045,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
             match event.token() {
                 APPTUN => {
                     if event.is_readable() {
-                        apptun_rx(
+                        let rereg = apptun_rx(
+                            10, /* Read 10 packets and give up for other activities */
                             &mut agent.app_tun,
                             &mut agent.flows,
                             &mut agent.app_rx,
@@ -1034,11 +1057,13 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             agent.gw_onboarded,
                             &agent.reginfo,
                         );
-                        agent
-                            .app_tun
-                            .tun
-                            .event_register(APPTUN, &mut poll, RegType::Rereg)
-                            .ok();
+                        if rereg {
+                            agent
+                                .app_tun
+                                .tun
+                                .event_register(APPTUN, &mut poll, RegType::Rereg)
+                                .ok();
+                        }
                     }
                     if event.is_writable() {
                         agent.app_tun.tx_ready = true;
@@ -1055,9 +1080,11 @@ fn agent_main_thread(platform: usize, direct: usize) {
                     }
                 }
                 idx => {
+                    let mut rereg = false;
                     if let Some(mut tun) = agent.tuns.remove(&idx.0) {
                         if tun.proxy_client {
-                            proxyclient_rx(
+                            rereg = proxyclient_rx(
+                                10, /* Read 10 packets and give up for other activities */
                                 &mut tun,
                                 &mut agent.flows,
                                 &mut agent.app_rx,
@@ -1069,10 +1096,10 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 agent.gw_onboarded,
                                 &agent.reginfo,
                             );
-                            tun.tun.event_register(idx, &mut poll, RegType::Rereg).ok();
                         } else {
                             if event.is_readable() {
-                                gwtun_rx(
+                                rereg = gwtun_rx(
+                                    10, /* Read 10 packets and give up for other activities */
                                     &mut tun,
                                     &mut agent.flows,
                                     &mut agent.app_rx,
@@ -1084,6 +1111,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 tun.tx_ready = true;
                                 gwtun_tx(&mut tun, &mut agent.flows, &agent.reginfo);
                             }
+                        }
+                        if rereg {
+                            tun.tun.event_register(idx, &mut poll, RegType::Rereg).ok();
                         }
                         // This remove+re-insert keeps rust happy about mutable borrows etc..
                         // Might be a bit costlier than just referencing into the hash table, but I cant
