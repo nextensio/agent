@@ -2,7 +2,7 @@
 use android_logger::Config;
 use common::as_u32_be;
 use common::{
-    decode_ipv4, key_to_hdr,
+    decode_ipv4, hdr_to_key, key_to_hdr,
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
     FlowV4Key, NxtBufs, NxtErr, RegType, Transport,
 };
@@ -399,25 +399,11 @@ fn gwtun_rx(
                                 );
                             }
                             Hdr::Flow(flow) => {
-                                let sipb: Result<Ipv4Addr, _> = flow.source.parse();
-                                let dipb: Result<Ipv4Addr, _> = flow.dest.parse();
-                                // This has to be a corrupt packet, otherwise we can have a
-                                // garbage ip address come in. We cant keep the session/tun open
-                                // with even one garbage packet coming in on it
-                                if sipb.is_err() || dipb.is_err() {
-                                    tun.tun.close(0).ok();
-                                    return;
+                                if let Some(key) = hdr_to_key(&hdr) {
+                                    flow_rx_data(
+                                        stream, tun, &key, flows, data, app_rx, app_tx, poll,
+                                    );
                                 }
-                                let sip = as_u32_be(&sipb.unwrap().octets());
-                                let dip = dipb.unwrap().to_string();
-                                let key = FlowV4Key {
-                                    sip,
-                                    dip,
-                                    sport: flow.sport as u16,
-                                    dport: flow.dport as u16,
-                                    proto: flow.proto as usize,
-                                };
-                                flow_rx_data(stream, tun, &key, flows, data, app_rx, app_tx, poll);
                             }
                         }
                     }
