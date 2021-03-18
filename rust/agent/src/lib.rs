@@ -616,7 +616,7 @@ fn proxyclient_close(
     tun: &mut Tun,
     tun_idx: Token,
     poll: &mut Poll,
-) {
+) -> bool {
     match tun.flows {
         TunFlow::OneToOne(ref k) => {
             if let Some(f) = flows.get_mut(k) {
@@ -631,8 +631,10 @@ fn proxyclient_close(
             // case we have not yet identified a flow and hence cant realy on the flow closing the session etc..
             tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
             tun.tun.close(0).ok();
+            return false;
         }
     }
+    return true;
 }
 
 fn proxyclient_rx(
@@ -656,8 +658,7 @@ fn proxyclient_rx(
                     return true;
                 }
                 _ => {
-                    proxyclient_close(flows, tuns, tun, tun_idx, poll);
-                    return false;
+                    return proxyclient_close(flows, tuns, tun, tun_idx, poll);
                 }
             },
             Ok((_, mut data)) => {
@@ -667,8 +668,7 @@ fn proxyclient_rx(
                             tun.flows = TunFlow::OneToOne(key);
                         } else {
                             // We have to get a key for the proxy client, otherwise its unusable
-                            proxyclient_close(flows, tuns, tun, tun_idx, poll);
-                            return false;
+                            return proxyclient_close(flows, tuns, tun, tun_idx, poll);
                         }
                     }
                     _ => {}
