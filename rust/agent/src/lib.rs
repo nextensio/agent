@@ -12,6 +12,8 @@ use log::{error, Level};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::Read;
 use std::net::Ipv4Addr;
 use std::{collections::HashMap, time::Duration, time::Instant};
 use std::{sync::atomic::AtomicI32, thread};
@@ -140,6 +142,11 @@ fn dummy_onboard(agent: &mut AgentInfo) {
         uuid: "123e4567-e89b-12d3-a456-426655440000".to_string(),
         services: vec!["test1-nextensio-net".to_string()],
     };
+    /*
+    match File::open("/tmp/nextensio.crt") {
+        Ok(mut file) => file.read_to_end(&mut agent.reginfo.ca_cert).ok(),
+        Err(_) => Some(0),
+    };*/
 }
 
 // Mark when the flow should be cleaned up. The internet RFCs stipulate
