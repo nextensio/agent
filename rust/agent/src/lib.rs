@@ -11,13 +11,13 @@ use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
 use log::{error, Level};
-use mio::{Events, Poll, Registry, Token};
+use mio::{Events, Poll, Token};
 use netconn::NetConn;
+use std::collections::VecDeque;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::{collections::HashMap, time::Duration, time::Instant};
-use std::{collections::VecDeque, sync::Mutex};
 use std::{sync::atomic::AtomicI32, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
@@ -29,6 +29,8 @@ use websock::WebSession;
 // These are atomic because rust will complain loudly about mutable global variables
 static VPNFD: AtomicI32 = AtomicI32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
+static mut REGINFO: Option<Box<RegistrationInfo>> = None;
+static REGINFO_CHANGED: AtomicI32 = AtomicI32::new(0);
 
 const NXT_AGENT_PROXY: usize = 8080;
 
@@ -71,27 +73,27 @@ pub struct CRegistrationInfo {
     pub num_domains: c_int,
     pub ca_cert: *const c_char,
     pub userid: *const c_char,
+    pub uuid: *const c_char,
     pub services: *const *const c_char,
     pub num_services: c_int,
 }
 
-fn creginfo_translate(creg: *const CRegistrationInfo) -> RegistrationInfo {
+fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
     let mut reginfo = RegistrationInfo::default();
     unsafe {
-        reginfo.host = CStr::from_ptr((*creg).host).to_string_lossy().into_owned();
-        reginfo.access_token = CStr::from_ptr((*creg).access_token)
+        reginfo.host = CStr::from_ptr(creg.host).to_string_lossy().into_owned();
+        reginfo.access_token = CStr::from_ptr(creg.access_token)
             .to_string_lossy()
             .into_owned();
-        reginfo.connect_id = CStr::from_ptr((*creg).connect_id)
+        reginfo.connect_id = CStr::from_ptr(creg.connect_id)
             .to_string_lossy()
             .into_owned();
-        reginfo.ca_cert = CStr::from_ptr((*creg).ca_cert).to_bytes().to_owned();
-        reginfo.userid = CStr::from_ptr((*creg).userid)
-            .to_string_lossy()
-            .into_owned();
+        reginfo.ca_cert = CStr::from_ptr(creg.ca_cert).to_bytes().to_owned();
+        reginfo.userid = CStr::from_ptr(creg.userid).to_string_lossy().into_owned();
+        reginfo.uuid = CStr::from_ptr(creg.uuid).to_string_lossy().into_owned();
 
         let tmp_array: &[*const c_char] =
-            slice::from_raw_parts((*creg).domains, (*creg).num_domains as usize);
+            slice::from_raw_parts(creg.domains, creg.num_domains as usize);
         let rust_array: Vec<_> = tmp_array
             .iter()
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
@@ -99,7 +101,7 @@ fn creginfo_translate(creg: *const CRegistrationInfo) -> RegistrationInfo {
         reginfo.domains = rust_array;
 
         let tmp_array: &[*const c_char] =
-            slice::from_raw_parts((*creg).services, (*creg).num_services as usize);
+            slice::from_raw_parts(creg.services, creg.num_services as usize);
         let rust_array: Vec<_> = tmp_array
             .iter()
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
@@ -1579,4 +1581,10 @@ pub unsafe extern "C" fn agent_off() {
     let fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
     error!("Agent off {}", fd);
     VPNFD.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn onboard(info: CRegistrationInfo) {
+    REGINFO = Some(Box::new(creginfo_translate(info)));
+    REGINFO_CHANGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
