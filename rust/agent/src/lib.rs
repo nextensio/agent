@@ -3,6 +3,8 @@ use android_logger::Config;
 use common::{
     decode_ipv4, hdr_to_key, key_to_hdr,
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
+    parse_host,
+    tls::parse_sni,
     FlowV4Key, NxtBufs, NxtErr, RegType, Transport,
 };
 use dummy::Dummy;
@@ -45,6 +47,8 @@ const CLEANUP_TCP_IDLE: usize = 60 * 60; // one hour
 const CLEANUP_UDP_IDLE: usize = 4 * 60; // 4 minutes
 const CLEANUP_UDP_DNS: usize = 30; // 30 seconds
 
+const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
+
 #[derive(Default)]
 pub struct RegistrationInfo {
     host: String,
@@ -65,10 +69,13 @@ struct FlowV4 {
     tx_socket: usize,
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
-    dead_time: Instant,
+    creation_time: Instant,
+    last_active: Instant,
     cleanup_after: usize,
     dead: bool,
     pending_tx_qed: bool,
+    service: String,
+    parse_pending: Option<Vec<u8>>,
 }
 
 enum TunFlow {
@@ -122,6 +129,7 @@ struct AgentInfo {
     vpn_tx: VecDeque<(usize, Vec<u8>)>,
     vpn_rx: VecDeque<(usize, Vec<u8>)>,
     flows: HashMap<FlowV4Key, FlowV4>,
+    parse_pending: HashMap<FlowV4Key, ()>,
     tuns: HashMap<usize, TunInfo>,
     next_tun_idx: usize,
     vpn_tun: Tun,
@@ -157,7 +165,7 @@ fn dummy_onboard(agent: &mut AgentInfo) {
 // will hang around in idle state for a long time. And for dns we are being
 // super aggressive here, cleaning up in 30 seconds.
 fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4, alive: bool) {
-    flow.dead_time = Instant::now();
+    flow.last_active = Instant::now();
     if alive {
         if key.proto == common::TCP {
             flow.cleanup_after = CLEANUP_TCP_IDLE;
@@ -209,9 +217,11 @@ fn flow_fail(mut rx_socket: Box<dyn Transport>, rx_socket_idx: Token, poll: &mut
 
 fn flow_new(
     key: &FlowV4Key,
+    need_parsing: bool,
     rx_socket_idx: Token,
     rx_socket: Box<dyn Transport>,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
@@ -300,11 +310,17 @@ fn flow_new(
         tx_socket,
         pending_tx: None,
         pending_rx: VecDeque::with_capacity(1),
-        dead_time: Instant::now(),
+        last_active: Instant::now(),
+        creation_time: Instant::now(),
         cleanup_after,
         dead: false,
         pending_tx_qed: false,
+        service: "".to_string(),
+        parse_pending: None,
     };
+    if need_parsing {
+        parse_pending.insert(key.clone(), ());
+    }
     flows.insert(key.clone(), f);
 }
 
@@ -548,6 +564,73 @@ fn external_sock_tx(
     tun.pending_tx.shrink_to_fit();
 }
 
+fn parse_https_and_http(flow: &mut FlowV4, data: &[u8]) -> bool {
+    if let Some(service) = parse_sni(data) {
+        flow.service = service;
+        return true;
+    }
+    let (_, _, service) = parse_host(data);
+    if service != "" {
+        flow.service = service;
+        return true;
+    }
+
+    return false;
+}
+// Add more data to the pending buffer and see if we can parse a service name
+// with all that data. If we cant, keep waiting for more data. This flow will
+// be sitting in a parse_pending hashmap which is monitored every 100ms and if
+// it times out waiting for more data, we will just use the ip address as the
+// service and send the flow across to the destination
+fn parse_complete(key: &FlowV4Key, flow: &mut FlowV4, mut tx: NxtBufs) -> Option<NxtBufs> {
+    if let Some(mut pending) = flow.parse_pending.take() {
+        for b in tx.bufs {
+            pending.extend_from_slice(&b[tx.headroom..]);
+            tx.headroom = 0;
+        }
+        if pending.len() >= common::MAXBUF {
+            if !parse_https_and_http(flow, &pending[0..]) {
+                // We dont want any more data to parse, we give up and use dest ip as service
+                flow.service = key.dip.clone();
+            }
+            return Some(NxtBufs {
+                hdr: tx.hdr,
+                bufs: vec![pending],
+                headroom: 0,
+            });
+        } else {
+            // wait for more data or timeout
+            flow.parse_pending = Some(pending);
+            return None;
+        }
+    } else {
+        // Most common case: the first buffer (usually at least 2048 in size) should be able
+        // to contain a complete tls client hello (for https) or http headers with host
+        // (for http). If the first buffer doesnt have the max data we want to attempt
+        // to parse, then deep copy the buffers to one large buffer (very bad case ,( )
+        if !tx.bufs.is_empty() {
+            if parse_https_and_http(flow, &tx.bufs[0][tx.headroom..]) {
+                return Some(tx);
+            } else {
+                // We dont want any more data to parse, we give up and use dest ip as service
+                if tx.bufs[0][tx.headroom..].len() >= common::MAXBUF {
+                    flow.service = key.dip.clone();
+                    return Some(tx);
+                }
+                // We think more data will produce better parsing results, so wait for more data
+                let mut pending = Vec::with_capacity(common::MAXBUF);
+                for b in tx.bufs {
+                    pending.extend_from_slice(&b[tx.headroom..]);
+                    tx.headroom = 0;
+                }
+                flow.parse_pending = Some(pending);
+                return None;
+            }
+        }
+    }
+    return None;
+}
+
 // Now lets see if the smoltcp FSM deems that we have a payload to
 // be read. Before that see if we had any payload pending to be processed
 // and if so process it. The payload might be sent to the gateway or direct.
@@ -577,6 +660,15 @@ fn flow_data_to_external(
                 },
             }
         }
+        if flow.service == "" {
+            if let Some(p) = parse_complete(key, flow, tx) {
+                tx = p;
+            } else {
+                // Read more data
+                continue;
+            }
+        }
+
         if flow.tx_socket == GWTUN_IDX {
             let mut hdr = key_to_hdr(key);
             hdr.streamid = flow.tx_stream;
@@ -585,7 +677,17 @@ fn flow_data_to_external(
                 Hdr::Flow(ref mut f) => {
                     f.source_agent = reginfo.connect_id.clone();
                     f.origin_agent = reginfo.connect_id.clone();
-                    f.dest_agent = "default-internet".to_string();
+                    let mut found = false;
+                    for d in reginfo.domains.iter() {
+                        if flow.service.contains(d) {
+                            f.dest_agent = d.clone();
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        f.dest_agent = "default-internet".to_string();
+                    }
                 }
                 _ => {}
             }
@@ -675,6 +777,7 @@ fn flow_data_from_external(
 fn proxyclient_rx(
     tun_info: TunInfo,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
     tun_idx: Token,
     next_tun_idx: &mut usize,
@@ -700,15 +803,18 @@ fn proxyclient_rx(
                     if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
                         flow_new(
                             &key,
+                            false,
                             tun_idx,
                             tun.tun,
                             flows,
+                            parse_pending,
                             tuns,
                             next_tun_idx,
                             poll,
                             gw_onboarded,
                         );
                         if let Some(flow) = flows.get_mut(&key) {
+                            flow.service = key.dip.clone();
                             if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                 // Send the data on to the destination
                                 flow.pending_tx = Some(data);
@@ -732,7 +838,8 @@ fn proxyclient_rx(
                             proxyclient_tx(&tun_info, flows, tuns, poll);
                             return Some(tun_info);
                         } else {
-                            // Flow creation failed for whatever reason
+                            // Flow creation failed for whatever reason. The flow_new() will close and
+                            // deregister etc.. if flow creation fails
                             return None;
                         }
                     } else {
@@ -798,6 +905,7 @@ fn vpntun_rx(
     max_pkts: usize,
     tun: &mut Tun,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
     vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
     vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
     tuns: &mut HashMap<usize, TunInfo>,
@@ -827,9 +935,11 @@ fn vpntun_rx(
                             let rx_socket = Box::new(Socket::new_client(&key, 1500));
                             flow_new(
                                 &key,
+                                true,
                                 UNUSED_POLL, /* This socket is not registered with mio poller */
                                 rx_socket,
                                 flows,
+                                parse_pending,
                                 tuns,
                                 next_tun_idx,
                                 poll,
@@ -935,6 +1045,10 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 }
 
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
+    if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
+        return;
+    }
+
     if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
         let gw_tun = &mut gw_tun.tun();
         if gw_tun.tun.is_closed(0) {
@@ -944,7 +1058,7 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 .tun
                 .event_register(GWTUN_POLL, poll, RegType::Dereg)
                 .ok();
-            close_gateway_flows(&mut agent.flows, gw_tun, poll);
+            close_gateway_flows(&mut agent.flows, &mut agent.parse_pending, gw_tun, poll);
             agent.tuns.remove(&GWTUN_IDX);
             new_gw(agent, poll);
         } else {
@@ -986,10 +1100,20 @@ fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
             .ok();
         agent.vpn_fd = 0;
         if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
-            close_gateway_flows(&mut agent.flows, &mut gw_tun.tun(), poll);
+            close_gateway_flows(
+                &mut agent.flows,
+                &mut agent.parse_pending,
+                &mut gw_tun.tun(),
+                poll,
+            );
         }
         // After closing gateway flows, what is left is direct flows
-        close_direct_flows(&mut agent.flows, &mut agent.tuns, poll);
+        close_direct_flows(
+            &mut agent.flows,
+            &mut agent.parse_pending,
+            &mut agent.tuns,
+            poll,
+        );
     }
     if agent.vpn_fd != fd {
         let vpn_tun = app_transport(fd, agent.platform);
@@ -1017,6 +1141,41 @@ fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
     }
 }
 
+fn monitor_parse_pending(
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
+    tuns: &mut HashMap<usize, TunInfo>,
+    reginfo: &mut RegistrationInfo,
+    poll: &mut Poll,
+) {
+    let mut keys = Vec::new();
+    for (k, _) in parse_pending.iter_mut() {
+        if let Some(f) = flows.get_mut(k) {
+            if f.creation_time.elapsed() >= Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+                if let Some(data) = f.parse_pending.take() {
+                    // We couldnt parse the service, just use dest ip as service
+                    f.service = k.dip.clone();
+                    // Send the data queued up for parsing immediately
+                    f.pending_tx = Some(NxtBufs {
+                        hdr: None,
+                        bufs: vec![data],
+                        headroom: 0,
+                    });
+                    if let Some(tx_sock) = tuns.get_mut(&f.tx_socket) {
+                        if !f.dead {
+                            flow_data_to_external(k, f, &mut tx_sock.tun(), reginfo, poll);
+                        }
+                    }
+                }
+                keys.push(k.clone());
+            }
+        }
+    }
+    for k in keys {
+        parse_pending.remove(&k).unwrap();
+    }
+}
+
 // TODO: This can be made more effective by using some kind of timer wheel
 // to sort the flows in the order of their expiry rather than having to walk
 // through them all. Right now the use case is for a couple of hundred flows
@@ -1024,13 +1183,14 @@ fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
 fn monitor_flows(
     poll: &mut Poll,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
 ) {
     error!("Total flows {}", flows.len());
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
-        if f.dead_time.elapsed() > Duration::from_secs(f.cleanup_after as u64) {
+        if f.last_active.elapsed() > Duration::from_secs(f.cleanup_after as u64) {
             if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
                 let tx_socket = tx_socket.tun();
                 flow_close(k, f, &mut tx_socket.tun, poll);
@@ -1068,18 +1228,29 @@ fn monitor_flows(
     }
     for k in keys {
         flows.remove(&k);
+        if parse_pending.contains_key(&k) {
+            parse_pending.remove(&k);
+        }
     }
     flows.shrink_to_fit();
     tuns.shrink_to_fit();
 }
 
-fn close_gateway_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tun: &mut Tun, poll: &mut Poll) {
+fn close_gateway_flows(
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
+    tun: &mut Tun,
+    poll: &mut Poll,
+) {
     match tun.flows {
         TunFlow::OneToMany(ref mut tun_flows) => {
             for (_, k) in tun_flows.iter() {
                 if let Some(f) = flows.get_mut(k) {
                     flow_close(k, f, &mut tun.tun, poll);
                     flows.remove(k);
+                    if parse_pending.contains_key(k) {
+                        parse_pending.remove(k);
+                    }
                 }
             }
             tun_flows.clear();
@@ -1090,6 +1261,7 @@ fn close_gateway_flows(flows: &mut HashMap<FlowV4Key, FlowV4>, tun: &mut Tun, po
 
 fn close_direct_flows(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
     poll: &mut Poll,
 ) {
@@ -1105,6 +1277,9 @@ fn close_direct_flows(
     }
     for k in keys {
         flows.remove(&k);
+        if parse_pending.contains_key(&k) {
+            parse_pending.remove(&k);
+        }
     }
 }
 
@@ -1198,10 +1373,11 @@ fn agent_main_thread(platform: usize, direct: usize) {
     proxy_init(&mut agent, &mut poll);
 
     let mut flow_ager = Instant::now();
+    let mut service_parse_ager = Instant::now();
     let mut monitor_ager = Instant::now();
     loop {
-        let two_secs = Duration::new(2, 0);
-        match poll.poll(&mut events, Some(two_secs)) {
+        let hundred_ms = Duration::from_millis(SERVICE_PARSE_TIMEOUT);
+        match poll.poll(&mut events, Some(hundred_ms)) {
             Err(e) => error!("Error polling {:?}, retrying", e),
             Ok(_) => {}
         }
@@ -1214,6 +1390,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             10, /* Read 10 packets and yield for other activities */
                             &mut agent.vpn_tun,
                             &mut agent.flows,
+                            &mut agent.parse_pending,
                             &mut agent.vpn_rx,
                             &mut agent.vpn_tx,
                             &mut agent.tuns,
@@ -1263,6 +1440,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 let rereg = proxyclient_rx(
                                     tun_info,
                                     &mut agent.flows,
+                                    &mut agent.parse_pending,
                                     &mut agent.tuns,
                                     idx,
                                     &mut agent.next_tun_idx,
@@ -1324,9 +1502,24 @@ fn agent_main_thread(platform: usize, direct: usize) {
             monitor_vpnfd(&mut agent, &mut poll);
             monitor_ager = Instant::now();
         }
+        if service_parse_ager.elapsed() >= Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+            monitor_parse_pending(
+                &mut agent.flows,
+                &mut agent.parse_pending,
+                &mut agent.tuns,
+                &mut agent.reginfo,
+                &mut poll,
+            );
+            service_parse_ager = Instant::now();
+        }
         if flow_ager.elapsed() >= Duration::from_secs(30) {
             // Check the flow aging only once every 30 seconds
-            monitor_flows(&mut poll, &mut agent.flows, &mut agent.tuns);
+            monitor_flows(
+                &mut poll,
+                &mut agent.flows,
+                &mut agent.parse_pending,
+                &mut agent.tuns,
+            );
             flow_ager = Instant::now();
         }
     }
