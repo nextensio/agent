@@ -567,7 +567,9 @@ fn flow_data_to_external(
             tx = match flow.rx_socket.read() {
                 Ok((_, t)) => t,
                 Err(e) => match e.code {
-                    NxtErr::EWOULDBLOCK => return,
+                    NxtErr::EWOULDBLOCK => {
+                        return;
+                    }
                     _ => {
                         flow_close(key, flow, &mut tx_socket.tun, poll);
                         return;
@@ -748,16 +750,14 @@ fn proxyclient_rx(
                     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                         flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll);
                     }
-
-                    // We read max_pkts and looks like we have more to read, yield and reregister
                     flow.rx_socket
                         .event_register(tun_idx, poll, RegType::Rereg)
                         .ok();
                 }
-                return Some(tun_info);
             } else {
                 panic!("Got an rx event for proxy client with no associated flow");
             }
+            return Some(tun_info);
         }
     }
 }
@@ -1114,31 +1114,41 @@ fn proxy_listener(
     next_tun_idx: &mut usize,
     poll: &mut Poll,
 ) {
-    match proxy.tun.listen() {
-        Ok(client) => {
-            let tx_socket = *next_tun_idx;
-            *next_tun_idx = tx_socket + 1;
-            let mut tun = Tun {
-                tun: client,
-                pending_tx: VecDeque::with_capacity(1),
-                tx_ready: true,
-                flows: TunFlow::NoFlow,
-                proxy_client: true,
-            };
-            match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
-                Err(e) => {
-                    error!("Proxy transport register failed {}", format!("{}", e));
-                    tun.tun.close(0).ok();
+    loop {
+        match proxy.tun.listen() {
+            Ok(client) => {
+                let socket_idx = *next_tun_idx;
+                *next_tun_idx = socket_idx + 1;
+                let mut tun = Tun {
+                    tun: client,
+                    pending_tx: VecDeque::with_capacity(1),
+                    tx_ready: true,
+                    flows: TunFlow::NoFlow,
+                    proxy_client: true,
+                };
+                match tun
+                    .tun
+                    .event_register(Token(socket_idx), poll, RegType::Reg)
+                {
+                    Err(e) => {
+                        error!("Proxy transport register failed {}", format!("{}", e));
+                        tun.tun.close(0).ok();
+                        continue;
+                    }
+                    Ok(_) => {}
+                }
+                tuns.insert(socket_idx, TunInfo::Tun(tun));
+            }
+            Err(e) => match e.code {
+                NxtErr::EWOULDBLOCK => {
                     return;
                 }
-                Ok(_) => {}
-            }
-            tuns.insert(tx_socket, TunInfo::Tun(tun));
+                _ => {
+                    error!("Proxy server error {}", e);
+                    return;
+                }
+            },
         }
-        Err(e) => match e.code {
-            NxtErr::EWOULDBLOCK => {}
-            _ => error!("Proxy server error {}", e),
-        },
     }
 }
 
@@ -1263,6 +1273,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
                                 if rereg.is_some() {
                                     agent.tuns.insert(idx.0, rereg.unwrap());
                                 }
+                            } else {
+                                agent.tuns.insert(idx.0, tun_info);
                             }
                         } else {
                             if event.is_readable() {
