@@ -729,7 +729,6 @@ fn proxyclient_tx(
     tuns: &mut HashMap<usize, TunInfo>,
     poll: &mut Poll,
 ) {
-    println!("Proxy tx");
     match tun_info {
         TunInfo::Flow(ref key) => {
             if let Some(flow) = flows.get_mut(&key) {
