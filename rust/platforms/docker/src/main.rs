@@ -11,6 +11,14 @@ const NXT_OKTA_RESULTS: usize = 8081;
 const NXT_OKTA_LOGIN: usize = 8180;
 static ONBOARDED: AtomicBool = AtomicBool::new(false);
 
+// TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
+// basic simple web server and a simple http client - we can use ureq for http client,
+// but we do the ignore-certificate business today, or even if we dont ignore, we might
+// want to specficy a custom root-CA, so the http client lib should support it. Anyways,
+// this docker implementation is meant for servers, so its pbbly not that big a deal.
+// But is SUCKS to see that the so called "simple" http server rouille (tiny-http) spawns
+// like eight threads when we open listeners on two ports (4 threads  per port ?)
+
 #[derive(Deserialize)]
 struct OnboardInfo {
     Result: String,
@@ -95,70 +103,78 @@ fn onboard_status() -> rouille::Response {
 }
 
 fn okta_login() {
-    rouille::start_server(format!("localhost:{}", NXT_OKTA_LOGIN), move |request| {
-        router!(request,
-            (GET) (/) => {
-                login_page()
-            },
-            (HEAD) (/) => {
-                login_page()
-            },
-            (GET) (/onboardstatus) => {
-                onboard_status()
-            },
-            (HEAD) (/onboardstatus) => {
-                onboard_status()
-            },
-            _ => {
-                println!("Nonexistant path: {:?}", request);
-                rouille::Response::empty_404()
-            },
-        )
-    });
+    rouille::start_server_with_pool(
+        format!("localhost:{}", NXT_OKTA_LOGIN),
+        Some(1),
+        move |request| {
+            router!(request,
+                (GET) (/) => {
+                    login_page()
+                },
+                (HEAD) (/) => {
+                    login_page()
+                },
+                (GET) (/onboardstatus) => {
+                    onboard_status()
+                },
+                (HEAD) (/onboardstatus) => {
+                    onboard_status()
+                },
+                _ => {
+                    println!("Nonexistant path: {:?}", request);
+                    rouille::Response::empty_404()
+                },
+            )
+        },
+    );
 }
 
 fn okta_results(controller: String, services: String) {
-    rouille::start_server(format!("localhost:{}", NXT_OKTA_RESULTS), move |request| {
-        router!(request,
-            (GET) (/accessid/{access: String}/{id: String}) => {
-                // TODO: Once we start using proper certs for our production clusters, make this
-                // accept_invalid_certs true only for test environment. Even test environments ideally
-                // should have verifiable certs via a test.nextensio.net domain or something
-                let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
-                let get_url = format!("https://{}/api/v1/onboard/{}", controller, access);
-                let bearer = format!("Bearer {}", access);
-                let resp = client.get(&get_url).header("Authorization", bearer).send();
-                match resp {
-                    Ok(mut res) => {
-                        if res.status().is_success() {
-                            let onb: Result<OnboardInfo, reqwest::Error> = res.json();
-                            match onb {
-                                Ok(o) => {
-                                    if o.Result != "ok" {
-                                        println!("Result from controller not ok {}", o.Result);
-                                    } else {
-                                        println!("Onboarded {}", o);
-                                        ONBOARDED.store(true, std::sync::atomic::Ordering::Relaxed);
-                                    }
-                                },
-                                Err(e) => {println!("HTTP body failed {:?}", e);},
+    rouille::start_server_with_pool(
+        format!("localhost:{}", NXT_OKTA_RESULTS),
+        Some(1),
+        move |request| {
+            router!(request,
+                (GET) (/accessid/{access: String}/{id: String}) => {
+                    // TODO: Once we start using proper certs for our production clusters, make this
+                    // accept_invalid_certs true only for test environment. Even test environments ideally
+                    // should have verifiable certs via a test.nextensio.net domain or something
+                    let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
+                    let get_url = format!("https://{}/api/v1/onboard/{}", controller, access);
+                    let bearer = format!("Bearer {}", access);
+                    let resp = client.get(&get_url).header("Authorization", bearer).send();
+                    match resp {
+                        Ok(mut res) => {
+                            if res.status().is_success() {
+                                let onb: Result<OnboardInfo, reqwest::Error> = res.json();
+                                match onb {
+                                    Ok(o) => {
+                                        if o.Result != "ok" {
+                                            println!("Result from controller not ok {}", o.Result);
+                                        } else {
+                                            println!("Onboarded {}", o);
+                                            ONBOARDED.store(true, std::sync::atomic::Ordering::Relaxed);
+                                        }
+                                    },
+                                    Err(e) => {println!("HTTP body failed {:?}", e);},
+                                }
+                            } else {
+                                println!("HTTP Get result {}, failed", res.status());
                             }
-                        } else {
-                            println!("HTTP Get result {}, failed", res.status());
-                        }
-                    },
-                    Err(e) => {println!("HTTP Get failed {:?}", e);},
-                }
+                        },
+                        Err(e) => {println!("HTTP Get failed {:?}", e);},
+                    }
 
 
-                let mut response = Response::text("");
-                response.status_code = 200;
-                response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
-                response
-            },
-            _ => rouille::Response::empty_404(),
-        )
-    });
+                    let mut response = Response::text("");
+                    response.status_code = 200;
+                    response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
+                    response
+                },
+                _ => rouille::Response::empty_404(),
+            )
+        },
+    );
 }
 
 fn main() {
