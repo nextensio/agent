@@ -11,12 +11,13 @@ use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
 use log::{error, Level};
-use mio::{Events, Poll, Token};
+use mio::{Events, Poll, Registry, Token};
 use netconn::NetConn;
-use std::collections::VecDeque;
-use std::fs::File;
-use std::io::Read;
+use std::ffi::CStr;
+use std::os::raw::{c_char, c_int};
+use std::slice;
 use std::{collections::HashMap, time::Duration, time::Instant};
+use std::{collections::VecDeque, sync::Mutex};
 use std::{sync::atomic::AtomicI32, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
@@ -59,6 +60,53 @@ pub struct RegistrationInfo {
     userid: String,
     uuid: String,
     services: Vec<String>,
+}
+
+#[repr(C)]
+pub struct CRegistrationInfo {
+    pub host: *const c_char,
+    pub access_token: *const c_char,
+    pub connect_id: *const c_char,
+    pub domains: *const *const c_char,
+    pub num_domains: c_int,
+    pub ca_cert: *const c_char,
+    pub userid: *const c_char,
+    pub services: *const *const c_char,
+    pub num_services: c_int,
+}
+
+fn creginfo_translate(creg: *const CRegistrationInfo) -> RegistrationInfo {
+    let mut reginfo = RegistrationInfo::default();
+    unsafe {
+        reginfo.host = CStr::from_ptr((*creg).host).to_string_lossy().into_owned();
+        reginfo.access_token = CStr::from_ptr((*creg).access_token)
+            .to_string_lossy()
+            .into_owned();
+        reginfo.connect_id = CStr::from_ptr((*creg).connect_id)
+            .to_string_lossy()
+            .into_owned();
+        reginfo.ca_cert = CStr::from_ptr((*creg).ca_cert).to_bytes().to_owned();
+        reginfo.userid = CStr::from_ptr((*creg).userid)
+            .to_string_lossy()
+            .into_owned();
+
+        let tmp_array: &[*const c_char] =
+            slice::from_raw_parts((*creg).domains, (*creg).num_domains as usize);
+        let rust_array: Vec<_> = tmp_array
+            .iter()
+            .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
+            .collect();
+        reginfo.domains = rust_array;
+
+        let tmp_array: &[*const c_char] =
+            slice::from_raw_parts((*creg).services, (*creg).num_services as usize);
+        let rust_array: Vec<_> = tmp_array
+            .iter()
+            .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
+            .collect();
+        reginfo.services = rust_array;
+    }
+    return reginfo;
 }
 
 struct FlowV4 {
@@ -134,26 +182,6 @@ struct AgentInfo {
     next_tun_idx: usize,
     vpn_tun: Tun,
     proxy_tun: Tun,
-}
-
-fn dummy_onboard(agent: &mut AgentInfo) {
-    // TODO: do proper okta onboarding
-    //agent.idp_onboarded = true;
-    agent.reginfo = RegistrationInfo {
-        host: "gatewaytesta.nextensio.net".to_string(),
-        access_token: "foobar".to_string(),
-        connect_id: "test1-nextensio-net".to_string(),
-        domains: vec!["kismis.org".to_string()],
-        ca_cert: Vec::new(),
-        userid: "test1@nextensio.net".to_string(),
-        uuid: "123e4567-e89b-12d3-a456-426655440000".to_string(),
-        services: vec!["test1-nextensio-net".to_string()],
-    };
-    /*
-    match File::open("/tmp/nextensio.crt") {
-        Ok(mut file) => file.read_to_end(&mut agent.reginfo.ca_cert).ok(),
-        Err(_) => Some(0),
-    };*/
 }
 
 // Mark when the flow should be cleaned up. The internet RFCs stipulate
@@ -1369,7 +1397,6 @@ fn agent_main_thread(platform: usize, direct: usize) {
     agent.platform = platform;
     agent.next_tun_idx = TUN_START;
 
-    dummy_onboard(&mut agent);
     proxy_init(&mut agent, &mut poll);
 
     let mut flow_ager = Instant::now();
