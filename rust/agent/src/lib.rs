@@ -11,25 +11,21 @@ use l3proxy::Socket;
 use log::{error, Level};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
-use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
-use std::net::Ipv4Addr;
+use std::net::{SocketAddr, SocketAddrV4, ToSocketAddrs};
 use std::{collections::HashMap, time::Duration, time::Instant};
+use std::{collections::VecDeque, net::Ipv4Addr};
 use std::{sync::atomic::AtomicI32, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
 
-// Note1: About "Rx" and "Tx" in this file: The "Rx" and "Tx" is from the perspective of the
-// device, lets say a mobile phone. Rx is anything that comes INTO the phone and Tx is
-// anything that goes OUT of the phone.
-//
-// Note2: The "vpn" seen in this file refers to the tun interface from the OS on the device
+// Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
 // in ios.
 
 // These are atomic because rust will complain loudly about mutable global variables
-static APPFD: AtomicI32 = AtomicI32::new(0);
+static VPNFD: AtomicI32 = AtomicI32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
 
 const HTTP_OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
@@ -40,9 +36,10 @@ const VPNTUN_IDX: usize = 1;
 const WEBPROXY_IDX: usize = 2;
 const GWTUN_IDX: usize = 3;
 const TUN_START: usize = 4;
-const VPNTUN: Token = Token(VPNTUN_IDX);
-const WEBPROXY: Token = Token(WEBPROXY_IDX);
-const GWTUN: Token = Token(GWTUN_IDX);
+const UNUSED_POLL: Token = Token(UNUSED_IDX);
+const VPNTUN_POLL: Token = Token(VPNTUN_IDX);
+const WEBPROXY_POLL: Token = Token(WEBPROXY_IDX);
+const GWTUN_POLL: Token = Token(GWTUN_IDX);
 
 const CLEANUP_NOW: usize = 5; // 5 seconds
 const CLEANUP_TCP_HALFOPEN: usize = 30; // 30 seconds
@@ -190,8 +187,16 @@ fn flow_close(key: &FlowV4Key, flow: &mut FlowV4, tx_socket: &mut Box<dyn Transp
     flow_alive(key, flow, false);
 }
 
+fn flow_fail(mut rx_socket: Box<dyn Transport>, rx_socket_idx: Token, poll: &mut Poll) {
+    rx_socket
+        .event_register(rx_socket_idx, poll, RegType::Dereg)
+        .ok();
+    rx_socket.close(0).ok();
+}
+
 fn flow_new(
     key: &FlowV4Key,
+    rx_socket_idx: Token,
     rx_socket: Box<dyn Transport>,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, TunInfo>,
@@ -214,10 +219,16 @@ fn flow_new(
     let tx_stream;
     if direct {
         tx_socket = *next_tun_idx;
-        let dest: Ipv4Addr = key.dip.parse().unwrap();
-        let mut tun = NetConn::new_client(dest, key.dport as usize, key.proto, true, None);
+        let mut tun = NetConn::new_client(
+            key.dip.to_string(),
+            key.dport as usize,
+            key.proto,
+            true,
+            None,
+        );
         match tun.dial() {
             Err(_) => {
+                flow_fail(rx_socket, rx_socket_idx, poll);
                 return;
             }
             Ok(()) => {}
@@ -235,6 +246,7 @@ fn flow_new(
             Err(e) => {
                 error!("Direct transport register failed {}", format!("{}", e));
                 tun.tun.close(0).ok();
+                flow_fail(rx_socket, rx_socket_idx, poll);
                 return;
             }
             Ok(_) => {}
@@ -252,9 +264,11 @@ fn flow_new(
                 _ => panic!("We expect a hashmap for gateway flows"),
             }
         } else {
+            flow_fail(rx_socket, rx_socket_idx, poll);
             return;
         }
     } else {
+        flow_fail(rx_socket, rx_socket_idx, poll);
         return;
     }
 
@@ -267,7 +281,7 @@ fn flow_new(
 
     let f = FlowV4 {
         rx_socket,
-        rx_socket_idx: UNUSED_IDX,
+        rx_socket_idx: rx_socket_idx.0,
         rx_stream: None,
         tx_stream,
         tx_socket,
@@ -656,7 +670,16 @@ fn proxyclient_rx(
                 },
                 Ok((_, data)) => {
                     if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
-                        flow_new(&key, tun.tun, flows, tuns, next_tun_idx, poll, gw_onboarded);
+                        flow_new(
+                            &key,
+                            tun_idx,
+                            tun.tun,
+                            flows,
+                            tuns,
+                            next_tun_idx,
+                            poll,
+                            gw_onboarded,
+                        );
                         // Send an HTTP-OK back to the client
                         if let Some(flow) = flows.get_mut(&key) {
                             flow.pending_rx.push_back(NxtBufs {
@@ -664,8 +687,13 @@ fn proxyclient_rx(
                                 bufs: vec![HTTP_OK.as_bytes().to_vec()],
                                 headroom: 0,
                             });
+                            let tun_info = TunInfo::Flow(key);
+                            proxyclient_tx(&tun_info, flows, tuns, poll);
+                            return Some(tun_info);
+                        } else {
+                            // Flow creation failed for whatever reason
+                            return None;
                         }
-                        return Some(TunInfo::Flow(key));
                     } else {
                         // We have to get a key for the proxy client, otherwise its unusable
                         tun.tun.event_register(tun_idx, poll, RegType::Dereg).ok();
@@ -699,9 +727,9 @@ fn proxyclient_tx(
     tun_info: &TunInfo,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     tuns: &mut HashMap<usize, TunInfo>,
-
     poll: &mut Poll,
 ) {
+    println!("Proxy tx");
     match tun_info {
         TunInfo::Flow(ref key) => {
             if let Some(flow) = flows.get_mut(&key) {
@@ -748,7 +776,7 @@ fn vpntun_rx(
                     return;
                 }
                 _ => {
-                    // This will trigger monitor_appfd() to close and cleanup etc..
+                    // This will trigger monitor_vpnfd() to close and cleanup etc..
                     tun.tun.close(0).ok();
                     return;
                 }
@@ -761,6 +789,7 @@ fn vpntun_rx(
                             let rx_socket = Box::new(Socket::new_client(&key, 1500));
                             flow_new(
                                 &key,
+                                UNUSED_POLL, /* This socket is not registered with mio poller */
                                 rx_socket,
                                 flows,
                                 tuns,
@@ -801,7 +830,9 @@ fn vpntun_rx(
         }
     }
     // We read max_pkts and looks like we have more to read, yield and reregister
-    tun.tun.event_register(VPNTUN, poll, RegType::Rereg).ok();
+    tun.tun
+        .event_register(VPNTUN_POLL, poll, RegType::Rereg)
+        .ok();
 }
 
 fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Vec<u8>)>) {
@@ -823,7 +854,7 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Vec<u8>)>) {
                     return;
                 }
                 _ => {
-                    // This will trigger monitor_appfd() to close and cleanup etc..
+                    // This will trigger monitor_vpnfd() to close and cleanup etc..
                     tun.tun.close(0).ok();
                     return;
                 }
@@ -847,7 +878,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         proxy_client: false,
     };
 
-    match tun.tun.event_register(GWTUN, poll, RegType::Reg) {
+    match tun.tun.event_register(GWTUN_POLL, poll, RegType::Reg) {
         Err(e) => {
             error!("Gateway transport register failed {}", format!("{}", e));
             tun.tun.close(0).ok();
@@ -866,7 +897,10 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         if gw_tun.tun.is_closed(0) {
             error!("Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
-            gw_tun.tun.event_register(GWTUN, poll, RegType::Dereg).ok();
+            gw_tun
+                .tun
+                .event_register(GWTUN_POLL, poll, RegType::Dereg)
+                .ok();
             close_gateway_flows(&mut agent.flows, gw_tun);
             agent.tuns.remove(&GWTUN_IDX);
             new_gw(agent, poll);
@@ -892,8 +926,8 @@ fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
     Box::new(vpn_tun)
 }
 
-fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
-    let fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
+fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
+    let fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
     if agent.vpn_fd != 0 && (agent.vpn_fd != fd || agent.vpn_tun.tun.is_closed(0)) {
         error!(
             "App transport closed, try opening again {}/{}/{}",
@@ -905,7 +939,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
         agent
             .vpn_tun
             .tun
-            .event_register(VPNTUN, poll, RegType::Dereg)
+            .event_register(VPNTUN_POLL, poll, RegType::Dereg)
             .ok();
         agent.vpn_fd = 0;
         if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
@@ -923,7 +957,7 @@ fn monitor_appfd(agent: &mut AgentInfo, poll: &mut Poll) {
             flows: TunFlow::NoFlow,
             proxy_client: false,
         };
-        match tun.tun.event_register(VPNTUN, poll, RegType::Reg) {
+        match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
             Err(e) => {
                 error!("App transport register failed {}", format!("{}", e));
                 agent.vpn_tun.tun.close(0).ok();
@@ -1075,7 +1109,7 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
     agent
         .proxy_tun
         .tun
-        .event_register(VPNTUN, poll, RegType::Reg)
+        .event_register(WEBPROXY_POLL, poll, RegType::Reg)
         .ok();
 }
 
@@ -1119,7 +1153,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
         for event in events.iter() {
             match event.token() {
-                VPNTUN => {
+                VPNTUN_POLL => {
                     if event.is_readable() {
                         vpntun_rx(
                             10, /* Read 10 packets and yield for other activities */
@@ -1138,7 +1172,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                         agent.vpn_tun.tx_ready = true;
                     }
                 }
-                WEBPROXY => {
+                WEBPROXY_POLL => {
                     if event.is_readable() {
                         proxy_listener(
                             &mut agent.proxy_tun,
@@ -1229,7 +1263,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
         // so make sure we monitor only every two secs
         if monitor_ager.elapsed() >= Duration::from_secs(2) {
             monitor_gw(&mut agent, &mut poll);
-            monitor_appfd(&mut agent, &mut poll);
+            monitor_vpnfd(&mut agent, &mut poll);
             monitor_ager = Instant::now();
         }
         if flow_ager.elapsed() >= Duration::from_secs(30) {
@@ -1257,14 +1291,14 @@ pub unsafe extern "C" fn agent_init(platform: usize, direct: usize) {
 // We EXPECT the fd provied to us to be already non blocking
 #[no_mangle]
 pub unsafe extern "C" fn agent_on(fd: i32) {
-    let old_fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
+    let old_fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
     error!("Agent on, old {}, new {}", old_fd, fd);
-    APPFD.store(fd, std::sync::atomic::Ordering::Relaxed);
+    VPNFD.store(fd, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn agent_off() {
-    let fd = APPFD.load(std::sync::atomic::Ordering::Relaxed);
+    let fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
     error!("Agent off {}", fd);
-    APPFD.store(0, std::sync::atomic::Ordering::Relaxed);
+    VPNFD.store(0, std::sync::atomic::Ordering::Relaxed);
 }
