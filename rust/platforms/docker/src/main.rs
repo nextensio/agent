@@ -95,7 +95,7 @@ fn login_page() -> rouille::Response {
 }
 
 fn onboard_status() -> rouille::Response {
-    if ONBOARDED.load(std::sync::atomic::Ordering::Relaxed) == false {
+    if ONBOARDED.load(std::sync::atomic::Ordering::Relaxed) {
         let mut response = Response::text("");
         response.status_code = 201;
         response
