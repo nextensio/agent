@@ -18,7 +18,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::{collections::HashMap, time::Duration, time::Instant};
-use std::{sync::atomic::AtomicI32, thread};
+use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
 
@@ -30,7 +30,7 @@ use websock::WebSession;
 static VPNFD: AtomicI32 = AtomicI32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
 static mut REGINFO: Option<Box<RegistrationInfo>> = None;
-static REGINFO_CHANGED: AtomicI32 = AtomicI32::new(0);
+static REGINFO_CHANGED: AtomicUsize = AtomicUsize::new(0);
 
 const NXT_AGENT_PROXY: usize = 8080;
 
@@ -184,6 +184,7 @@ struct AgentInfo {
     next_tun_idx: usize,
     vpn_tun: Tun,
     proxy_tun: Tun,
+    reginfo_changed: usize,
 }
 
 // Mark when the flow should be cleaned up. The internet RFCs stipulate
@@ -1074,6 +1075,21 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     }
 }
 
+fn monitor_onboard(agent: &mut AgentInfo) {
+    let cur_reginfo = REGINFO_CHANGED.load(std::sync::atomic::Ordering::Relaxed);
+    if agent.reginfo_changed == cur_reginfo {
+        return;
+    }
+    // If the onboarding changed, tear down the existing gateway tunnel
+    if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
+        // The gateway monitor will figure out that this is closed
+        gw_tun.tun().tun.close(0).ok();
+    }
+    agent.reginfo_changed = cur_reginfo;
+    unsafe { agent.reginfo = *REGINFO.take().unwrap() };
+    agent.idp_onboarded = true;
+}
+
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
         return;
@@ -1527,6 +1543,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
         // Note that we have a poll timeout of two seconds, but packets can keep the loop busy
         // so make sure we monitor only every two secs
         if monitor_ager.elapsed() >= Duration::from_secs(2) {
+            monitor_onboard(&mut agent);
             monitor_gw(&mut agent, &mut poll);
             monitor_vpnfd(&mut agent, &mut poll);
             monitor_ager = Instant::now();
