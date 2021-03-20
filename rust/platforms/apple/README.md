@@ -14,10 +14,10 @@
 - Register your apple developer account through Xcode preferences -> Account
 - Open NextensioAgent.xcodeproj file, go to nxtapp and nxtTunnel targets -> Sign & Capabilities to change the respective Team in order to build the apps with Network Extension successfully
 
-## Podfile
+## Okta SDK Installation 
 
-- Okta SDK uses CocoaPod for installation
-- pod install, will download OktaAuth, OktaJWT and OktaOIDC and create new xcode workspace file
+- Podfile: Okta SDK uses CocoaPod for installation
+- platforms/apple $ pod install --> will download OktaAuth, OktaJWT and OktaOIDC and create new xcode workspace file
 
 ## XCode Workspace
 
@@ -54,3 +54,18 @@
 
 ## Todo
 - Future: Use Nextensio IDP login and password, pass accessToken to gateway
+
+## Rust adaptation
+
+1.  install rust: $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+2.  source env: $ source $HOME/.cargo/env
+3.  add ios/macos targets: $ rustup target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin
+4.  check its working: $ rustup show
+5.  go to agent directory: $ cd agent/rust/agent
+6.  add: ~/.cargo/config: [net]
+                          git-fetch-with-cli = true
+7.  build ios for device: $ cargo build --target aarch64-apple-ios --release
+8.  build ios for simulator: $ cargo build --target x86_64-apple-ios --release
+9.  build ios for macosx: $ cargo build --target x86_64-apple-darwin --release
+10.  archive all into one package: $ lipo -create target/aarch64-apple-ios/release/libnextensio.a target/x86_64-apple-ios/release/libnextensio.a target/x86_64-apple-darwin/release/libnextensio.a
+11. check the library: $ lipo -info target/libnextensio.a

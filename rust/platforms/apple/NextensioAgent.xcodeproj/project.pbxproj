@@ -101,7 +101,7 @@
 		67D65F0A0443621B49F2E9DA /* Pods-NextensioAppMacOSX.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioAppMacOSX.debug.xcconfig"; path = "Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX.debug.xcconfig"; sourceTree = "<group>"; };
 		6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NextensioPacketTunnelMacOSX.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B0BA59625D8FDE300F3B1C6 /* NextensioAppMacOSX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioAppMacOSX.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		6B2042D925D8A47E001A7129 /* libnxt.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libnxt.a"; path = "../../../../../../../../Documents/agent/go/platforms/apple/libnxt.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B2042D925D8A47E001A7129 /* libnxt.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libnxt.a; path = ../../../../../../../../Documents/agent/go/platforms/apple/libnxt.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6B9925D113630051991B /* NextensioApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6B9C25D113630051991B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6B2D6B9E25D113630051991B /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -310,6 +310,20 @@
 			passBuildSettingsInEnvironment = 1;
 			productName = NextensioGoBridgeMacOSX;
 		};
+		6BD87368260654C3006ECD61 /* NextensioRustBridge */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(ACTION)";
+			buildConfigurationList = 6BD8736B260654C3006ECD61 /* Build configuration list for PBXLegacyTarget "NextensioRustBridge" */;
+			buildPhases = (
+			);
+			buildToolPath = ./build_rust_bridge.sh;
+			buildWorkingDirectory = "$(PROJECT_DIR)/Sources/NextensioRustBridge";
+			dependencies = (
+			);
+			name = NextensioRustBridge;
+			passBuildSettingsInEnvironment = 1;
+			productName = NextensioRustBridge;
+		};
 /* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
@@ -412,6 +426,9 @@
 					6B2D6BB825D114240051991B = {
 						CreatedOnToolsVersion = 12.4;
 					};
+					6BD87368260654C3006ECD61 = {
+						CreatedOnToolsVersion = 12.4;
+					};
 				};
 			};
 			buildConfigurationList = 6B2D6B9425D113630051991B /* Build configuration list for PBXProject "NextensioAgent" */;
@@ -433,6 +450,7 @@
 				6B0BA58425D8FDE300F3B1C6 /* NextensioAppMacOSX */,
 				6B0BA57425D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX */,
 				6B2042E525D8A664001A7129 /* NextensioGoBridgeMacOSX */,
+				6BD87368260654C3006ECD61 /* NextensioRustBridge */,
 			);
 		};
 /* End PBXProject section */
@@ -1078,6 +1096,33 @@
 			};
 			name = Release;
 		};
+		6BD87369260654C3006ECD61 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		6BD8736A260654C3006ECD61 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1140,6 +1185,15 @@
 			buildConfigurations = (
 				6B2D6BC625D114240051991B /* Debug */,
 				6B2D6BC725D114240051991B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6BD8736B260654C3006ECD61 /* Build configuration list for PBXLegacyTarget "NextensioRustBridge" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BD87369260654C3006ECD61 /* Debug */,
+				6BD8736A260654C3006ECD61 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
