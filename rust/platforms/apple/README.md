@@ -34,19 +34,19 @@
 
 ## Building iOS target in Xcode
 
-- For RUST agent:
+- For RUST agent (warning: rust compilation is slow)
 - build Target:NextensioRustBridge, pick iPhone (simulator/device) to generate libnextensioIOS.a 
 - build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
 
 - For GO agent:
-- build Target:NextensioGoBridgeIOS, pick iPhone (simulator/device) to generate libnxt.a 
+- build Target:NextensioGoBridge, pick iPhone (simulator/device) to generate libnxt.a 
 - build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
 
 ## Building MacOS target in Xcode
 
-- For RUST agent:
-- build Target:NextensioRustBridge, pick My Mac to generate libnextensioMacOSX.a 
-- build Target:NextensioApp, pick My Mac to generate the NextensioAgent app and NextensioPacketTunnel appex
+- For RUST agent (warning: rust compilation is slow)
+- build Target:NextensioRustBridgeMacOSX, pick My Mac to generate libnextensioMacOSX.a 
+- build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgent app and NextensioPacketTunnel appex
 
 - For GO agent:
 - build Target:NextensioGoBridgeMacOSX, pick My Mac to generate libnxt.a 

@@ -8,14 +8,6 @@ echo "[PROJECT_DIR] "$PROJECT_DIR
 #    exit 1
 #fi
 
-if [ "$1" = "ios" ]; then
-  echo "[BUILDING TARGET] IOS"
-elif [ "$1" = "macosx" ]; then
-  echo "[BUILDING TARGET] MacOSX"
-else
-  echo "[BUILDING TARGET] IOS MacOSX"
-fi
-
 RUST_TARGET=$PROJECT_DIR/../../target
 IOS_LIB=libnextensioIOS.a
 MACOSX_LIB=libnextensioMacOSX.a
@@ -25,13 +17,19 @@ DEST_TARGET=$PROJECT_DIR/NextensioRustBridge
 echo "[DEST_TARGET] "$DEST_TARGET
 
 # build all apple targets
-source $PROJECT_DIR/../../agent/build_apple.sh
-
-rm -f $DEST_TARGET/$IOS_LIB
-rm -f $DEST_TARGET/$MACOSX_LIB
-
-lipo -create $RUST_TARGET/aarch64-apple-ios/release/$NXT_LIB $RUST_TARGET/x86_64-apple-ios/release/$NXT_LIB -output $DEST_TARGET/$IOS_LIB
-lipo -create $RUST_TARGET/x86_64-apple-darwin/release/$NXT_LIB -output $DEST_TARGET/$MACOSX_LIB
-
-lipo -info $DEST_TARGET/$IOS_LIB
-lipo -info $DEST_TARGET/$MACOSX_LIB
+if [ "$1" = "ios" ]; then
+  echo "[BUILDING TARGET] IOS"
+  source $PROJECT_DIR/../../agent/build_apple.sh ios
+  rm -f $DEST_TARGET/$IOS_LIB
+  lipo -create $RUST_TARGET/aarch64-apple-ios/release/$NXT_LIB $RUST_TARGET/x86_64-apple-ios/release/$NXT_LIB -output $DEST_TARGET/$IOS_LIB
+  lipo -info $DEST_TARGET/$IOS_LIB
+elif [ "$1" = "macosx" ]; then
+  echo "[BUILDING TARGET] MacOSX"
+  source $PROJECT_DIR/../../agent/build_apple.sh macosx
+  rm -f $DEST_TARGET/$MACOSX_LIB
+  lipo -create $RUST_TARGET/x86_64-apple-darwin/release/$NXT_LIB -output $DEST_TARGET/$MACOSX_LIB
+  lipo -info $DEST_TARGET/$MACOSX_LIB
+else
+  echo "[MISSING TARGET] exiting... "
+  exit 2
+fi

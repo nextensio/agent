@@ -292,9 +292,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXLegacyTarget section */
+		6B39905B2607A0440099DE59 /* NextensioRustBridgeMacOSX */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = macosx;
+			buildConfigurationList = 6B39905C2607A0440099DE59 /* Build configuration list for PBXLegacyTarget "NextensioRustBridgeMacOSX" */;
+			buildPhases = (
+			);
+			buildToolPath = ./build_rust_bridge.sh;
+			buildWorkingDirectory = "$(PROJECT_DIR)/NextensioRustBridge";
+			dependencies = (
+			);
+			name = NextensioRustBridgeMacOSX;
+			passBuildSettingsInEnvironment = 1;
+			productName = NextensioRustBridgeMacOSX;
+		};
 		6BD87368260654C3006ECD61 /* NextensioRustBridge */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(ACTION)";
+			buildArgumentsString = ios;
 			buildConfigurationList = 6BD8736B260654C3006ECD61 /* Build configuration list for PBXLegacyTarget "NextensioRustBridge" */;
 			buildPhases = (
 			);
@@ -401,6 +415,9 @@
 					6B2D6BB825D114240051991B = {
 						CreatedOnToolsVersion = 12.4;
 					};
+					6B39905B2607A0440099DE59 = {
+						CreatedOnToolsVersion = 12.4;
+					};
 					6BD87368260654C3006ECD61 = {
 						CreatedOnToolsVersion = 12.4;
 					};
@@ -424,6 +441,7 @@
 				6B0BA58425D8FDE300F3B1C6 /* NextensioAppMacOSX */,
 				6B0BA57425D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX */,
 				6BD87368260654C3006ECD61 /* NextensioRustBridge */,
+				6B39905B2607A0440099DE59 /* NextensioRustBridgeMacOSX */,
 			);
 		};
 /* End PBXProject section */
@@ -1027,6 +1045,33 @@
 			};
 			name = Release;
 		};
+		6B39905D2607A0440099DE59 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		6B39905E2607A0440099DE59 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2CM26W7US8;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 		6BD87369260654C3006ECD61 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1098,6 +1143,15 @@
 			buildConfigurations = (
 				6B2D6BC625D114240051991B /* Debug */,
 				6B2D6BC725D114240051991B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6B39905C2607A0440099DE59 /* Build configuration list for PBXLegacyTarget "NextensioRustBridgeMacOSX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B39905D2607A0440099DE59 /* Debug */,
+				6B39905E2607A0440099DE59 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
