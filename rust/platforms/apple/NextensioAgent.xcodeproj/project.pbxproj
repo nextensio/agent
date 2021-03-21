@@ -51,13 +51,6 @@
 			remoteGlobalIDString = 6B2D6BB825D114240051991B;
 			remoteInfo = NextensioPacketTunnel;
 		};
-		6BB0152A260666DF00EA4881 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 6BE9EA1725D9881F006DCD29;
-			remoteInfo = NextensioAppMacOS;
-		};
 		6BF3B7A025D9B4910023DD0B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 6B2D6B9125D113630051991B /* Project object */;
@@ -115,7 +108,6 @@
 		6BB01523260666DF00EA4881 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6BB01524260666DF00EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB01525260666DF00EA4881 /* SignInViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignInViewController.swift; sourceTree = "<group>"; };
-		6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = NextensioAppMacOS.xcodeproj; sourceTree = "<group>"; };
 		6BB015392606681100EA4881 /* ViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		6BB0153A2606681100EA4881 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6BB0153B2606681100EA4881 /* NextensioApp.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioApp.entitlements; sourceTree = "<group>"; };
@@ -127,7 +119,6 @@
 		6BB015432606681100EA4881 /* SceneDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		6BB015562606682C00EA4881 /* Info-MacOSX.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "Info-MacOSX.plist"; sourceTree = "<group>"; };
-		6BB015572606682C00EA4881 /* NextensioAgent-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NextensioAgent-Go-Bridge.h"; sourceTree = "<group>"; };
 		6BB015582606682C00EA4881 /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 		6BB015592606682C00EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB0155A2606682C00EA4881 /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
@@ -242,18 +233,9 @@
 				6BB01523260666DF00EA4881 /* AppDelegate.swift */,
 				6BB01524260666DF00EA4881 /* Info.plist */,
 				6BB01525260666DF00EA4881 /* SignInViewController.swift */,
-				6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */,
 			);
 			name = NextensioAppMacOSX;
 			path = NextensioAgent/NextensioAppMacOSX;
-			sourceTree = "<group>";
-		};
-		6BB01527260666DF00EA4881 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				6BB0152B260666DF00EA4881 /* NextensioAppMacOS.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		6BB015382606681100EA4881 /* NextensioApp */ = {
@@ -278,7 +260,6 @@
 			children = (
 				6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */,
 				6BB015562606682C00EA4881 /* Info-MacOSX.plist */,
-				6BB015572606682C00EA4881 /* NextensioAgent-Go-Bridge.h */,
 				6BB015582606682C00EA4881 /* NextensioPacketTunnel.entitlements */,
 				6BB015592606682C00EA4881 /* Info.plist */,
 				6BB0155A2606682C00EA4881 /* Socket.swift */,
@@ -426,12 +407,6 @@
 			mainGroup = 6B2D6B9025D113630051991B;
 			productRefGroup = 6B2D6B9A25D113630051991B /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = 6BB01527260666DF00EA4881 /* Products */;
-					ProjectRef = 6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				6B2D6B9825D113630051991B /* NextensioApp */,
@@ -442,16 +417,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXReferenceProxy section */
-		6BB0152B260666DF00EA4881 /* NextensioAppMacOS.app */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.application;
-			path = NextensioAppMacOS.app;
-			remoteRef = 6BB0152A260666DF00EA4881 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
 		6B0BA57B25D8FAE300F3B1C6 /* Resources */ = {
