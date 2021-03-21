@@ -16,28 +16,41 @@
 
 ## Okta SDK Installation 
 
-- Podfile: Okta SDK uses CocoaPod for installation
-- platforms/apple $ pod install --> will download OktaAuth, OktaJWT and OktaOIDC and create new xcode workspace file
+- Podfile: CocoaPod configuration to download OktaAuth/JWT/OIDC
+-
+- For RUST agent:
+- $ cd rust/platforms/apple
+- $ pod install
+-
+- For GO agent:
+- $ cd go/platforms/apple
+- $ pod install
+-
+- This creates new xcode workspace file
 
-## XCode Workspace
+## Load XCode
 
 - Open NextensioAgent.xcworkspace (don't use NextensioAgent.xcodeproj)
 
 ## Building iOS target in Xcode
 
-- iOS build
-- First: build Target:NextensioGoBridgeIOS and pick iPhone X (simulator/device) to generate libnxt.a 
-- Second: build Target:NextensioApp and pick iPhone X (simulator/device) to generate the NextensioAgent app
-- (if second step doesn't generate PacketTunnel appex, go to third step and re-do second step)
-- Third: build Target:NextensioPacketTunnel and pick iPhone X (simulator/device) to generate the NextensioPacketTunnel appex
+- For RUST agent:
+- build Target:NextensioRustBridge, pick iPhone (simulator/device) to generate libnextensioIOS.a 
+- build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
+
+- For GO agent:
+- build Target:NextensioGoBridgeIOS, pick iPhone (simulator/device) to generate libnxt.a 
+- build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
 
 ## Building MacOS target in Xcode
 
-- MacOS build
-- First: build Target:NextensioGoBridgeMacOSX and pick my mac to generate libnxt.a 
-- Second: build Target:NextensioAppMacOSX and pick my mac to generate the NextensioAgentAppMacOSX app
-- (if second step doesn't generate PacketTunnel appex, go to third step and re-do second step)
-- Third: build Target:NextensioPacketTunnelMacOSX and pick my mac to generate the NextensioPacketTunnel appex
+- For RUST agent:
+- build Target:NextensioRustBridge, pick My Mac to generate libnextensioMacOSX.a 
+- build Target:NextensioApp, pick My Mac to generate the NextensioAgent app and NextensioPacketTunnel appex
+
+- For GO agent:
+- build Target:NextensioGoBridgeMacOSX, pick My Mac to generate libnxt.a 
+- build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgentAppMacOSX app and NextensioPacketTunnelMacOS appex
 
 ## Source Code 
 
@@ -52,21 +65,13 @@
 - By default, the code will connect directly to internet -- direct variable set to 1 in initNextensioAgent() and seconds var to 1.0 in startTunnel
 - To connect to nextensio -- change direct var from 1 to 0 in initNextensioAgent() and seconds var to 30.0 in startTunnel
 
-## Todo
-- Future: Use Nextensio IDP login and password, pass accessToken to gateway
+## Rust adaptation (Installation)
 
-## Rust adaptation
-
-1.  install rust: $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-                  $ cargo install --force cbindgen
-2.  source env: $ source $HOME/.cargo/env
-3.  add ios/macos targets: $ rustup target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin
-4.  check its working: $ rustup show
-5.  go to agent directory: $ cd agent/rust/agent
-6.  add: ~/.cargo/config: [net]
-                          git-fetch-with-cli = true
-7.  build ios for device: $ cargo build --target aarch64-apple-ios --release
-8.  build ios for simulator: $ cargo build --target x86_64-apple-ios --release
-9.  build ios for macosx: $ cargo build --target x86_64-apple-darwin --release
-10.  archive all into one package: $ lipo -create target/aarch64-apple-ios/release/libnextensio.a target/x86_64-apple-ios/release/libnextensio.a target/x86_64-apple-darwin/release/libnextensio.a
-11. check the library: $ lipo -info target/libnextensio.a
+- install rust: $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+- install cbindgen, to generate C headerfile for swift: $ cargo install --force cbindgen
+- if needed to re-generate the C headerfile: $ cbindgen -l C -o nxt-api.h
+- source env: $ source $HOME/.cargo/env
+- add ios/macos targets: $ rustup target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin
+- check its working: $ rustup show
+- add: $HOME/.cargo/config: [net]
+                            git-fetch-with-cli = true
