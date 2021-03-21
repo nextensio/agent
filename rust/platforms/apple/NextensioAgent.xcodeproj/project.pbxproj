@@ -7,7 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		00C55D284CA27BE21ECFFE16 /* Pods_NextensioApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2E276486B7FB9D74970EA04 /* Pods_NextensioApp.framework */; };
+		1B533CB6E05BB6ABF91F793C /* Pods_NextensioApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3E26DE199F62AC7B6B0E43F9 /* Pods_NextensioApp.framework */; };
+		6358D1A52EEBB71937B3B079 /* Pods_NextensioAppMacOSX.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7AB6F63FA10C05FCB98854C0 /* Pods_NextensioAppMacOSX.framework */; };
 		6B01CCE12607947700AA1D71 /* AuthFlowCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */; };
 		6B01CCE22607947700AA1D71 /* AuthFlowCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */; };
 		6B01CCE32607947700AA1D71 /* AuthFlowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDF2607947600AA1D71 /* AuthFlowCoordinator.swift */; };
@@ -43,7 +44,6 @@
 		6BB015622606682D00EA4881 /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0155A2606682C00EA4881 /* Socket.swift */; };
 		6BB015632606682D00EA4881 /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0155A2606682C00EA4881 /* Socket.swift */; };
 		6BF3B7BA25D9BBDF0023DD0B /* NextensioPacketTunnelMacOSX.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		F2AD92CEC5ECE34D2A3E347E /* Pods_NextensioAppMacOSX.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 09877EEBE8A38ECD10BB3928 /* Pods_NextensioAppMacOSX.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,7 +89,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		09877EEBE8A38ECD10BB3928 /* Pods_NextensioAppMacOSX.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_NextensioAppMacOSX.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E26DE199F62AC7B6B0E43F9 /* Pods_NextensioApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_NextensioApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AuthFlowCoordinatorProtocol.swift; sourceTree = "<group>"; };
 		6B01CCDF2607947600AA1D71 /* AuthFlowCoordinator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AuthFlowCoordinator.swift; sourceTree = "<group>"; };
 		6B01CCE02607947600AA1D71 /* AuthBaseViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AuthBaseViewController.swift; sourceTree = "<group>"; };
@@ -126,11 +126,11 @@
 		6BB015592606682C00EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB0155A2606682C00EA4881 /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
 		6BB0155B2606682C00EA4881 /* NextensioPacketTunnelMacOSXDebug.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnelMacOSXDebug.entitlements; sourceTree = "<group>"; };
-		791EC32399322C8F0F62C3FB /* Pods-NextensioAppMacOSX.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioAppMacOSX.release.xcconfig"; path = "Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX.release.xcconfig"; sourceTree = "<group>"; };
-		9D4158EBEF4B039E34EB82CF /* Pods-NextensioAppMacOSX.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioAppMacOSX.debug.xcconfig"; path = "Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX.debug.xcconfig"; sourceTree = "<group>"; };
-		B2E276486B7FB9D74970EA04 /* Pods_NextensioApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_NextensioApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		BC84E2A7DE948FF09902588F /* Pods-NextensioApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioApp.release.xcconfig"; path = "Target Support Files/Pods-NextensioApp/Pods-NextensioApp.release.xcconfig"; sourceTree = "<group>"; };
-		F9DFD7D224A1F24F81D7FB16 /* Pods-NextensioApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioApp.debug.xcconfig"; path = "Target Support Files/Pods-NextensioApp/Pods-NextensioApp.debug.xcconfig"; sourceTree = "<group>"; };
+		7AB6F63FA10C05FCB98854C0 /* Pods_NextensioAppMacOSX.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_NextensioAppMacOSX.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F630FACE50CC6373CCD54C4 /* Pods-NextensioAppMacOSX.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioAppMacOSX.release.xcconfig"; path = "Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX.release.xcconfig"; sourceTree = "<group>"; };
+		BDF4037533DE62BBBD1A121F /* Pods-NextensioApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioApp.debug.xcconfig"; path = "Target Support Files/Pods-NextensioApp/Pods-NextensioApp.debug.xcconfig"; sourceTree = "<group>"; };
+		DA926445737F385129E1E14E /* Pods-NextensioAppMacOSX.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioAppMacOSX.debug.xcconfig"; path = "Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX.debug.xcconfig"; sourceTree = "<group>"; };
+		EEDAB654FEDF24FC72C8EC9B /* Pods-NextensioApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioApp.release.xcconfig"; path = "Target Support Files/Pods-NextensioApp/Pods-NextensioApp.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,7 +148,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6B0BA58C25D8FDE300F3B1C6 /* NetworkExtension.framework in Frameworks */,
-				F2AD92CEC5ECE34D2A3E347E /* Pods_NextensioAppMacOSX.framework in Frameworks */,
+				6358D1A52EEBB71937B3B079 /* Pods_NextensioAppMacOSX.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,7 +157,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */,
-				00C55D284CA27BE21ECFFE16 /* Pods_NextensioApp.framework in Frameworks */,
+				1B533CB6E05BB6ABF91F793C /* Pods_NextensioApp.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -176,10 +176,10 @@
 		3A0772C3F802395AF14B2571 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				F9DFD7D224A1F24F81D7FB16 /* Pods-NextensioApp.debug.xcconfig */,
-				BC84E2A7DE948FF09902588F /* Pods-NextensioApp.release.xcconfig */,
-				9D4158EBEF4B039E34EB82CF /* Pods-NextensioAppMacOSX.debug.xcconfig */,
-				791EC32399322C8F0F62C3FB /* Pods-NextensioAppMacOSX.release.xcconfig */,
+				BDF4037533DE62BBBD1A121F /* Pods-NextensioApp.debug.xcconfig */,
+				EEDAB654FEDF24FC72C8EC9B /* Pods-NextensioApp.release.xcconfig */,
+				DA926445737F385129E1E14E /* Pods-NextensioAppMacOSX.debug.xcconfig */,
+				9F630FACE50CC6373CCD54C4 /* Pods-NextensioAppMacOSX.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -224,8 +224,8 @@
 			isa = PBXGroup;
 			children = (
 				6B2D6BBB25D114240051991B /* NetworkExtension.framework */,
-				B2E276486B7FB9D74970EA04 /* Pods_NextensioApp.framework */,
-				09877EEBE8A38ECD10BB3928 /* Pods_NextensioAppMacOSX.framework */,
+				3E26DE199F62AC7B6B0E43F9 /* Pods_NextensioApp.framework */,
+				7AB6F63FA10C05FCB98854C0 /* Pods_NextensioAppMacOSX.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -330,12 +330,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6B0BA59325D8FDE300F3B1C6 /* Build configuration list for PBXNativeTarget "NextensioAppMacOSX" */;
 			buildPhases = (
-				80735AFF7EF0064F14D2E0D5 /* [CP] Check Pods Manifest.lock */,
+				466B0DEF986774FBA6A8346B /* [CP] Check Pods Manifest.lock */,
 				6B0BA58725D8FDE300F3B1C6 /* Sources */,
 				6B0BA58B25D8FDE300F3B1C6 /* Frameworks */,
 				6B0BA58D25D8FDE300F3B1C6 /* Resources */,
 				6BE9E96225D90D69006DCD29 /* Embed App Extensions */,
-				8EBF0AE92B790492F9948FC3 /* [CP] Embed Pods Frameworks */,
+				CB15052679C2B684EE1277B4 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -351,12 +351,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6B2D6BAD25D113640051991B /* Build configuration list for PBXNativeTarget "NextensioApp" */;
 			buildPhases = (
-				CC620867C4EE323ED2AACCAF /* [CP] Check Pods Manifest.lock */,
+				C6C0CFD48054F6F4FEC69F1A /* [CP] Check Pods Manifest.lock */,
 				6B2D6B9525D113630051991B /* Sources */,
 				6B2D6B9625D113630051991B /* Frameworks */,
 				6B2D6B9725D113630051991B /* Resources */,
 				6B2D6BC825D114240051991B /* Embed App Extensions */,
-				1B020B01E894CE05329A31FB /* [CP] Embed Pods Frameworks */,
+				F4FA7C267DED5673A52B8F7C /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -471,24 +471,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		1B020B01E894CE05329A31FB /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-NextensioApp/Pods-NextensioApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-NextensioApp/Pods-NextensioApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NextensioApp/Pods-NextensioApp-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		80735AFF7EF0064F14D2E0D5 /* [CP] Check Pods Manifest.lock */ = {
+		466B0DEF986774FBA6A8346B /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -510,24 +493,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		8EBF0AE92B790492F9948FC3 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		CC620867C4EE323ED2AACCAF /* [CP] Check Pods Manifest.lock */ = {
+		C6C0CFD48054F6F4FEC69F1A /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -547,6 +513,40 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		CB15052679C2B684EE1277B4 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		F4FA7C267DED5673A52B8F7C /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-NextensioApp/Pods-NextensioApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-NextensioApp/Pods-NextensioApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NextensioApp/Pods-NextensioApp-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -711,9 +711,9 @@
 		};
 		6B0BA59425D8FDE300F3B1C6 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 9D4158EBEF4B039E34EB82CF /* Pods-NextensioAppMacOSX.debug.xcconfig */;
+			baseConfigurationReference = DA926445737F385129E1E14E /* Pods-NextensioAppMacOSX.debug.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
@@ -734,15 +734,18 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 6;
-				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
+				USER_HEADER_SEARCH_PATHS = (
+					"${SRCROOT}/**",
+					"$(inherited)",
+				);
 			};
 			name = Debug;
 		};
 		6B0BA59525D8FDE300F3B1C6 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 791EC32399322C8F0F62C3FB /* Pods-NextensioAppMacOSX.release.xcconfig */;
+			baseConfigurationReference = 9F630FACE50CC6373CCD54C4 /* Pods-NextensioAppMacOSX.release.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
@@ -762,7 +765,10 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 6;
-				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
+				USER_HEADER_SEARCH_PATHS = (
+					"${SRCROOT}/**",
+					"$(inherited)",
+				);
 			};
 			name = Release;
 		};
@@ -890,9 +896,9 @@
 		};
 		6B2D6BAE25D113640051991B /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F9DFD7D224A1F24F81D7FB16 /* Pods-NextensioApp.debug.xcconfig */;
+			baseConfigurationReference = BDF4037533DE62BBBD1A121F /* Pods-NextensioApp.debug.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
@@ -915,15 +921,18 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
+				USER_HEADER_SEARCH_PATHS = (
+					"${SRCROOT}/**",
+					"$(inherited)",
+				);
 			};
 			name = Debug;
 		};
 		6B2D6BAF25D113640051991B /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = BC84E2A7DE948FF09902588F /* Pods-NextensioApp.release.xcconfig */;
+			baseConfigurationReference = EEDAB654FEDF24FC72C8EC9B /* Pods-NextensioApp.release.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
@@ -945,7 +954,10 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
+				USER_HEADER_SEARCH_PATHS = (
+					"${SRCROOT}/**",
+					"$(inherited)",
+				);
 			};
 			name = Release;
 		};
