@@ -23,19 +23,6 @@ public enum NextensioGoBridgeLogLevel: Int32 {
     case error = 2
 }
 
-// logger_cb_t  -> function pointer defined in nxt.h
-var loggerHandler : logger_cb_t = { context, level, msg in
-    guard let context = context, let message = msg else { return }
-
-    let unretainedSelf = Unmanaged<PacketTunnelProvider>.fromOpaque(context)
-        .takeUnretainedValue()
-    
-    let swiftString = String(cString: msg!)
-    let tunnelLogLevel = NextensioGoBridgeLogLevel(rawValue: level) ?? .debug
-    
-    NSLog("go-bridge level: \(tunnelLogLevel) msg: \(swiftString)")
-}
-
 class PacketTunnelProvider: NEPacketTunnelProvider {
     var session: NWUDPSession? = nil
     var connection: Socket = Socket()
@@ -205,29 +192,29 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // Setup NextensioAgent log handler.
     private func setupNextensioAgentLogHandler() {
         let context = Unmanaged.passUnretained(self).toOpaque()
-        NSLog("go-bridge nxtLogger... ")
-        nxtLogger(context, loggerHandler)
+        NSLog("rust-bridge nxtLogger... ")
+        //nxtLogger(context, loggerHandler)
     }
     
     // init NextensioAgent .
     private func initNextensioAgent() {
         let direct : Int32 = 1
-        NSLog("go-bridge nxtInit... direct: \(direct)")
-        nxtInit(direct)
+        NSLog("rust-bridge nxtInit... direct: \(direct)")
+        //nxtInit(direct)
     }
     
     // turn on NextensioAgent .
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("go-bridge nxtOn... ")
-        nxtOn(tunIf)
+        NSLog("rust-bridge nxtOn... ")
+        //nxtOn(tunIf)
     }
     
     // turn off NextensioAgent .
     private func turnOffNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("go-bridge nxtOff... ")
-        nxtOff(tunIf)
+        NSLog("rust-bridge nxtOff... ")
+        agent_off()
     }
 }
 

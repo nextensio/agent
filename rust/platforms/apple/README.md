@@ -58,6 +58,7 @@
 ## Rust adaptation
 
 1.  install rust: $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+                  $ cargo install --force cbindgen
 2.  source env: $ source $HOME/.cargo/env
 3.  add ios/macos targets: $ rustup target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin
 4.  check its working: $ rustup show
