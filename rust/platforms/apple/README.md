@@ -40,9 +40,9 @@ $ pod install
 
 - Go to NextensioApp and NextensioPacketTunnel Targets, Build Phases -> Copy Bundle Bundle Resources -> remove Info.Plist, this is added when you do 'pod install'. For some reason, its a duplicate, xcode compilation doesn't like it.
 
-- For RUST agent (warning: rust compilation is slow)
+- For RUST agent (warning: rust compilation is slow):
 ```
-build Target:NextensioRustBridge, pick My Mac to generate libnextensioIOS.a (for x86_64 simulator/device)
+build Target:NextensioRustBridge, pick My Mac to generate libnextensioIOS.a (My Mac picked for x86_64 simulator & ARM64 devices)
 build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
 ```
 
@@ -54,7 +54,7 @@ build Target:NextensioApp, pick iPhone (simulator/device) to generate the Nexten
 
 ## Building MacOS target in Xcode
 
-- For RUST agent (warning: rust compilation is slow)
+- For RUST agent (warning: rust compilation is slow):
 ```
 build Target:NextensioRustBridgeMacOSX, pick My Mac to generate libnextensioMacOSX.a 
 build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgent app and NextensioPacketTunnel appex

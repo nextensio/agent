@@ -33,3 +33,5 @@ else
   echo "[MISSING TARGET] exiting... "
   exit 2
 fi
+
+exit 0

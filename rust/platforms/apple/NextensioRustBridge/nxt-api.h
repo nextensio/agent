@@ -11,16 +11,16 @@
 #include <stdlib.h>
 
 typedef struct CRegistrationInfo {
-  const char *host;
-  const char *access_token;
-  const char *connect_id;
-  const char *const *domains;
-  int num_domains;
-  const char *ca_cert;
-  const char *userid;
-  const char *uuid;
-  const char *const *services;
-  int num_services;
+    char *host;
+    char *access_token;
+    char *connect_id;
+    char *domains;
+    int num_domains;
+    char *ca_cert;
+    char *userid;
+    char *uuid;
+    char *services;
+    int num_services;
 } CRegistrationInfo;
 
 void agent_init(uintptr_t platform, uintptr_t direct);

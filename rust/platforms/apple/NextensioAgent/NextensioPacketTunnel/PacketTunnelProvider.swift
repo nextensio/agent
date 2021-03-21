@@ -31,13 +31,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override init() {
         super.init()
-        
-        NSLog("Initialize Nextensio Agent...")
-        
-        // start the agent first
-        self.setupNextensioAgentLogHandler()
+        // start the agent
         self.initNextensioAgent()
-        
     }
     
     // These are core methods for Nextensio VPN tunnelling
@@ -72,15 +67,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         NSLog("Setup connection to agent \(serverAddress) \(serverPort)")
 
         self.connection.open(host: serverAddress, port: serverPort)
-
-        // send a test message...
-        // var bytes: [UInt8] = [11, 22, 33, 44, 55, 66, 77, 88]
-        // let uint8Pointer = UnsafeMutablePointer<UInt8>.allocate(capacity: 8)
-        // uint8Pointer.initialize(from: &bytes, count: 8)
-
-        // let message = Data.init(bytes: uint8Pointer, count: 8)
-        // logPacket(message, prefix: "Test packet")
-        // self.connection.send(bytes: message)
     }
     
     private func setupPacketTunnelNetworkSettings() {
@@ -111,7 +97,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let refresh = (conf["refresh"] as! String)
         NSLog("accessToken: \(access)")
         NSLog("refreshToken: \(refresh)")
-
+        
+        onboardNextensioAgent(accessToken: access)
+ 
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
             self.pendingStartCompletion?(nil)
@@ -135,8 +123,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             self.pendingStartCompletion = completionHandler
             self.setupPacketTunnelNetworkSettings()
         }
-    
-        //self.tunProxy()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
@@ -189,32 +175,54 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
           }
     }
     
-    // Setup NextensioAgent log handler.
-    private func setupNextensioAgentLogHandler() {
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        NSLog("rust-bridge nxtLogger... ")
-        //nxtLogger(context, loggerHandler)
+    // onboard NextensioAgent (access token)
+    private func onboardNextensioAgent(accessToken: String) {
+        var registration = CRegistrationInfo()
+        
+        NSLog("rust-bridge onboard agent")
+
+        registration.access_token = UnsafeMutablePointer<Int8>(mutating: (accessToken as NSString).utf8String)
+        registration.num_domains = 1
+        registration.num_services = 1
+        
+        // onboard(registration)
     }
     
-    // init NextensioAgent .
+    // init NextensioAgent
     private func initNextensioAgent() {
-        let direct : Int32 = 1
-        NSLog("rust-bridge nxtInit... direct: \(direct)")
-        //nxtInit(direct)
+        let direct : UInt = 1
+        NSLog("rust-bridge agent_init, direct: \(direct)")
+        agent_init(1 /*apple*/, direct)
     }
     
-    // turn on NextensioAgent .
+    // turn on NextensioAgent
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("rust-bridge nxtOn... ")
-        //nxtOn(tunIf)
+        NSLog("rust-bridge agent_on, tunif: \(tunIf)")
+        agent_on(tunIf);
     }
     
-    // turn off NextensioAgent .
+    // turn off NextensioAgent
     private func turnOffNextensioAgent() {
-        let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("rust-bridge nxtOff... ")
+        NSLog("rust-bridge agent_off... ")
         agent_off()
+    }
+}
+
+// Initialize RegistrationInfo
+extension CRegistrationInfo {
+    init() {
+        let emptyStr = UnsafeMutablePointer<Int8>(mutating: ("" as NSString).utf8String)
+        self.init(host: emptyStr,
+                  access_token: emptyStr,
+                  connect_id: emptyStr,
+                  domains: emptyStr,
+                  num_domains: 0,
+                  ca_cert: emptyStr,
+                  userid: emptyStr,
+                  uuid: emptyStr,
+                  services: emptyStr,
+                  num_services: 0)
     }
 }
 
