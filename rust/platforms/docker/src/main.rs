@@ -191,9 +191,9 @@ fn okta_results(controller: String, services: String) {
                                             ONBOARDED.store(true, std::sync::atomic::Ordering::Relaxed);
                                             let nxt_services;
                                             if services != "" {
-                                             nxt_services = format!("{} {}", o.connectid, services);
+                                                nxt_services = format!("{} {}", o.connectid, services);
                                             } else {
-                                                nxt_services = services.clone();
+                                                nxt_services = o.connectid.clone();
                                             }
                                             agent_onboard(&o, access.clone(), nxt_services);
                                         }
