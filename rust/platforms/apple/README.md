@@ -17,15 +17,17 @@
 ## Okta SDK Installation 
 
 - Podfile: CocoaPod configuration to download OktaAuth/JWT/OIDC
- 
 - For RUST agent:
-- $ cd rust/platforms/apple
-- $ pod install
- 
+``` 
+$ cd rust/platforms/apple
+$ pod install
+``` 
 - For GO agent:
-- $ cd go/platforms/apple
-- $ pod install
--
+``` 
+$ cd go/platforms/apple
+$ pod install
+``` 
+ 
 - This creates new xcode workspace file
 
 ## Load XCode
@@ -35,22 +37,30 @@
 ## Building iOS target in Xcode
 
 - For RUST agent (warning: rust compilation is slow)
-- build Target:NextensioRustBridge, pick iPhone (simulator/device) to generate libnextensioIOS.a 
-- build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
+```
+build Target:NextensioRustBridge, pick iPhone (simulator/device) to generate libnextensioIOS.a 
+build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
+```
 
 - For GO agent:
-- build Target:NextensioGoBridge, pick iPhone (simulator/device) to generate libnxt.a 
-- build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
+```
+build Target:NextensioGoBridge, pick iPhone (simulator/device) to generate libnxt.a 
+build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
+```
 
 ## Building MacOS target in Xcode
 
 - For RUST agent (warning: rust compilation is slow)
-- build Target:NextensioRustBridgeMacOSX, pick My Mac to generate libnextensioMacOSX.a 
-- build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgent app and NextensioPacketTunnel appex
+```
+build Target:NextensioRustBridgeMacOSX, pick My Mac to generate libnextensioMacOSX.a 
+build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgent app and NextensioPacketTunnel appex
+```
 
 - For GO agent:
-- build Target:NextensioGoBridgeMacOSX, pick My Mac to generate libnxt.a 
-- build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgentAppMacOSX app and NextensioPacketTunnelMacOS appex
+```
+build Target:NextensioGoBridgeMacOSX, pick My Mac to generate libnxt.a 
+build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgentAppMacOSX app and NextensioPacketTunnelMacOS appex
+```
 
 ## Source Code Groups
 
@@ -67,11 +77,13 @@
 
 ## Rust adaptation (Installation)
 
-- install rust: $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-- install cbindgen, to generate C headerfile for swift: $ cargo install --force cbindgen
-- if needed to re-generate the C headerfile: $ cbindgen -l C -o nxt-api.h
-- source env: $ source $HOME/.cargo/env
-- add ios/macos targets: $ rustup target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin
-- check its working: $ rustup show
-- add: $HOME/.cargo/config: [net]
-                            git-fetch-with-cli = true
+```
+install rust: $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+install cbindgen, to generate C headerfile for swift: $ cargo install --force cbindgen
+if needed to re-generate the C headerfile: $ cbindgen -l C -o nxt-api.h
+source env: $ source $HOME/.cargo/env
+add ios/macos targets: $ rustup target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin
+check its working: $ rustup show
+add: $HOME/.cargo/config: [net]
+                          git-fetch-with-cli = true
+```
