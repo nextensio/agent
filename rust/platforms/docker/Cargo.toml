@@ -10,4 +10,5 @@ rouille = "3.0.0"
 serde = "1.0.124"
 reqwest = { version = "0.9.24", features = ["tls"]}
 uuid = { version = "0.8", features = ["v4"] }
+clap = "2.33.3"
 agent = { path = "../../agent" }

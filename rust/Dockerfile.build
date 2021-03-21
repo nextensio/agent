@@ -1,0 +1,40 @@
+FROM instrumentisto/rust:1.51.0-beta
+
+# Stuff required for selenium automated login script to work (login.py)
+# Note that the docker container is huge because of these chromium stuff,
+# we need this only for the test/automation environment
+RUN apt update
+RUN apt install -y python3-pip unzip iproute2 iptables net-tools
+RUN pip3 install chromedriver
+RUN pip3 install selenium
+RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+RUN apt install -y ./google-chrome-stable_current_amd64.deb
+RUN rm ./google-chrome-stable_current_amd64.deb
+RUN wget https://chromedriver.storage.googleapis.com/88.0.4324.96/chromedriver_linux64.zip
+RUN unzip chromedriver_linux64.zip 
+RUN mv chromedriver /usr/bin/
+RUN rm chromedriver_linux64.zip 
+
+# For emulating a private URL webservice
+RUN apt-get install -y lighttpd
+RUN mkdir /etc/lighttpd/certs
+COPY files/http/certs/* /etc/lighttpd/certs/
+RUN chmod 400 /etc/lighttpd/certs/lighttpd.pem
+COPY files/http/config/lighttpd.conf /etc/lighttpd/lighttpd.conf
+RUN chmod 777 /var/log/lighttpd
+
+# Now compile the code
+WORKDIR /rust/src/app
+RUN mkdir -p /root/.ssh
+RUN mkdir -p /rust/files/
+COPY files/ /rust/files
+RUN chmod +x /rust/files/gitlab.sh
+RUN /rust/files/gitlab.sh
+COPY . .
+RUN cd platforms/docker; CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --path .
+
+RUN rm /rust/files/gitlab_rsa
+
+RUN chmod +x /rust/files/run.sh
+EXPOSE 8180/tcp 8081/tcp 8080/tcp
+CMD /rust/files/run.sh

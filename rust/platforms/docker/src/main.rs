@@ -1,3 +1,5 @@
+use clap::{App, Arg};
+use libc::servent;
 use nextensio::{agent_init, agent_on, onboard, CRegistrationInfo};
 use rouille::{router, Response};
 use serde::Deserialize;
@@ -93,7 +95,7 @@ fn login_page() -> rouille::Response {
 }
 
 fn onboard_status() -> rouille::Response {
-    if ONBOARDED.load(std::sync::atomic::Ordering::Relaxed) == false {
+    if ONBOARDED.load(std::sync::atomic::Ordering::Relaxed) {
         let mut response = Response::text("");
         response.status_code = 201;
         response
@@ -187,7 +189,13 @@ fn okta_results(controller: String, services: String) {
                                         } else {
                                             println!("Onboarded {}", o);
                                             ONBOARDED.store(true, std::sync::atomic::Ordering::Relaxed);
-                                            agent_onboard(&o, access.clone(), services.clone());
+                                            let nxt_services;
+                                            if services != "" {
+                                                nxt_services = format!("{} {}", o.connectid, services);
+                                            } else {
+                                                nxt_services = o.connectid.clone();
+                                            }
+                                            agent_onboard(&o, access.clone(), nxt_services);
                                         }
                                     },
                                     Err(e) => {println!("HTTP body failed {:?}", e);},
@@ -212,13 +220,34 @@ fn okta_results(controller: String, services: String) {
 }
 
 fn main() {
+    let matches = App::new("NxtAgent")
+        .arg(
+            Arg::with_name("service")
+                .long("service")
+                .takes_value(true)
+                .help("Service names as space seperated strings"),
+        )
+        .arg(
+            Arg::with_name("controller")
+                .long("controller")
+                .takes_value(true)
+                .help("Controller FQDN/ip address"),
+        )
+        .get_matches();
+
+    let services = matches.value_of("service").unwrap_or("").to_owned();
+    let controller = matches
+        .value_of("controller")
+        .unwrap_or("server.nextensio.net")
+        .to_owned();
+
+    println!("controller {}, service {}", controller, services);
+
     let fd = create_tun().unwrap();
     config_tun();
 
-    let controller = "172.18.0.2:8080";
-
     thread::spawn(move || okta_login());
-    thread::spawn(move || okta_results(controller.to_string(), "".to_string()));
+    thread::spawn(move || okta_results(controller, services));
 
     unsafe {
         agent_on(fd);

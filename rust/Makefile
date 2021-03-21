@@ -1,6 +1,6 @@
 VERSION=0.1
 NAME=agent
-USER=registry.gitlab.com/nextensio/go-agent
+USER=registry.gitlab.com/nextensio/rust-agent
 
 .PHONY: all
 all: build
