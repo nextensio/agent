@@ -305,7 +305,7 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "etherparse",
  "httparse",
@@ -492,7 +492,7 @@ checksum = "88d7ed2934d741c6b37e33e3832298e8850b53fd2d2bea03873375596c7cea4e"
 [[package]]
 name = "dummy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "common",
 ]
@@ -556,7 +556,7 @@ dependencies = [
 [[package]]
 name = "fd"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "common",
  "libc",
@@ -912,7 +912,7 @@ dependencies = [
 [[package]]
 name = "l3proxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "common",
  "smoltcp",
@@ -1147,7 +1147,7 @@ dependencies = [
 [[package]]
 name = "netconn"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "common",
  "mio 0.7.9",
@@ -2434,7 +2434,7 @@ checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 [[package]]
 name = "webproxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "common",
  "mio 0.7.9",
@@ -2443,7 +2443,7 @@ dependencies = [
 [[package]]
 name = "websock"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#1d1ff094f1663eca3d47f61c437bfbb40f4f0884"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#f702f86afb866d638b16e1495679d9c91fbdb559"
 dependencies = [
  "common",
  "http 0.2.3",

@@ -1,6 +1,6 @@
 VERSION=0.1
-NAME=agent
-USER=registry.gitlab.com/nextensio/rust-agent
+NAME=rust-agent
+USER=registry.gitlab.com/nextensio/agent
 
 .PHONY: all
 all: build
