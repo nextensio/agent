@@ -28,17 +28,19 @@ $ cd go/platforms/apple
 $ pod install
 ``` 
  
-- This creates new xcode workspace file
+- This install OktaAuthSdk, OktaJWT, OktaOidc and create NextensioAgent.xcworkspace file
 
 ## Load XCode
 
-- Open NextensioAgent.xcworkspace (don't use NextensioAgent.xcodeproj)
+- Open XCode App, open a project of file
+- For RUST agent, pick rust/platforms/apple/NextensioAgent.xcworkspace. For GO agent, pick go/platforms/apple/NextensioAgent.xcworkspace
+- Don't use NextensioAgent.xcodeproj
 
 ## Building iOS target in Xcode
 
 - For RUST agent (warning: rust compilation is slow)
 ```
-build Target:NextensioRustBridge, pick iPhone (simulator/device) to generate libnextensioIOS.a 
+build Target:NextensioRustBridge, pick My Mac to generate libnextensioIOS.a (for x86_64 simulator/device)
 build Target:NextensioApp, pick iPhone (simulator/device) to generate the NextensioAgent app and NextensioPacketTunnel appex
 ```
 
