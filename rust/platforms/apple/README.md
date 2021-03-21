@@ -17,11 +17,11 @@
 ## Okta SDK Installation 
 
 - Podfile: CocoaPod configuration to download OktaAuth/JWT/OIDC
--
+ 
 - For RUST agent:
 - $ cd rust/platforms/apple
 - $ pod install
--
+ 
 - For GO agent:
 - $ cd go/platforms/apple
 - $ pod install
@@ -52,18 +52,18 @@
 - build Target:NextensioGoBridgeMacOSX, pick My Mac to generate libnxt.a 
 - build Target:NextensioAppMacOSX, pick My Mac to generate the NextensioAgentAppMacOSX app and NextensioPacketTunnelMacOS appex
 
-## Source Code 
+## Source Code Groups
 
-- NextensioApp - is the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
-- NextensioAppMacOSX - is the macosx main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
-- NextensioPacketTunnel - is the tunnel provider process to handle tunnel packet flow. Main functions are startTunnel() and stopTunnel()
-- NextensioGoBridge - is the go glue code for the agent
-- Files ViewController.swift and PacketProviderTunnel.swift are the two main files that handle the configuration and packet flow
+- NextensioApp: the main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
+- NextensioAppMacOSX: macosx main app responsible for the storyboard (aka UI), system configuration and tunnel on/off trigger
+- NextensioPacketTunnel: the tunnel provider process to handle tunnel packet flow. Main functions are startTunnel() and stopTunnel()
+- NextensioRustBridge: the RUST glue code for the agent
+- NextensioGoBridge: the GO glue code for the agent
 
-## Connect 
+## Connection 
 
-- By default, the code will connect directly to internet -- direct variable set to 1 in initNextensioAgent() and seconds var to 1.0 in startTunnel
-- To connect to nextensio -- change direct var from 1 to 0 in initNextensioAgent() and seconds var to 30.0 in startTunnel
+- Direct to internet (default): direct variable set to 1 in initNextensioAgent() and seconds var to 1.0 in startTunnel
+- Via nextensio cloud: change direct var from 1 to 0 in initNextensioAgent() and seconds var to 30.0 in startTunnel
 
 ## Rust adaptation (Installation)
 
