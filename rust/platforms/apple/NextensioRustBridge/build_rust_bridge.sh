@@ -1,17 +1,37 @@
 #!/bin/bash
 source $HOME/.cargo/env
-source ../../../../agent/build_apple.sh
 
-RUST_TARGET=../../../../target
+echo "[PROJECT_DIR] "$PROJECT_DIR
+
+#if [ "$#" -ne 1 ] ; then
+#    echo "$0: Error missing argument [ios|macosx] expected"
+#    exit 1
+#fi
+
+if [ "$1" = "ios" ]; then
+  echo "[BUILDING TARGET] IOS"
+elif [ "$1" = "macosx" ]; then
+  echo "[BUILDING TARGET] MacOSX"
+else
+  echo "[BUILDING TARGET] IOS MacOSX"
+fi
+
+RUST_TARGET=$PROJECT_DIR/../../target
 IOS_LIB=libnextensioIOS.a
-MACOSX_LIB=libnextensioMACOSX.a
+MACOSX_LIB=libnextensioMacOSX.a
 NXT_LIB=libnextensio.a
+DEST_TARGET=$PROJECT_DIR/NextensioRustBridge
 
-rm -f $RUST_TARGET/$IOS_LIB
-rm -f $RUST_TARGET/$MACOSX_LIB
-lipo -create $RUST_TARGET/aarch64-apple-ios/release/$NXT_LIB $RUST_TARGET/x86_64-apple-ios/release/$NXT_LIB -output $RUST_TARGET/$IOS_LIB
-lipo -create $RUST_TARGET/x86_64-apple-darwin/release/$NXT_LIB -output $RUST_TARGET/$MACOSX_LIB
+echo "[DEST_TARGET] "$DEST_TARGET
 
-echo "[Rust Libraries]"
-lipo -info $RUST_TARGET/$IOS_LIB
-lipo -info $RUST_TARGET/$MACOSX_LIB
+# build all apple targets
+source $PROJECT_DIR/../../agent/build_apple.sh
+
+rm -f $DEST_TARGET/$IOS_LIB
+rm -f $DEST_TARGET/$MACOSX_LIB
+
+lipo -create $RUST_TARGET/aarch64-apple-ios/release/$NXT_LIB $RUST_TARGET/x86_64-apple-ios/release/$NXT_LIB -output $DEST_TARGET/$IOS_LIB
+lipo -create $RUST_TARGET/x86_64-apple-darwin/release/$NXT_LIB -output $DEST_TARGET/$MACOSX_LIB
+
+lipo -info $DEST_TARGET/$IOS_LIB
+lipo -info $DEST_TARGET/$MACOSX_LIB

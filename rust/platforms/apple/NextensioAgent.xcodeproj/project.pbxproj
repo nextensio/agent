@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		6B0BA57A25D8FAE300F3B1C6 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
 		6B0BA58C25D8FDE300F3B1C6 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
+		6B15594D2607339D006788D8 /* libnextensioIOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B15594C2607339D006788D8 /* libnextensioIOS.a */; };
+		6B15594F260733DE006788D8 /* libnextensioMacOSX.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B15594E260733DE006788D8 /* libnextensioMacOSX.a */; };
 		6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
 		6B2D6BC425D114240051991B /* NextensioPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
@@ -51,13 +53,6 @@
 			remoteGlobalIDString = 6B2D6BB825D114240051991B;
 			remoteInfo = NextensioPacketTunnel;
 		};
-		6BB0152A260666DF00EA4881 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 6BE9EA1725D9881F006DCD29;
-			remoteInfo = NextensioAppMacOS;
-		};
 		6BF3B7A025D9B4910023DD0B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 6B2D6B9125D113630051991B /* Project object */;
@@ -98,6 +93,8 @@
 		67D65F0A0443621B49F2E9DA /* Pods-NextensioAppMacOSX.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NextensioAppMacOSX.debug.xcconfig"; path = "Target Support Files/Pods-NextensioAppMacOSX/Pods-NextensioAppMacOSX.debug.xcconfig"; sourceTree = "<group>"; };
 		6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NextensioPacketTunnelMacOSX.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B0BA59625D8FDE300F3B1C6 /* NextensioAppMacOSX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioAppMacOSX.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B15594C2607339D006788D8 /* libnextensioIOS.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libnextensioIOS.a; sourceTree = "<group>"; };
+		6B15594E260733DE006788D8 /* libnextensioMacOSX.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libnextensioMacOSX.a; sourceTree = "<group>"; };
 		6B2D6B9925D113630051991B /* NextensioApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextensioApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NextensioPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2D6BBB25D114240051991B /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
@@ -115,7 +112,6 @@
 		6BB01523260666DF00EA4881 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6BB01524260666DF00EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB01525260666DF00EA4881 /* SignInViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignInViewController.swift; sourceTree = "<group>"; };
-		6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = NextensioAppMacOS.xcodeproj; sourceTree = "<group>"; };
 		6BB015392606681100EA4881 /* ViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		6BB0153A2606681100EA4881 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6BB0153B2606681100EA4881 /* NextensioApp.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioApp.entitlements; sourceTree = "<group>"; };
@@ -127,7 +123,6 @@
 		6BB015432606681100EA4881 /* SceneDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		6BB015562606682C00EA4881 /* Info-MacOSX.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "Info-MacOSX.plist"; sourceTree = "<group>"; };
-		6BB015572606682C00EA4881 /* NextensioAgent-Go-Bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NextensioAgent-Go-Bridge.h"; sourceTree = "<group>"; };
 		6BB015582606682C00EA4881 /* NextensioPacketTunnel.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioPacketTunnel.entitlements; sourceTree = "<group>"; };
 		6BB015592606682C00EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB0155A2606682C00EA4881 /* Socket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Socket.swift; sourceTree = "<group>"; };
@@ -142,6 +137,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6B15594F260733DE006788D8 /* libnextensioMacOSX.a in Frameworks */,
 				6B0BA57A25D8FAE300F3B1C6 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -169,6 +165,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */,
+				6B15594D2607339D006788D8 /* libnextensioIOS.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -225,6 +222,8 @@
 			isa = PBXGroup;
 			children = (
 				6BB015002606640F00EA4881 /* build_rust_bridge.sh */,
+				6B15594C2607339D006788D8 /* libnextensioIOS.a */,
+				6B15594E260733DE006788D8 /* libnextensioMacOSX.a */,
 				6BB014F12606635A00EA4881 /* nxt-api.h */,
 				6BB014F02606635A00EA4881 /* NextensioApp-Bridging-Header.h */,
 			);
@@ -242,18 +241,9 @@
 				6BB01523260666DF00EA4881 /* AppDelegate.swift */,
 				6BB01524260666DF00EA4881 /* Info.plist */,
 				6BB01525260666DF00EA4881 /* SignInViewController.swift */,
-				6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */,
 			);
 			name = NextensioAppMacOSX;
 			path = NextensioAgent/NextensioAppMacOSX;
-			sourceTree = "<group>";
-		};
-		6BB01527260666DF00EA4881 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				6BB0152B260666DF00EA4881 /* NextensioAppMacOS.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		6BB015382606681100EA4881 /* NextensioApp */ = {
@@ -278,7 +268,6 @@
 			children = (
 				6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */,
 				6BB015562606682C00EA4881 /* Info-MacOSX.plist */,
-				6BB015572606682C00EA4881 /* NextensioAgent-Go-Bridge.h */,
 				6BB015582606682C00EA4881 /* NextensioPacketTunnel.entitlements */,
 				6BB015592606682C00EA4881 /* Info.plist */,
 				6BB0155A2606682C00EA4881 /* Socket.swift */,
@@ -308,7 +297,7 @@
 			buildPhases = (
 			);
 			buildToolPath = ./build_rust_bridge.sh;
-			buildWorkingDirectory = "$(PROJECT_DIR)/Sources/NextensioRustBridge";
+			buildWorkingDirectory = "$(PROJECT_DIR)/NextensioRustBridge";
 			dependencies = (
 			);
 			name = NextensioRustBridge;
@@ -426,12 +415,6 @@
 			mainGroup = 6B2D6B9025D113630051991B;
 			productRefGroup = 6B2D6B9A25D113630051991B /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = 6BB01527260666DF00EA4881 /* Products */;
-					ProjectRef = 6BB01526260666DF00EA4881 /* NextensioAppMacOS.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				6B2D6B9825D113630051991B /* NextensioApp */,
@@ -442,16 +425,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXReferenceProxy section */
-		6BB0152B260666DF00EA4881 /* NextensioAppMacOS.app */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.application;
-			path = NextensioAppMacOS.app;
-			remoteRef = 6BB0152A260666DF00EA4881 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
 		6B0BA57B25D8FAE300F3B1C6 /* Resources */ = {
@@ -662,10 +635,11 @@
 			buildSettings = {
 				APP_ID_IOS = "";
 				APP_ID_MACOSX = "";
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
+				INFOPLIST_FILE = "NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -677,6 +651,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 					"$(BUILD_DIR)/Debug",
+					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
@@ -686,7 +661,7 @@
 				SUPPORTED_PLATFORMS = macosx;
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 6;
@@ -698,10 +673,11 @@
 			buildSettings = {
 				APP_ID_IOS = "";
 				APP_ID_MACOSX = "";
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = "Sources/NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
+				INFOPLIST_FILE = "NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -713,6 +689,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 					"$(BUILD_DIR)/Debug",
+					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
@@ -722,7 +699,7 @@
 				SUPPORTED_PLATFORMS = macosx;
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 6;
@@ -736,10 +713,10 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = Sources/NextensioAgent/NextensioAppMacOSX/Info.plist;
+				INFOPLIST_FILE = NextensioAgent/NextensioAppMacOSX/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -754,6 +731,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 6;
+				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
 			};
 			name = Debug;
 		};
@@ -764,10 +742,10 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
-				INFOPLIST_FILE = Sources/NextensioAgent/NextensioAppMacOSX/Info.plist;
+				INFOPLIST_FILE = NextensioAgent/NextensioAppMacOSX/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -781,6 +759,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 6;
+				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
 			};
 			name = Release;
 		};
@@ -914,11 +893,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioApp/NextensioApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Sources/NextensioAgent/NextensioApp/Info.plist;
+				INFOPLIST_FILE = NextensioAgent/NextensioApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -933,6 +912,7 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
 			};
 			name = Debug;
 		};
@@ -944,11 +924,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioApp/NextensioApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Sources/NextensioAgent/NextensioApp/Info.plist;
+				INFOPLIST_FILE = NextensioAgent/NextensioApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -962,17 +942,19 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				USER_HEADER_SEARCH_PATHS = "${SRCROOT}/**";
 			};
 			name = Release;
 		};
 		6B2D6BC625D114240051991B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Sources/NextensioAgent/NextensioPacketTunnel/Info.plist;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
+				INFOPLIST_FILE = NextensioAgent/NextensioPacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -984,12 +966,13 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 					"$(BUILD_DIR)/Debug",
+					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -999,11 +982,12 @@
 		6B2D6BC725D114240051991B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Sources/NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Sources/NextensioAgent/NextensioPacketTunnel/Info.plist;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
+				INFOPLIST_FILE = NextensioAgent/NextensioPacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1015,12 +999,13 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 					"$(BUILD_DIR)/Debug",
+					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/NextensioAgent/NextensioPacketTunnel/NextensioAgent-Go-Bridge.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
