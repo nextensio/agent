@@ -9,11 +9,8 @@
 /* Begin PBXBuildFile section */
 		1B533CB6E05BB6ABF91F793C /* Pods_NextensioApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3E26DE199F62AC7B6B0E43F9 /* Pods_NextensioApp.framework */; };
 		6358D1A52EEBB71937B3B079 /* Pods_NextensioAppMacOSX.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7AB6F63FA10C05FCB98854C0 /* Pods_NextensioAppMacOSX.framework */; };
-		6B01CCE12607947700AA1D71 /* AuthFlowCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */; };
 		6B01CCE22607947700AA1D71 /* AuthFlowCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */; };
-		6B01CCE32607947700AA1D71 /* AuthFlowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDF2607947600AA1D71 /* AuthFlowCoordinator.swift */; };
 		6B01CCE42607947700AA1D71 /* AuthFlowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCDF2607947600AA1D71 /* AuthFlowCoordinator.swift */; };
-		6B01CCE52607947700AA1D71 /* AuthBaseViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCE02607947600AA1D71 /* AuthBaseViewController.swift */; };
 		6B01CCE62607947700AA1D71 /* AuthBaseViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B01CCE02607947600AA1D71 /* AuthBaseViewController.swift */; };
 		6B0BA57A25D8FAE300F3B1C6 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
 		6B0BA58C25D8FDE300F3B1C6 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; };
@@ -23,7 +20,6 @@
 		6B2D6BC425D114240051991B /* NextensioPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
 		6B4D5CAF26073B97001EF988 /* Info-MacOSX.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015562606682C00EA4881 /* Info-MacOSX.plist */; };
-		6B4D5CB826073D1F001EF988 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015592606682C00EA4881 /* Info.plist */; };
 		6BB0152C260666DF00EA4881 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0151E260666DF00EA4881 /* ViewController.swift */; };
 		6BB0152D260666DF00EA4881 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0151F260666DF00EA4881 /* Assets.xcassets */; };
 		6BB0152E260666DF00EA4881 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BB01521260666DF00EA4881 /* Main.storyboard */; };
@@ -37,7 +33,6 @@
 		6BB015472606681100EA4881 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0153E2606681100EA4881 /* Main.storyboard */; };
 		6BB015482606681100EA4881 /* Okta.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015402606681100EA4881 /* Okta.plist */; };
 		6BB015492606681100EA4881 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015412606681100EA4881 /* AppDelegate.swift */; };
-		6BB0154A2606681100EA4881 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015422606681100EA4881 /* Info.plist */; };
 		6BB0154B2606681100EA4881 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015432606681100EA4881 /* SceneDelegate.swift */; };
 		6BB0155C2606682C00EA4881 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */; };
 		6BB0155D2606682C00EA4881 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */; };
@@ -184,21 +179,9 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
-		6B01CCDD2607947600AA1D71 /* Shared */ = {
-			isa = PBXGroup;
-			children = (
-				6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */,
-				6B01CCDF2607947600AA1D71 /* AuthFlowCoordinator.swift */,
-				6B01CCE02607947600AA1D71 /* AuthBaseViewController.swift */,
-			);
-			name = Shared;
-			path = NextensioAgent/Shared;
-			sourceTree = "<group>";
-		};
 		6B2D6B9025D113630051991B = {
 			isa = PBXGroup;
 			children = (
-				6B01CCDD2607947600AA1D71 /* Shared */,
 				6BB015542606682C00EA4881 /* NextensioPacketTunnel */,
 				6BB015382606681100EA4881 /* NextensioApp */,
 				6BB0151D260666DF00EA4881 /* NextensioAppMacOSX */,
@@ -252,6 +235,9 @@
 				6BB01522260666DF00EA4881 /* Okta.plist */,
 				6BB01523260666DF00EA4881 /* AppDelegate.swift */,
 				6BB01524260666DF00EA4881 /* Info.plist */,
+				6B01CCDE2607947600AA1D71 /* AuthFlowCoordinatorProtocol.swift */,
+				6B01CCDF2607947600AA1D71 /* AuthFlowCoordinator.swift */,
+				6B01CCE02607947600AA1D71 /* AuthBaseViewController.swift */,
 				6BB01525260666DF00EA4881 /* SignInViewController.swift */,
 			);
 			name = NextensioAppMacOSX;
@@ -473,7 +459,6 @@
 				6BB015472606681100EA4881 /* Main.storyboard in Resources */,
 				6BB015452606681100EA4881 /* Assets.xcassets in Resources */,
 				6BB015462606681100EA4881 /* LaunchScreen.storyboard in Resources */,
-				6BB0154A2606681100EA4881 /* Info.plist in Resources */,
 				6BB015482606681100EA4881 /* Okta.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -482,7 +467,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B4D5CB826073D1F001EF988 /* Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -596,12 +580,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B01CCE12607947700AA1D71 /* AuthFlowCoordinatorProtocol.swift in Sources */,
-				6B01CCE52607947700AA1D71 /* AuthBaseViewController.swift in Sources */,
 				6BB015492606681100EA4881 /* AppDelegate.swift in Sources */,
 				6BB015442606681100EA4881 /* ViewController.swift in Sources */,
 				6BB0154B2606681100EA4881 /* SceneDelegate.swift in Sources */,
-				6B01CCE32607947700AA1D71 /* AuthFlowCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -998,7 +979,6 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)",
-					"$(BUILD_DIR)/Debug",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
@@ -1031,7 +1011,6 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)",
-					"$(BUILD_DIR)/Debug",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
