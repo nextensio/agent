@@ -10,7 +10,7 @@ use common::{
 use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
-use log::{error, Level};
+use log::{error, Level, LevelFilter};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
 use std::collections::VecDeque;
@@ -21,6 +21,8 @@ use std::{collections::HashMap, time::Duration, time::Instant};
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
+#[cfg(target_vendor = "apple")]
+use oslog::OsLogger;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
@@ -1399,6 +1401,12 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
     #[cfg(target_os = "linux")]
     stderrlog::new().module(module_path!()).init().unwrap();
+
+    #[cfg(target_vendor = "apple")]
+    OsLogger::new("com.nextensio.agent")
+        .level_filter(LevelFilter::Debug)
+        .init()
+        .unwrap();
 
     error!("Agent init called");
 

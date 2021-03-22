@@ -191,8 +191,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // init NextensioAgent
     private func initNextensioAgent() {
         let direct : UInt = 1
-        NSLog("rust-bridge agent_init, direct: \(direct)")
+        os_log("os.log rust-bridge agent_init: \(direct)")
         agent_init(1 /*apple*/, direct)
+        os_log("os.log rust-bridge agent_init, completed")
     }
     
     // turn on NextensioAgent

@@ -19,7 +19,6 @@
 		6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
 		6B2D6BC425D114240051991B /* NextensioPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6B2D6BCB25D114920051991B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B2D6BBB25D114240051991B /* NetworkExtension.framework */; platformFilter = ios; };
-		6B4D5CAF26073B97001EF988 /* Info-MacOSX.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015562606682C00EA4881 /* Info-MacOSX.plist */; };
 		6BB0152C260666DF00EA4881 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0151E260666DF00EA4881 /* ViewController.swift */; };
 		6BB0152D260666DF00EA4881 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0151F260666DF00EA4881 /* Assets.xcassets */; };
 		6BB0152E260666DF00EA4881 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BB01521260666DF00EA4881 /* Main.storyboard */; };
@@ -38,6 +37,7 @@
 		6BB0155D2606682C00EA4881 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */; };
 		6BB015622606682D00EA4881 /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0155A2606682C00EA4881 /* Socket.swift */; };
 		6BB015632606682D00EA4881 /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0155A2606682C00EA4881 /* Socket.swift */; };
+		6BB45679260806D500D37981 /* Info-MacOSX.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015562606682C00EA4881 /* Info-MacOSX.plist */; };
 		6BF3B7BA25D9BBDF0023DD0B /* NextensioPacketTunnelMacOSX.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMacOSX.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -437,7 +437,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B4D5CAF26073B97001EF988 /* Info-MacOSX.plist in Resources */,
+				6BB45679260806D500D37981 /* Info-MacOSX.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

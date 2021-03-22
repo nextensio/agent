@@ -117,14 +117,6 @@ class ViewController: AuthBaseViewController {
             self.idToken = ""
         }
         
-//        var tokens = ""
-//        if let accessToken = oidcStateManager?.accessToken,
-//           let decodedToken = try? OktaOidcStateManager.decodeJWT(accessToken) {
-//            accessTokenBase64 = oidcStateManager?.accessToken
-//            tokens += "Access token:\n\(decodedToken)\n\n"
-//        }
-//        print("Token:\n\(tokens)")
-        
         // self?.viewTokensButton.isEnabled = true
         logoutButton.isEnabled = true
         connectButton.isEnabled = true
@@ -244,7 +236,7 @@ class ViewController: AuthBaseViewController {
     }
 
     @IBAction func connect_button(_ sender: Any) {
-        print("Go!")
+        print("connect_button pressed")
         let button = sender as! NSButton
         self.vpnManager.loadFromPreferences { (error:Error?) in
             if let error = error {
@@ -252,6 +244,8 @@ class ViewController: AuthBaseViewController {
             }
             if (button.title == "Connect") {
                 do {
+                    print("startVPN Tunnel")
+
                     try self.vpnManager.connection.startVPNTunnel()
                 } catch {
                     print(error)
