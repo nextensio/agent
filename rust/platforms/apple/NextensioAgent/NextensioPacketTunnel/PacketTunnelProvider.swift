@@ -32,7 +32,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     override init() {
         super.init()
         // start the agent
-        self.initNextensioAgent()
+        // self.initNextensioAgent()
     }
     
     // These are core methods for Nextensio VPN tunnelling
@@ -43,7 +43,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 let proto = protocolNumber(for: packet)
                 
                 // logPacketSrcDestIP(packet, "original")
-                // NSLog("proto: \(proto.uint8Value), tcp: \(PacketType.TCP.rawValue)")
+                // os_log("proto: \(proto.uint8Value), tcp: \(PacketType.TCP.rawValue)")
                 
                 if (protocolType(for: packet) == PacketType.TCP) {
                     var overridePacket = packet // make it mutuable
@@ -64,7 +64,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let serverAddress = self.conf["server"] as! String
         let serverPort = Int(self.conf["port"] as! String) ?? 0
 
-        NSLog("Setup connection to agent \(serverAddress) \(serverPort)")
+        os_log("Setup connection to agent \(serverAddress) \(serverPort)")
 
         self.connection.open(host: serverAddress, port: serverPort)
     }
@@ -95,8 +95,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         
         let access = (conf["access"] as! String)
         let refresh = (conf["refresh"] as! String)
-        NSLog("accessToken: \(access)")
-        NSLog("refreshToken: \(refresh)")
+        os_log("accessToken: \(access)")
+        os_log("refreshToken: \(refresh)")
         
         onboardNextensioAgent(accessToken: access)
  
@@ -112,12 +112,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         
+        // init the agent
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0) {
+            self.initNextensioAgent()
+        }
+        
         let seconds = 1.0 // change to 30.0 seconds to allow login to okta
-        NSLog("startTunnel sleep for \(seconds) seconds.... login to okta")
+        os_log("startTunnel sleep for \(seconds) seconds....")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-            // Put your code which should be executed with a delay here
-            NSLog("startTunnel using Network Extension configuration")
+            os_log("startTunnel using Network Extension configuration")
             self.conf = (self.protocolConfiguration as! NETunnelProviderProtocol).providerConfiguration! as [String : AnyObject]
 
             self.pendingStartCompletion = completionHandler
@@ -131,19 +135,19 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
-        NSLog("handleAppMessage")
+        os_log("handleAppMessage")
         if let handler = completionHandler {
             handler(messageData)
         }
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
-        NSLog("sleep")
+        os_log("sleep")
         completionHandler()
     }
 
     override func wake() {
-        NSLog("wake")
+        os_log("wake")
     }
     
     // Tunnel device file descriptor.
@@ -179,7 +183,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     private func onboardNextensioAgent(accessToken: String) {
         var registration = CRegistrationInfo()
         
-        NSLog("rust-bridge onboard agent")
+        os_log("rust-bridge onboard agent")
 
         registration.access_token = UnsafeMutablePointer<Int8>(mutating: (accessToken as NSString).utf8String)
         registration.num_domains = 1
@@ -191,21 +195,22 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // init NextensioAgent
     private func initNextensioAgent() {
         let direct : UInt = 1
-        os_log("os.log rust-bridge agent_init: \(direct)")
+        os_log("rust-bridge agent_init: \(direct)")
         agent_init(1 /*apple*/, direct)
-        os_log("os.log rust-bridge agent_init, completed")
+        os_log("rust-bridge agent_init, completed")
     }
     
     // turn on NextensioAgent
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        NSLog("rust-bridge agent_on, tunif: \(tunIf)")
+        os_log("rust-bridge agent_on, tunif: \(tunIf)")
+        setnonblocking(tunif: tunIf)
         agent_on(tunIf);
     }
     
     // turn off NextensioAgent
     private func turnOffNextensioAgent() {
-        NSLog("rust-bridge agent_off... ")
+        os_log("rust-bridge agent_off... ")
         agent_off()
     }
 }
@@ -224,6 +229,17 @@ extension CRegistrationInfo {
                   uuid: emptyStr,
                   services: emptyStr,
                   num_services: 0)
+    }
+}
+
+private func setnonblocking(tunif: Int32) -> () {
+    var opt = fcntl(tunif, F_GETFL)
+    if (opt < 0) {
+        os_log("setnonblocking: fcntl(F_GETFL) fail.")
+    }
+    opt |= O_NONBLOCK;
+    if (fcntl(tunif, F_SETFL, opt) < 0) {
+        os_log("setnonblocking: fcntl(F_SETFL) fail.");
     }
 }
 
@@ -268,17 +284,17 @@ private func logPacketSrcDestIP(_ packet: Data, _ prefix: String) -> Void {
         return
     }
     let byteArray = [UInt8](packet) // transfer packet to array
-    // NSLog("Byte array %@", byteArray)
+    // os_log("Byte array %@", byteArray)
 
     let proto = String(format: "%d", byteArray[9])
     let srcIP = String(format: "%d.%d.%d.%d", byteArray[12], byteArray[13], byteArray[14], byteArray[15])
     let destIP = String(format: "%d.%d.%d.%d", byteArray[16], byteArray[17], byteArray[18], byteArray[19])
-    NSLog("\(prefix) utun proto: \(proto), srcIP: \(srcIP), destIP: \(destIP)")
+    os_log("\(prefix) utun proto: \(proto), srcIP: \(srcIP), destIP: \(destIP)")
 }
 
 private func computeIPCheckSum(_ packet: Data) -> [UInt8] {
     var st = String(format:"0x%02X,0x%02X, count:%d", packet[10], packet[11], packet.count)
-    NSLog("Compute IP Checksum... original checksum=\(st)")
+    os_log("Compute IP Checksum... original checksum=\(st)")
 
     // Compute IP Checksum
     // https://en.wikipedia.org/wiki/IPv4_header_checksum
@@ -302,14 +318,14 @@ private func computeIPCheckSum(_ packet: Data) -> [UInt8] {
     checksum[0] = UInt8(sum32 >> 8 & 0x00ff)
     checksum[1] = UInt8(sum32 & 0x00ff)
     st = String(format:"0x%02X,0x%02X, 1': 0x%02X,0x%02X", checksum[0], checksum[1], ~checksum[0], ~checksum[1])
-    NSLog("Compute IP Checksum... computed checksum=\(st)")
+    os_log("Compute IP Checksum... computed checksum=\(st)")
     
     return checksum
 }
 
 private func computeTCPCheckSum(_ packet: Data) -> [UInt8] {
     var st = String(format:"0x%02X,0x%02X, count:%d", packet[36], packet[37], packet.count)
-    NSLog("Compute TCP Checksum... original checksum=\(st)")
+    os_log("Compute TCP Checksum... original checksum=\(st)")
     
     var sum32: UInt32 = 0
 
@@ -345,7 +361,7 @@ private func computeTCPCheckSum(_ packet: Data) -> [UInt8] {
     checksum[0] = UInt8(sum32 >> 8 & 0x00ff)
     checksum[1] = UInt8(sum32 & 0x00ff)
     st = String(format:"0x%02X,0x%02X, 1': 0x%02X,0x%02X", checksum[0], checksum[1], ~checksum[0], ~checksum[1])
-    NSLog("Compute TCP Checksum... computed checksum=\(st)")
+    os_log("Compute TCP Checksum... computed checksum=\(st)")
     
     return checksum
 }
@@ -360,12 +376,12 @@ private func overrideDestAddr(_ newPacket: inout Data) -> Void {
     _ = computeIPCheckSum(newPacket) // validate algorithm is correct
     _ = computeTCPCheckSum(newPacket) // validate algorithm is correct
     
-    NSLog("Mapped packet srcIP to destIP")
+    os_log("Mapped packet srcIP to destIP")
     newPacket[12] = newPacket[16]
     newPacket[13] = newPacket[17]
     newPacket[14] = newPacket[18]
     newPacket[15] = newPacket[19]
-    NSLog("Mapped packet destIP to 127.0.0.1")
+    os_log("Mapped packet destIP to 127.0.0.1")
     newPacket[16] = 127
     newPacket[17] = 0
     newPacket[18] = 0
