@@ -6,11 +6,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ComponentName;
 import android.content.ServiceConnection;
-import android.os.Binder;
 import android.os.IBinder;
 import android.net.VpnService;
-import android.support.v4.content.LocalBroadcastManager;
-import android.support.v7.app.ActionBarActivity;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -38,7 +37,7 @@ class NxtStats {
 // This class is an android 'activity' class, ie this is the one that deals
 // with UI and buttons and stuff. Based on all the UI/button activity it will
 // then launch a 'service' class in NxtAgentService.java
-public class NxtAgent extends ActionBarActivity {
+public class NxtAgent extends AppCompatActivity {
     private static final int VPN_REQUEST_CODE = 0x0F;
     private static final String TAG = "NxtUi";
     private NxtAgentService agentService = null;

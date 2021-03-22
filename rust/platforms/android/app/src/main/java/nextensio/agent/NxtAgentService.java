@@ -4,16 +4,13 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
-import android.support.v4.content.LocalBroadcastManager;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.pm.PackageManager;
 import android.util.Log;
 import android.os.Binder;
 import android.os.IBinder;
-import android.system.Os;
-import java.io.Closeable;
-import java.io.FileDescriptor;
+
 import java.io.IOException;
-import java.nio.channels.Selector;
 
 // This class is an android 'service' class (ie it has nothing to do with UI etc..), 
 // its job is to create the vpnService interface/file descriptors and pass it onto 
