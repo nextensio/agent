@@ -25,9 +25,23 @@ import com.okta.oidc.RequestCallback;
 import com.okta.oidc.ResultCallback;
 import com.okta.oidc.Tokens;
 import com.okta.oidc.clients.sessions.SessionClient;
+import com.okta.oidc.net.response.IntrospectInfo;
+import com.okta.oidc.net.params.TokenTypeHint;
 import com.okta.oidc.clients.web.WebAuthClient;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.AuthFailureError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+import java.util.Map;
+import java.util.HashMap;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 class NxtStats {
     long heap;
@@ -62,7 +76,7 @@ public class NxtAgent extends AppCompatActivity {
     .clientId("0oa2ncngj2cVUdS6b4x7")
     .redirectUri("nextensio.agent:/login")
     .endSessionRedirectUri("nextensio.agent:/logout")
-    .scopes("openid", "email", "profile")
+    .scopes("openid", "email", "profile", "offline_access")
     .discoveryUri("https://dev-635657.okta.com")
     .create();
 
@@ -187,8 +201,89 @@ public class NxtAgent extends AppCompatActivity {
 
     // User is asking for a browser to do the authentication/login
     private void launchLogin() {
-        authClient.signOut(this, null);
         authClient.signIn(this, null);
+    }
+
+    private void agentOnboard(String accessToken, JSONObject onboard) {
+        try {
+            String result = onboard.getString("Result");
+            if (result != "ok") {
+                // TODO: show the error some place
+                Log.i(TAG, "Onboard result is not ok: " + result);
+                return;
+            }
+            String userid = onboard.getString("userid");
+            String host = onboard.getString("gateway");
+            String connectid = onboard.getString("connectid");
+
+            JSONArray cert = onboard.getJSONArray("cacert");
+            byte[] cacert = new byte[cert.length()];
+            for(int i = 0; i < cert.length(); i++) {
+                cacert[i] = (byte)cert.getInt(i);
+            }
+
+            JSONArray dom = onboard.getJSONArray("domains");
+            String[] domains = new String[dom.length()];
+            for(int i = 0; i < dom.length(); i++) {
+                domains[i] = dom.getString(i);
+            }
+        } catch (final JSONException e)  {
+            // TODO: show the error some place
+            Log.i(TAG, "Error parsing json");
+            return;
+        }
+    }
+
+    private void introspect() {
+        try {
+            sessionClient.introspectToken(sessionClient.getTokens().getAccessToken(),
+                TokenTypeHint.REFRESH_TOKEN, new RequestCallback<IntrospectInfo, AuthorizationException>() {
+                    @Override
+                    public void onSuccess(@NonNull IntrospectInfo result) {
+                        Log.i(TAG, "Introspect active" + result.isActive() + " username " + result.getUsername() + " uid " + result.getUid() + 
+                        " sub " + result.getSub() + " aud " + result.getAud() + " iss " + result.getIss() + " exp " + 
+                        result.getExp() + " dev " + result.getDeviceId() + " client " + result.getClientId() + " scope " + result.getScope() +
+                        " ttype " + result.getTokenType());
+                    }
+        
+                    @Override
+                    public void onError(String error, AuthorizationException exception) {
+                        Log.i(TAG, "Introspect failed " + error + " desc " + exception.errorDescription);
+                    }
+                }
+            );
+        } catch (AuthorizationException e) {
+            //handle error
+        }
+    }
+
+    private void controllerOnboard(String accessToken) {
+        String url = "https://172.18.0.3:8080/api/v1/onboard/" + accessToken;
+        RequestQueue queue = Volley.newRequestQueue(this);
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                Log.i(TAG, "Response: " + response.toString());
+                agentOnboard(accessToken, response);
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                // TODO: Show the error some place
+                Log.i(TAG, "Error calling " + url);
+            }
+        }) {
+            @Override
+            public Map getHeaders() throws AuthFailureError 
+            { 
+                HashMap headers = new HashMap(); 
+                headers.put("Authorization", "Bearer " + accessToken); 
+                return headers; 
+            }
+        }; 
+        
+        // Add the request to the RequestQueue.
+        queue.add(jsonObjectRequest);
     }
 
     @Override
@@ -230,7 +325,10 @@ public class NxtAgent extends AppCompatActivity {
                     try {
                         //client is authorized.
                         Tokens tokens = sessionClient.getTokens();
-                        Log.i(TAG, "tokens %s" + tokens.getAccessToken());
+                        Log.i(TAG, "Access " + tokens.getAccessToken());
+                        Log.i(TAG, "ID Token " + tokens.getIdToken());
+                        introspect();
+                        controllerOnboard(tokens.getAccessToken());
                     } catch (AuthorizationException exception) {
                         return;
                     }

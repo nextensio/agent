@@ -238,7 +238,7 @@ fn main() {
     let services = matches.value_of("service").unwrap_or("").to_owned();
     let controller = matches
         .value_of("controller")
-        .unwrap_or("server.nextensio.net")
+        .unwrap_or("server.nextensio.net:8080")
         .to_owned();
 
     println!("controller {}, service {}", controller, services);
