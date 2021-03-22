@@ -17,6 +17,17 @@ import android.widget.TextView;
 import android.util.Log;
 import android.net.Uri;
 import android.os.Handler;
+import com.okta.oidc.OIDCConfig;
+import com.okta.oidc.Okta;
+import com.okta.oidc.AuthorizationStatus;
+import com.okta.oidc.util.AuthorizationException;
+import com.okta.oidc.RequestCallback;
+import com.okta.oidc.ResultCallback;
+import com.okta.oidc.Tokens;
+import com.okta.oidc.clients.sessions.SessionClient;
+import com.okta.oidc.clients.web.WebAuthClient;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 class NxtStats {
     long heap;
@@ -42,6 +53,18 @@ public class NxtAgent extends AppCompatActivity {
     private static final String TAG = "NxtUi";
     private NxtAgentService agentService = null;
     private Handler handler = new Handler();
+    private final static String FIRE_FOX = "org.mozilla.firefox";
+    private final static String ANDROID_BROWSER = "com.android.browser";
+    private WebAuthClient authClient;
+    private SessionClient sessionClient;
+    
+    private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
+    .clientId("0oa2ncngj2cVUdS6b4x7")
+    .redirectUri("nextensio.agent:/login")
+    .endSessionRedirectUri("nextensio.agent:/logout")
+    .scopes("openid", "email", "profile")
+    .discoveryUri("https://dev-635657.okta.com")
+    .create();
 
     private Runnable runTask = new Runnable() {
         @Override
@@ -164,8 +187,8 @@ public class NxtAgent extends AppCompatActivity {
 
     // User is asking for a browser to do the authentication/login
     private void launchLogin() {
-        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://localhost:8180"));
-        startActivity(browserIntent);
+        authClient.signOut(this, null);
+        authClient.signIn(this, null);
     }
 
     @Override
@@ -192,6 +215,39 @@ public class NxtAgent extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_nextensio);
+
+        authClient = new Okta.WebAuthBuilder()
+        .withConfig(mOidcConfig)
+        .withContext(this.getApplicationContext())
+        .supportedBrowsers(ANDROID_BROWSER, FIRE_FOX)
+        .setCacheMode(false).create();
+
+        sessionClient = authClient.getSessionClient();
+        authClient.registerCallback(new ResultCallback<AuthorizationStatus, AuthorizationException>() {
+            @Override
+            public void onSuccess(@NonNull AuthorizationStatus status) {
+                if (status == AuthorizationStatus.AUTHORIZED) {
+                    try {
+                        //client is authorized.
+                        Tokens tokens = sessionClient.getTokens();
+                        Log.i(TAG, "tokens %s" + tokens.getAccessToken());
+                    } catch (AuthorizationException exception) {
+                        return;
+                    }
+                } else if (status == AuthorizationStatus.SIGNED_OUT) {
+                    // TODO: We need to tell agent about this so agent can stop forwarding and tear
+                    // down tunnels etc..
+                }
+            }
+    
+            @Override
+            public void onCancel() {
+            }
+    
+            @Override
+            public void onError(@Nullable String s, @Nullable AuthorizationException e) {
+            }
+        }, this);
 
         // Setup the button to turn the vpn on/off
         final Button vpnButton = (Button)findViewById(R.id.vpn);
