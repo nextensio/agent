@@ -77,7 +77,7 @@ public class NxtAgent extends AppCompatActivity {
     .redirectUri("nextensio.agent:/login")
     .endSessionRedirectUri("nextensio.agent:/logout")
     .scopes("openid", "email", "profile", "offline_access")
-    .discoveryUri("https://dev-635657.okta.com")
+    .discoveryUri("https://dev-635657.okta.com/oauth2/default")
     .create();
 
     private Runnable runTask = new Runnable() {
