@@ -45,19 +45,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 class NxtStats {
-    long heap;
-    long mallocs;
-    long frees;
-    long paused;
-    int gc;
-    int goroutines;
-    int conn;
-    int disco;
-    int discoSecs;
-    int numflows;
-    int directflows;
+    int gateway_up;
+    int gateway_flaps;
+    int last_gateway_flap;
+    int gateway_flows;
+    int total_flows;
 
-    //native void nxtStats();
+    native void nxtStats();
 }
 
 // This class is an android 'activity' class, ie this is the one that deals
@@ -86,17 +80,13 @@ public class NxtAgent extends AppCompatActivity {
         public void run() {
             final TextView textview = (TextView)findViewById(R.id.status);
             NxtStats stats = new NxtStats();
-            //stats.nxtStats();
-            String text = String.format("%s to Nextensio-Rust\n" + 
+            stats.nxtStats();
+            String text = String.format("%s to Nextensio\n" + 
                                         "%d connection flaps to nextensio, last flap %d seconds / %d mins ago\n" + 
-                                        "Total heap in-use bytes %d, malloc count %d, free count %d (delta = %d)\n" + 
-                                        "Goroutines in use %d, Total GC count %d, Total GC Pause Nanosecs %d\n" +
-                                        "Via Nxt flows %d, Direct internet flows %d\n",
-                                        (stats.conn == 1 ? "Connected" : "Not Connected"),
-                                        stats.disco, stats.discoSecs, stats.discoSecs/60,
-                                        stats.heap, stats.mallocs, stats.frees, stats.mallocs - stats.frees,
-                                        stats.goroutines, stats.gc, stats.paused,
-                                        stats.numflows, stats.directflows);
+                                        "Via Nextensio flows %d, Direct internet flows %d\n",
+                                        (stats.gateway_up == 1 ? "Connected" : "Not Connected"),
+                                        stats.gateway_flaps, stats.last_gateway_flap, stats.last_gateway_flap/60,
+                                        stats.gateway_flows, stats.total_flows);
             textview.setText(text);
                                         
             // Repeat every 30 secs

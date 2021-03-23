@@ -34,6 +34,7 @@ static DIRECT: AtomicI32 = AtomicI32::new(0);
 static mut REGINFO: Option<Box<RegistrationInfo>> = None;
 static REGINFO_CHANGED: AtomicUsize = AtomicUsize::new(0);
 
+static STATS_GWUP: AtomicI32 = AtomicI32::new(0);
 static STATS_NUMFLAPS: AtomicI32 = AtomicI32::new(0);
 static STATS_LASTFLAP: AtomicI32 = AtomicI32::new(0);
 static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
@@ -88,6 +89,7 @@ pub struct CRegistrationInfo {
 
 #[repr(C)]
 pub struct AgentStats {
+    gateway_up: c_int,
     gateway_flaps: c_int,
     last_gateway_flap: c_int,
     gateway_flows: c_int,
@@ -1139,13 +1141,8 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 
     if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
         let gw_tun = &mut gw_tun.tun();
-        match gw_tun.flows {
-            TunFlow::OneToMany(ref mut tun_flows) => {
-                STATS_GWFLOWS.store(tun_flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
-            }
-            _ => panic!("gateway tun should have 1tomany flows"),
-        }
         if gw_tun.tun.is_closed(0) {
+            STATS_GWUP.store(0, std::sync::atomic::Ordering::Relaxed);
             STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             agent.last_flap = Instant::now();
             error!("Gateway transport closed, try opening again");
@@ -1158,8 +1155,13 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
             agent.tuns.remove(&GWTUN_IDX);
             new_gw(agent, poll);
         } else {
+            STATS_GWUP.store(1, std::sync::atomic::Ordering::Relaxed);
             match gw_tun.flows {
-                TunFlow::OneToMany(ref mut tun_flows) => tun_flows.shrink_to_fit(),
+                TunFlow::OneToMany(ref mut tun_flows) => {
+                    tun_flows.shrink_to_fit();
+                    STATS_GWFLOWS
+                        .store(tun_flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
+                }
                 _ => {}
             }
         }
@@ -1669,8 +1671,9 @@ pub unsafe extern "C" fn onboard(info: CRegistrationInfo) {
 
 #[no_mangle]
 pub unsafe extern "C" fn agent_stats(stats: *mut AgentStats) {
+    (*stats).gateway_up = STATS_GWUP.load(std::sync::atomic::Ordering::Relaxed);
     (*stats).gateway_flaps = STATS_NUMFLAPS.load(std::sync::atomic::Ordering::Relaxed);
     (*stats).last_gateway_flap = STATS_LASTFLAP.load(std::sync::atomic::Ordering::Relaxed);
     (*stats).gateway_flows = STATS_GWFLOWS.load(std::sync::atomic::Ordering::Relaxed);
-    (*stats).gateway_flaps = STATS_NUMFLOWS.load(std::sync::atomic::Ordering::Relaxed);
+    (*stats).total_flows = STATS_NUMFLOWS.load(std::sync::atomic::Ordering::Relaxed);
 }

@@ -16,10 +16,20 @@ struct CRegistrationInfo
     int num_services;
 };
 
+struct AgentStats
+{
+    int gateway_up;
+    int gateway_flaps;
+    int last_gateway_flap;
+    int gateway_flows;
+    int total_flows;
+};
+
 extern void agent_init(int platform, int direct);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
+extern void agent_stats(struct AgentStats *stats);
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
@@ -95,6 +105,24 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jcl
         (*env)->ReleaseStringUTFChars(env, string, creg.services[i]);
     }
     free(creg.services);
+}
+
+JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobject obj)
+{
+    struct AgentStats stats = {};
+    agent_stats(&stats);
+
+    jclass thisObj = (*env)->GetObjectClass(env, obj);
+    jfieldID gateway_up = (*env)->GetFieldID(env, thisObj, "gateway_up", "I");
+    (*env)->SetIntField(env, obj, gateway_up, stats.gateway_up);
+    jfieldID gateway_flaps = (*env)->GetFieldID(env, thisObj, "gateway_flaps", "I");
+    (*env)->SetIntField(env, obj, gateway_flaps, stats.gateway_flaps);
+    jfieldID last_gateway_flap = (*env)->GetFieldID(env, thisObj, "last_gateway_flap", "I");
+    (*env)->SetIntField(env, obj, last_gateway_flap, stats.last_gateway_flap);
+    jfieldID gateway_flows = (*env)->GetFieldID(env, thisObj, "gateway_flows", "I");
+    (*env)->SetIntField(env, obj, gateway_flows, stats.gateway_flows);
+    jfieldID total_flows = (*env)->GetFieldID(env, thisObj, "total_flows", "I");
+    (*env)->SetIntField(env, obj, total_flows, stats.total_flows);
 }
 
 // These are some symbols that rust is looking for (coming from their math/logarithm lib!), just putting
