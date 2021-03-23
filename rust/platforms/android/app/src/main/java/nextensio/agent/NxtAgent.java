@@ -208,7 +208,7 @@ public class NxtAgent extends AppCompatActivity {
     private void agentOnboard(String accessToken, JSONObject onboard) {
         try {
             String result = onboard.getString("Result");
-            if (result != "ok") {
+            if (!result.equals("ok")) {
                 // TODO: show the error some place
                 Log.i(TAG, "Onboard result is not ok: " + result);
                 return;
@@ -217,7 +217,6 @@ public class NxtAgent extends AppCompatActivity {
             String userid = onboard.getString("userid");
             String host = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
-
             JSONArray cert = onboard.getJSONArray("cacert");
             byte[] cacert = new byte[cert.length()];
             for(int i = 0; i < cert.length(); i++) {
@@ -267,12 +266,11 @@ public class NxtAgent extends AppCompatActivity {
     }
 
     private void controllerOnboard(String accessToken) {
-        String url = "https://172.18.0.2:8080/api/v1/onboard/" + accessToken;
+        String url = "https://server.nextensio.net:8080/api/v1/onboard/" + accessToken;
         RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
             @Override
             public void onResponse(JSONObject response) {
-                Log.i(TAG, "Response: " + response.toString());
                 agentOnboard(accessToken, response);
             }
         }, new Response.ErrorListener() {

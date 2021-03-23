@@ -54,7 +54,7 @@ const CLEANUP_UDP_DNS: usize = 30; // 30 seconds
 
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RegistrationInfo {
     host: String,
     access_token: String,
