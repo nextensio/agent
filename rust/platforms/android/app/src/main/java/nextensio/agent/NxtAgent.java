@@ -11,6 +11,7 @@ import android.net.VpnService;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
+import android.os.Debug;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -82,11 +83,14 @@ public class NxtAgent extends AppCompatActivity {
             NxtStats stats = new NxtStats();
             stats.nxtStats();
             String text = String.format("%s to Nextensio\n" + 
-                                        "%d connection flaps to nextensio, last flap %d seconds / %d mins ago\n" + 
-                                        "Via Nextensio flows %d, Direct internet flows %d\n",
+                                        "%d connection flaps, last flap %d seconds / %d mins ago\n" + 
+                                        "Via Nextensio flows %d, Direct internet flows %d\n" +
+                                        "Heap in-use %d MB, allocated %d MB\n", 
                                         (stats.gateway_up == 1 ? "Connected" : "Not Connected"),
                                         stats.gateway_flaps, stats.last_gateway_flap, stats.last_gateway_flap/60,
-                                        stats.gateway_flows, stats.total_flows);
+                                        stats.gateway_flows, stats.total_flows,
+                                        (Debug.getNativeHeapSize() - Debug.getNativeHeapFreeSize())/(1024*1024),
+                                        Debug.getNativeHeapAllocatedSize()/(1024*1024));
             textview.setText(text);
                                         
             // Repeat every 30 secs
