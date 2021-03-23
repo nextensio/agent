@@ -34,6 +34,11 @@ static DIRECT: AtomicI32 = AtomicI32::new(0);
 static mut REGINFO: Option<Box<RegistrationInfo>> = None;
 static REGINFO_CHANGED: AtomicUsize = AtomicUsize::new(0);
 
+static STATS_NUMFLAPS: AtomicI32 = AtomicI32::new(0);
+static STATS_LASTFLAP: AtomicI32 = AtomicI32::new(0);
+static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
+static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
+
 const NXT_AGENT_PROXY: usize = 8080;
 
 const UNUSED_IDX: usize = 0;
@@ -79,6 +84,14 @@ pub struct CRegistrationInfo {
     pub uuid: *const c_char,
     pub services: *const *const c_char,
     pub num_services: c_int,
+}
+
+#[repr(C)]
+pub struct AgentStats {
+    gateway_flaps: c_int,
+    last_gateway_flap: c_int,
+    gateway_flows: c_int,
+    total_flows: c_int,
 }
 
 fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
@@ -176,7 +189,6 @@ impl TunInfo {
     }
 }
 
-#[derive(Default)]
 struct AgentInfo {
     idp_onboarded: bool,
     gw_onboarded: bool,
@@ -192,8 +204,30 @@ struct AgentInfo {
     vpn_tun: Tun,
     proxy_tun: Tun,
     reginfo_changed: usize,
+    last_flap: Instant,
 }
 
+impl Default for AgentInfo {
+    fn default() -> Self {
+        AgentInfo {
+            idp_onboarded: false,
+            gw_onboarded: false,
+            platform: 0,
+            reginfo: RegistrationInfo::default(),
+            vpn_fd: 0,
+            vpn_tx: VecDeque::new(),
+            vpn_rx: VecDeque::new(),
+            flows: HashMap::new(),
+            parse_pending: HashMap::new(),
+            tuns: HashMap::new(),
+            next_tun_idx: TUN_START,
+            vpn_tun: Tun::default(),
+            proxy_tun: Tun::default(),
+            reginfo_changed: 0,
+            last_flap: Instant::now(),
+        }
+    }
+}
 // Mark when the flow should be cleaned up. The internet RFCs stipulate
 // 4 hours for TCP idle flow, 5 minutes for UDP idle flow - we have made
 // it some more shorter here, that will pbbly have to be bumped up to match
@@ -1098,13 +1132,22 @@ fn monitor_onboard(agent: &mut AgentInfo) {
 }
 
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
+    // If we want the agent to be in all-direct mode, dont bother about gateway
     if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
         return;
     }
 
     if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
         let gw_tun = &mut gw_tun.tun();
+        match gw_tun.flows {
+            TunFlow::OneToMany(ref mut tun_flows) => {
+                STATS_GWFLOWS.store(tun_flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
+            }
+            _ => panic!("gateway tun should have 1tomany flows"),
+        }
         if gw_tun.tun.is_closed(0) {
+            STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            agent.last_flap = Instant::now();
             error!("Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
             gw_tun
@@ -1120,7 +1163,12 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 _ => {}
             }
         }
+        STATS_LASTFLAP.store(
+            agent.last_flap.elapsed().as_secs() as i32,
+            std::sync::atomic::Ordering::Relaxed,
+        );
     } else {
+        STATS_LASTFLAP.store(0, std::sync::atomic::Ordering::Relaxed);
         new_gw(agent, poll);
     }
 }
@@ -1239,7 +1287,7 @@ fn monitor_flows(
     parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
 ) {
-    error!("Total flows {}", flows.len());
+    STATS_NUMFLOWS.store(flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
@@ -1617,4 +1665,12 @@ pub unsafe extern "C" fn agent_off() {
 pub unsafe extern "C" fn onboard(info: CRegistrationInfo) {
     REGINFO = Some(Box::new(creginfo_translate(info)));
     REGINFO_CHANGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn agent_stats(stats: *mut AgentStats) {
+    (*stats).gateway_flaps = STATS_NUMFLAPS.load(std::sync::atomic::Ordering::Relaxed);
+    (*stats).last_gateway_flap = STATS_LASTFLAP.load(std::sync::atomic::Ordering::Relaxed);
+    (*stats).gateway_flows = STATS_GWFLOWS.load(std::sync::atomic::Ordering::Relaxed);
+    (*stats).gateway_flaps = STATS_NUMFLOWS.load(std::sync::atomic::Ordering::Relaxed);
 }
