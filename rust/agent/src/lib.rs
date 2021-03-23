@@ -13,6 +13,8 @@ use l3proxy::Socket;
 use log::{error, Level, LevelFilter};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
+#[cfg(target_vendor = "apple")]
+use oslog::OsLogger;
 use std::collections::VecDeque;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
@@ -21,8 +23,6 @@ use std::{collections::HashMap, time::Duration, time::Instant};
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
-#[cfg(target_vendor = "apple")]
-use oslog::OsLogger;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
@@ -74,6 +74,7 @@ pub struct CRegistrationInfo {
     pub domains: *const *const c_char,
     pub num_domains: c_int,
     pub ca_cert: *const c_char,
+    pub num_cacert: c_int,
     pub userid: *const c_char,
     pub uuid: *const c_char,
     pub services: *const *const c_char,
@@ -93,6 +94,10 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
         reginfo.ca_cert = CStr::from_ptr(creg.ca_cert).to_bytes().to_owned();
         reginfo.userid = CStr::from_ptr(creg.userid).to_string_lossy().into_owned();
         reginfo.uuid = CStr::from_ptr(creg.uuid).to_string_lossy().into_owned();
+
+        let tmp_array: &[c_char] = slice::from_raw_parts(creg.ca_cert, creg.num_cacert as usize);
+        let rust_array: Vec<_> = tmp_array.iter().map(|&v| v as u8).collect();
+        reginfo.ca_cert = rust_array;
 
         let tmp_array: &[*const c_char] =
             slice::from_raw_parts(creg.domains, creg.num_domains as usize);

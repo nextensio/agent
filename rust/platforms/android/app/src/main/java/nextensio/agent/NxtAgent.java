@@ -39,6 +39,7 @@ import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.UUID;
 import org.json.JSONObject;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -212,6 +213,7 @@ public class NxtAgent extends AppCompatActivity {
                 Log.i(TAG, "Onboard result is not ok: " + result);
                 return;
             }
+            String uuid = UUID.randomUUID().toString();
             String userid = onboard.getString("userid");
             String host = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
@@ -227,6 +229,12 @@ public class NxtAgent extends AppCompatActivity {
             for(int i = 0; i < dom.length(); i++) {
                 domains[i] = dom.getString(i);
             }
+
+            String[] services = new String[1];
+            services[0] = connectid;
+
+            nxtOnboard(accessToken, uuid, userid, host, connectid, cacert, domains, services);
+
         } catch (final JSONException e)  {
             // TODO: show the error some place
             Log.i(TAG, "Error parsing json");
@@ -240,10 +248,11 @@ public class NxtAgent extends AppCompatActivity {
                 TokenTypeHint.REFRESH_TOKEN, new RequestCallback<IntrospectInfo, AuthorizationException>() {
                     @Override
                     public void onSuccess(@NonNull IntrospectInfo result) {
-                        Log.i(TAG, "Introspect active" + result.isActive() + " username " + result.getUsername() + " uid " + result.getUid() + 
-                        " sub " + result.getSub() + " aud " + result.getAud() + " iss " + result.getIss() + " exp " + 
-                        result.getExp() + " dev " + result.getDeviceId() + " client " + result.getClientId() + " scope " + result.getScope() +
-                        " ttype " + result.getTokenType());
+                        Log.i(TAG, "Introspect active" + result.isActive() + " username " + result.getUsername() + 
+                                     " uid " + result.getUid() + " sub " + result.getSub() + " aud " + result.getAud() + 
+                                    " iss " + result.getIss() + " exp " + result.getExp() + " dev " + result.getDeviceId() +
+                                    " client " + result.getClientId() + " scope " + result.getScope() +
+                                    " ttype " + result.getTokenType());
                     }
         
                     @Override
@@ -253,12 +262,12 @@ public class NxtAgent extends AppCompatActivity {
                 }
             );
         } catch (AuthorizationException e) {
-            //handle error
+            Log.i(TAG, "Introspect failed with exception");
         }
     }
 
     private void controllerOnboard(String accessToken) {
-        String url = "https://172.18.0.3:8080/api/v1/onboard/" + accessToken;
+        String url = "https://172.18.0.2:8080/api/v1/onboard/" + accessToken;
         RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
             @Override
@@ -325,9 +334,6 @@ public class NxtAgent extends AppCompatActivity {
                     try {
                         //client is authorized.
                         Tokens tokens = sessionClient.getTokens();
-                        Log.i(TAG, "Access " + tokens.getAccessToken());
-                        Log.i(TAG, "ID Token " + tokens.getIdToken());
-                        introspect();
                         controllerOnboard(tokens.getAccessToken());
                     } catch (AuthorizationException exception) {
                         return;
@@ -398,4 +404,8 @@ public class NxtAgent extends AppCompatActivity {
         super.onDestroy();
         doUnbindService();
     }    
+
+    private static native void nxtOnboard(String accessToken, String uuid, String userid, String host,
+                                          String connectid, byte []cacert, String []domains, String []services);
+
 }

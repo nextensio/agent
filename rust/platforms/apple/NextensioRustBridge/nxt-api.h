@@ -17,6 +17,7 @@ typedef struct CRegistrationInfo {
     char *domains;
     int num_domains;
     char *ca_cert;
+    int num_cacert;
     char *userid;
     char *uuid;
     char *services;

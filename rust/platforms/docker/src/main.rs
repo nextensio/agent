@@ -156,6 +156,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
         domains: domains.as_ptr() as *const *const c_char,
         num_domains: domains.len() as c_int,
         ca_cert: onb.cacert.as_ptr() as *const c_char,
+        num_cacert: onb.cacert.len() as c_int,
         userid: c_userid.as_ptr(),
         uuid: c_uuid_str.as_ptr(),
         services: c_services.as_ptr() as *const *const c_char,
