@@ -253,8 +253,9 @@ fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4, alive: bool) {
     } else {
         flow.dead = true;
         flow.cleanup_after = CLEANUP_NOW;
-        drop(flow.pending_rx.clear());
+        flow.pending_rx.clear();
         flow.pending_tx = None;
+        flow.parse_pending = None;
     }
 }
 
@@ -690,15 +691,16 @@ fn parse_complete(key: &FlowV4Key, flow: &mut FlowV4, mut tx: NxtBufs) -> Option
                 if tx.bufs[0][tx.headroom..].len() >= common::MAXBUF {
                     flow.service = key.dip.clone();
                     return Some(tx);
+                } else {
+                    // We think more data will produce better parsing results, so wait for more data
+                    let mut pending = Vec::with_capacity(common::MAXBUF);
+                    for b in tx.bufs {
+                        pending.extend_from_slice(&b[tx.headroom..]);
+                        tx.headroom = 0;
+                    }
+                    flow.parse_pending = Some(pending);
+                    return None;
                 }
-                // We think more data will produce better parsing results, so wait for more data
-                let mut pending = Vec::with_capacity(common::MAXBUF);
-                for b in tx.bufs {
-                    pending.extend_from_slice(&b[tx.headroom..]);
-                    tx.headroom = 0;
-                }
-                flow.parse_pending = Some(pending);
-                return None;
             }
         }
     }
@@ -1272,6 +1274,8 @@ fn monitor_parse_pending(
                 }
                 keys.push(k.clone());
             }
+        } else {
+            keys.push(k.clone());
         }
     }
     for k in keys {
@@ -1326,6 +1330,9 @@ fn monitor_flows(
                     .ok();
                 tuns.remove(&f.rx_socket_idx);
             }
+            f.pending_rx.clear();
+            f.pending_tx = None;
+            f.parse_pending = None;
             keys.push(k.clone());
         }
     }
