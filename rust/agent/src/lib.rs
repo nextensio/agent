@@ -1167,10 +1167,12 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 _ => {}
             }
         }
-        STATS_LASTFLAP.store(
-            agent.last_flap.elapsed().as_secs() as i32,
-            std::sync::atomic::Ordering::Relaxed,
-        );
+        let mut elapsed: i32 = 0;
+        let now = Instant::now();
+        if now > agent.last_flap {
+            elapsed = (now - agent.last_flap).as_secs() as i32;
+        }
+        STATS_LASTFLAP.store(elapsed, std::sync::atomic::Ordering::Relaxed);
     } else {
         STATS_LASTFLAP.store(0, std::sync::atomic::Ordering::Relaxed);
         new_gw(agent, poll);
@@ -1256,7 +1258,7 @@ fn monitor_parse_pending(
     let mut keys = Vec::new();
     for (k, _) in parse_pending.iter_mut() {
         if let Some(f) = flows.get_mut(k) {
-            if f.creation_time.elapsed() >= Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+            if Instant::now() > f.creation_time + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
                 if let Some(data) = f.parse_pending.take() {
                     // We couldnt parse the service, just use dest ip as service
                     f.service = k.dip.clone();
@@ -1297,7 +1299,7 @@ fn monitor_flows(
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
-        if f.last_active.elapsed() > Duration::from_secs(f.cleanup_after as u64) {
+        if Instant::now() > f.last_active + Duration::from_secs(f.cleanup_after as u64) {
             if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
                 let tx_socket = tx_socket.tun();
                 flow_close(k, f, &mut tx_socket.tun, poll);
@@ -1612,13 +1614,13 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
         // Note that we have a poll timeout of two seconds, but packets can keep the loop busy
         // so make sure we monitor only every two secs
-        if monitor_ager.elapsed() >= Duration::from_secs(2) {
+        if Instant::now() > monitor_ager + Duration::from_secs(2) {
             monitor_onboard(&mut agent);
             monitor_gw(&mut agent, &mut poll);
             monitor_vpnfd(&mut agent, &mut poll);
             monitor_ager = Instant::now();
         }
-        if service_parse_ager.elapsed() >= Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+        if Instant::now() > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
             monitor_parse_pending(
                 &mut agent.flows,
                 &mut agent.parse_pending,
@@ -1628,7 +1630,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
             );
             service_parse_ager = Instant::now();
         }
-        if flow_ager.elapsed() >= Duration::from_secs(30) {
+        if Instant::now() > flow_ager + Duration::from_secs(30) {
             // Check the flow aging only once every 30 seconds
             monitor_flows(
                 &mut poll,
