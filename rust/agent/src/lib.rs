@@ -15,11 +15,11 @@ use mio::{Events, Poll, Token};
 use netconn::NetConn;
 #[cfg(target_vendor = "apple")]
 use oslog::OsLogger;
-use std::collections::VecDeque;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::slice;
-use std::{collections::HashMap, time::Duration, time::Instant};
+use std::{collections::HashMap, time::Duration};
+use std::{collections::VecDeque, time::SystemTime};
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
@@ -141,8 +141,8 @@ struct FlowV4 {
     tx_socket: usize,
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
-    creation_time: Instant,
-    last_active: Instant,
+    creation_time: SystemTime,
+    last_active: SystemTime,
     cleanup_after: usize,
     dead: bool,
     pending_tx_qed: bool,
@@ -206,7 +206,7 @@ struct AgentInfo {
     vpn_tun: Tun,
     proxy_tun: Tun,
     reginfo_changed: usize,
-    last_flap: Instant,
+    last_flap: SystemTime,
 }
 
 impl Default for AgentInfo {
@@ -226,7 +226,7 @@ impl Default for AgentInfo {
             vpn_tun: Tun::default(),
             proxy_tun: Tun::default(),
             reginfo_changed: 0,
-            last_flap: Instant::now(),
+            last_flap: SystemTime::now(),
         }
     }
 }
@@ -239,7 +239,7 @@ impl Default for AgentInfo {
 // will hang around in idle state for a long time. And for dns we are being
 // super aggressive here, cleaning up in 30 seconds.
 fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4, alive: bool) {
-    flow.last_active = Instant::now();
+    flow.last_active = SystemTime::now();
     if alive {
         if key.proto == common::TCP {
             flow.cleanup_after = CLEANUP_TCP_IDLE;
@@ -385,8 +385,8 @@ fn flow_new(
         tx_socket,
         pending_tx: None,
         pending_rx: VecDeque::with_capacity(1),
-        last_active: Instant::now(),
-        creation_time: Instant::now(),
+        last_active: SystemTime::now(),
+        creation_time: SystemTime::now(),
         cleanup_after,
         dead: false,
         pending_tx_qed: false,
@@ -1146,7 +1146,7 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         if gw_tun.tun.is_closed(0) {
             STATS_GWUP.store(0, std::sync::atomic::Ordering::Relaxed);
             STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            agent.last_flap = Instant::now();
+            agent.last_flap = SystemTime::now();
             error!("Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
             gw_tun
@@ -1167,12 +1167,15 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 _ => {}
             }
         }
-        let mut elapsed: i32 = 0;
-        let now = Instant::now();
-        if now > agent.last_flap {
-            elapsed = (now - agent.last_flap).as_secs() as i32;
+        match agent.last_flap.elapsed() {
+            Ok(elapsed) => {
+                STATS_LASTFLAP.store(
+                    elapsed.as_secs() as i32,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
+            }
+            _ => {}
         }
-        STATS_LASTFLAP.store(elapsed, std::sync::atomic::Ordering::Relaxed);
     } else {
         STATS_LASTFLAP.store(0, std::sync::atomic::Ordering::Relaxed);
         new_gw(agent, poll);
@@ -1258,7 +1261,7 @@ fn monitor_parse_pending(
     let mut keys = Vec::new();
     for (k, _) in parse_pending.iter_mut() {
         if let Some(f) = flows.get_mut(k) {
-            if Instant::now() > f.creation_time + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+            if SystemTime::now() > f.creation_time + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
                 if let Some(data) = f.parse_pending.take() {
                     // We couldnt parse the service, just use dest ip as service
                     f.service = k.dip.clone();
@@ -1299,7 +1302,7 @@ fn monitor_flows(
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
-        if Instant::now() > f.last_active + Duration::from_secs(f.cleanup_after as u64) {
+        if SystemTime::now() > f.last_active + Duration::from_secs(f.cleanup_after as u64) {
             if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
                 let tx_socket = tx_socket.tun();
                 flow_close(k, f, &mut tx_socket.tun, poll);
@@ -1489,9 +1492,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
     proxy_init(&mut agent, &mut poll);
 
-    let mut flow_ager = Instant::now();
-    let mut service_parse_ager = Instant::now();
-    let mut monitor_ager = Instant::now();
+    let mut flow_ager = SystemTime::now();
+    let mut service_parse_ager = SystemTime::now();
+    let mut monitor_ager = SystemTime::now();
     loop {
         let hundred_ms = Duration::from_millis(SERVICE_PARSE_TIMEOUT);
         match poll.poll(&mut events, Some(hundred_ms)) {
@@ -1614,13 +1617,13 @@ fn agent_main_thread(platform: usize, direct: usize) {
 
         // Note that we have a poll timeout of two seconds, but packets can keep the loop busy
         // so make sure we monitor only every two secs
-        if Instant::now() > monitor_ager + Duration::from_secs(2) {
+        if SystemTime::now() > monitor_ager + Duration::from_secs(2) {
             monitor_onboard(&mut agent);
             monitor_gw(&mut agent, &mut poll);
             monitor_vpnfd(&mut agent, &mut poll);
-            monitor_ager = Instant::now();
+            monitor_ager = SystemTime::now();
         }
-        if Instant::now() > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+        if SystemTime::now() > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
             monitor_parse_pending(
                 &mut agent.flows,
                 &mut agent.parse_pending,
@@ -1628,9 +1631,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
                 &mut agent.reginfo,
                 &mut poll,
             );
-            service_parse_ager = Instant::now();
+            service_parse_ager = SystemTime::now();
         }
-        if Instant::now() > flow_ager + Duration::from_secs(30) {
+        if SystemTime::now() > flow_ager + Duration::from_secs(30) {
             // Check the flow aging only once every 30 seconds
             monitor_flows(
                 &mut poll,
@@ -1638,7 +1641,7 @@ fn agent_main_thread(platform: usize, direct: usize) {
                 &mut agent.parse_pending,
                 &mut agent.tuns,
             );
-            flow_ager = Instant::now();
+            flow_ager = SystemTime::now();
         }
     }
 }
