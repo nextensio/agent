@@ -15,11 +15,11 @@ use mio::{Events, Poll, Token};
 use netconn::NetConn;
 #[cfg(target_vendor = "apple")]
 use oslog::OsLogger;
+use std::collections::VecDeque;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::{collections::HashMap, time::Duration};
-use std::{collections::VecDeque, time::Instant};
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize, thread};
 use webproxy::WebProxy;
 use websock::WebSession;
@@ -141,8 +141,8 @@ struct FlowV4 {
     tx_socket: usize,
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
-    creation_time: Instant,
-    last_active: Instant,
+    creation_time: Duration,
+    last_active: Duration,
     cleanup_after: usize,
     dead: bool,
     pending_tx_qed: bool,
@@ -206,7 +206,7 @@ struct AgentInfo {
     vpn_tun: Tun,
     proxy_tun: Tun,
     reginfo_changed: usize,
-    last_flap: Instant,
+    last_flap: Duration,
 }
 
 impl Default for AgentInfo {
