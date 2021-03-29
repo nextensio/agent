@@ -14,4 +14,3 @@ debug = true   # Controls whether the compiler passes `-g`
 lto = true
 codegen-units = 1
 opt-level = "z"
-panic = "unwind"
