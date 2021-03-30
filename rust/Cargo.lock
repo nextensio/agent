@@ -312,19 +312,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#308bd5629e39a5ee2d3b3431f98edc51bd1c49a5"
-dependencies = [
- "etherparse",
- "httparse",
- "mio 0.7.10",
- "native-tls",
- "prost",
- "prost-build",
-]
-
-[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

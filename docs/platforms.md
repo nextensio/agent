@@ -16,6 +16,11 @@ which case we have to keep the common java/swift stuff in some place common, or 
 retire the go version altogether because its not usable on ios anyways because of memory
 constraints.
 
+## Rust / Go common notes for compiling the code
+
+Refer to https://gitlab.com/nextensio/common/-/blob/master/README.md - there are some
+steps to be done before we can build the code here, the steps are outlined in that readme
+
 ## Apple agent
 
 #### Golang notes

@@ -11,6 +11,18 @@
 #include <net/if_utun.h>
 #include <sys/ioctl.h>
 #include <sys/kern_event.h>
+#include <fcntl.h>
+
+int set_nonblocking(int fd)
+{
+    int flags;
+
+    if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+    {
+        flags = 0;
+    }
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
 
 int32_t open_utun(uint64_t num)
 {
@@ -46,5 +58,6 @@ int32_t open_utun(uint64_t num)
         close(fd);
         return err;
     }
+    set_nonblocking(fd);
     return fd;
 }
