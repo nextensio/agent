@@ -336,7 +336,7 @@ fn flow_new(
         let mut tun = Tun {
             tun: Box::new(tun),
             pending_tx: VecDeque::with_capacity(1),
-            tx_ready: true,
+            tx_ready: false,
             flows: TunFlow::OneToOne(key.clone()),
             proxy_client: false,
         };
