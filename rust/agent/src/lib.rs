@@ -332,11 +332,18 @@ fn flow_new(
             Ok(()) => {}
         }
         tx_stream = tun.new_stream();
+        // The async tcp socket has to be established properly after handshake 
+        // and mio has to signal us that tx is ready before we can write. For 
+        // UDP tx is ready from get go
+	let mut tx_ready = false;
+	if key.proto == common::UDP {
+	    tx_ready = true;
+        }
         *next_tun_idx = tx_socket + 1;
         let mut tun = Tun {
             tun: Box::new(tun),
             pending_tx: VecDeque::with_capacity(1),
-            tx_ready: false,
+            tx_ready,
             flows: TunFlow::OneToOne(key.clone()),
             proxy_client: false,
         };
