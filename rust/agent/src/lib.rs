@@ -1102,7 +1102,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     let mut tun = Tun {
         tun: Box::new(websocket),
         pending_tx: VecDeque::with_capacity(1),
-        tx_ready: true,
+        tx_ready: false,
         flows: TunFlow::OneToMany(HashMap::new()),
         proxy_client: false,
     };
