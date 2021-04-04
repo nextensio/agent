@@ -45,8 +45,12 @@ class ViewController: UIViewController {
                                                           "ip": self.ip,
                                                           "subnet": self.subnet,
                                                           "mtu": self.mtu,
-                                                          "dns": self.dns
+                                                          "access": "" as Any,
+                                                          "refresh": "" as Any,
+                                                          "dns": self.dns,
+                                                          "id": "" as Any
                 ]
+                
                 providerProtocol.serverAddress = self.serverAddress
                 self.vpnManager.protocolConfiguration = providerProtocol
                 self.vpnManager.localizedDescription = "nextensio.io"

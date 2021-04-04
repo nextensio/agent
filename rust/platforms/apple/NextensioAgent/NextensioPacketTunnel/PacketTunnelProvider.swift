@@ -58,8 +58,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         
         let access = (conf["access"] as! String)
         let refresh = (conf["refresh"] as! String)
-        os_log("accessToken: \(access)")
-        os_log("refreshToken: \(refresh)")
+        if #available(iOSApplicationExtension 14.0, *) {
+            os_log("accessToken: \(access)")
+            os_log("refreshToken: \(refresh)")
+        } else {
+            // Fallback on earlier versions
+        }
          
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
@@ -81,7 +85,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     @objc func runner(msg: String) {
         let direct : UInt = 1
-        os_log("rust-bridge agent_init: \(direct)")
+        if #available(iOSApplicationExtension 14.0, *) {
+            os_log("rust-bridge agent_init: \(direct)")
+        } else {
+            NSLog("rust-bridge agent_init: \(direct)")
+        }
         agent_init(1 /*apple*/, direct)
     }
 
@@ -160,7 +168,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // turn on NextensioAgent
     private func turnOnNextensioAgent() {
         let tunIf : Int32 = self.tunnelFileDescriptor!
-        os_log("rust-bridge agent_on, tunif: \(tunIf)")
+        if #available(iOSApplicationExtension 14.0, *) {
+            os_log("rust-bridge agent_on, tunif: \(tunIf)")
+        } else {
+            NSLog("rust-bridge agent_on, tunif: \(tunIf)")
+        }
         setnonblocking(tunif: tunIf)
         agent_on(tunIf);
     }

@@ -7,11 +7,16 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/kern_control.h>
-#include <net/if_utun.h>
 #include <sys/ioctl.h>
-#include <sys/kern_event.h>
 #include <fcntl.h>
+
+#include <TargetConditionals.h>
+#if TARGET_CPU_X86
+        // Other kinds of Mac OS
+#include <sys/kern_control.h>
+#include <sys/kern_event.h>
+#include <net/if_utun.h>
+#endif
 
 int set_nonblocking(int fd)
 {
@@ -26,6 +31,7 @@ int set_nonblocking(int fd)
 
 int32_t open_utun(uint64_t num)
 {
+#if TARGET_CPU_X86
     int err;
     int fd;
     struct sockaddr_ctl addr;
@@ -60,4 +66,8 @@ int32_t open_utun(uint64_t num)
     }
     set_nonblocking(fd);
     return fd;
+#else
+    num = 0;
+    return -1;
+#endif
 }
