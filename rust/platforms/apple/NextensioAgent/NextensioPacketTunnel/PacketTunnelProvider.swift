@@ -62,7 +62,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             os_log("accessToken: \(access)")
             os_log("refreshToken: \(refresh)")
         } else {
-            // Fallback on earlier versions
+            NSLog("accessToken: \(access)")
+            NSLog("refreshToken: \(refresh)")
         }
          
         // Save the settings
