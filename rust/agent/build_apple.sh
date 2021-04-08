@@ -5,6 +5,10 @@ if [ "$#" -ne 1 ] ; then
     exit 1
 fi
 
+echo "[Environment]"
+env
+echo ""
+
 if [ "$1" = "ios" ]; then
   echo "build_apple.sh building target ios"
   cargo build --target aarch64-apple-ios --release
