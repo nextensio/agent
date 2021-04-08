@@ -78,7 +78,7 @@ func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, ca
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		client := &http.Client{Transport: tr}
-		req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/onboard/"+regInfo.AccessToken, nil)
+		req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
 		if err == nil {
 			req.Header.Add("Authorization", "Bearer "+regInfo.AccessToken)
 			resp, err := client.Do(req)

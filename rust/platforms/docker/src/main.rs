@@ -176,7 +176,7 @@ fn okta_results(controller: String, services: String) {
                     // accept_invalid_certs true only for test environment. Even test environments ideally
                     // should have verifiable certs via a test.nextensio.net domain or something
                     let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
-                    let get_url = format!("https://{}/api/v1/onboard/{}", controller, access);
+                    let get_url = format!("https://{}/api/v1/global/get/onboard", controller);
                     let bearer = format!("Bearer {}", access);
                     let resp = client.get(&get_url).header("Authorization", bearer).send();
                     match resp {

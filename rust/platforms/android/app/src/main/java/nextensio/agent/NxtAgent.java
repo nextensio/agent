@@ -260,7 +260,7 @@ public class NxtAgent extends AppCompatActivity {
     }
 
     private void controllerOnboard(String accessToken) {
-        String url = "https://server.nextensio.net:8080/api/v1/onboard/" + accessToken;
+        String url = "https://server.nextensio.net:8080/api/v1/global/get/onboard";
         RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
             @Override
