@@ -101,31 +101,28 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             self.pendingStartCompletion?(nil)
             self.pendingStartCompletion = nil
             
-            if (self.conf["direct"] as! String) == "false" {
+            if (self.conf["direct"] as! String) == "true" {
                 self.onboardController(accessToken: access)
+                self.startAgent(direct: "true")
+            } else {
+                self.startAgent(direct: "false")
             }
-            
-            self.startAgent()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: {
                 self.turnOnNextensioAgent()
             })
         }
     }
-    
-    func startAgent() {
-          let t = Thread(target: self, selector: #selector(runner(msg:)), object: "nextensio.worker")
-          t.start()
-      }
 
-    @objc func runner(msg: String) {
-        let direct : UInt = 1
-        if #available(iOSApplicationExtension 14.0, *) {
-            os_log("rust-bridge agent_init: \(direct)")
-        } else {
-            NSLog("rust-bridge agent_init: \(direct)")
-        }
-        agent_init(1 /*apple*/, direct)
+    @objc func runner(sender:Any) {
+        let direct = sender as! String
+        os_log("agent_init direct = %{public}@", direct)
+        agent_init(1 /*apple*/, direct == "true" ? 1 : 0)
+    }
+    
+    func startAgent(direct: String) {
+        let t = Thread(target: self, selector: #selector(runner(sender:)), object: direct)
+        t.start()
     }
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
