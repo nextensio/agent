@@ -29,7 +29,44 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override init() {
         super.init()
-        self.startAgent()
+    }
+    
+    private func onboardController(accessToken: String) {
+        os_log("onboard Controller")
+        
+        //create the url with NSURL
+        let url = URL(string: "https://server.nextensio.net:8080/api/v1/global/get/onboard")! //change the url
+        //create the session object
+        let session = URLSession.shared
+        //now create the URLRequest object using the url object
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField:"Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField:"Authorization")
+        request.timeoutInterval = 60.0
+
+        //create dataTask using the session object to send data to the server
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            guard error == nil else {
+                os_log("url error")
+                return
+            }
+            guard let data = data else {
+                os_log("data error")
+                return
+            }
+            do {
+                //create json object from data
+                if let onboard = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                    //onBoard Agent
+                    self.onboardNextensioAgent(accessToken: accessToken, json: onboard)
+                }
+                //onBoard Agent
+            } catch _ {
+                os_log("error in json serialization")
+            }
+        })
+        task.resume()
     }
     
     private func setupVPN() {
@@ -57,21 +94,18 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         networkSettings.dnsSettings = dnsSettings
         
         let access = (conf["access"] as! String)
-        let refresh = (conf["refresh"] as! String)
-        if #available(iOSApplicationExtension 14.0, *) {
-            os_log("accessToken: \(access)")
-            os_log("refreshToken: \(refresh)")
-        } else {
-            NSLog("accessToken: \(access)")
-            NSLog("refreshToken: \(refresh)")
-        }
+        // let refresh = (conf["refresh"] as! String)
          
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
             self.pendingStartCompletion?(nil)
             self.pendingStartCompletion = nil
             
-            self.onboardNextensioAgent(accessToken: access)
+            if (self.conf["direct"] as! String) == "false" {
+                self.onboardController(accessToken: access)
+            }
+            
+            self.startAgent()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: {
                 self.turnOnNextensioAgent()
@@ -154,14 +188,36 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
     
     // onboard NextensioAgent (access token)
-    private func onboardNextensioAgent(accessToken: String) {
+    private func onboardNextensioAgent(accessToken: String, json: [String:Any]) {
+        
+        os_log("processing json data")
+        os_log("ConnectID %{public}@", json["connectid"] as! String)
+        os_log("Tenant %{public}@", json["tenant"] as! String)
+        os_log("Gateway %{public}@", json["gateway"] as! String)
+        os_log("Domains count %d", (json["domains"] as! NSMutableArray).count)
+        os_log("CA cert count %d", (json["cacert"] as! NSMutableArray).count)
+        os_log("UserId %{public}@", json["userid"] as! String)
+
         var registration = CRegistrationInfo()
         
-        os_log("rust-bridge onboard agent")
+        os_log("rust-bridge registration info")
 
+        registration.host = UnsafeMutablePointer<Int8>(mutating: (json["gateway"] as! NSString).utf8String)
         registration.access_token = UnsafeMutablePointer<Int8>(mutating: (accessToken as NSString).utf8String)
+        registration.connect_id = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
+        registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
+        registration.uuid = UnsafeMutablePointer<Int8>(mutating: (UUID().uuidString as NSString).utf8String)
+        registration.domains = UnsafeMutablePointer<Int8>(mutating: ("" as NSString).utf8String)
         registration.num_domains = 1
+        registration.services = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
         registration.num_services = 1
+        let arr = (json["cacert"] as! NSMutableArray)
+        let cacert = UnsafeMutablePointer<Int8>.allocate(capacity: arr.count)
+        for i in 0..<arr.count {
+            cacert[i] = arr[i] as! Int8
+        }
+        // registration.ca_cert = UnsafeMutablePointer<Int8>(mutating: (json["ca_cert"] as! NSString).utf8String)
+        registration.num_cacert = 1
         
         // onboard(registration)
     }

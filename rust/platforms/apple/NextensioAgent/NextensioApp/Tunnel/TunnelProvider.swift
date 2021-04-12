@@ -13,6 +13,7 @@ import NetworkExtension
 class TunnelProvider {
     
     weak var connectButton: UIButton!
+    var directConn: Bool
     var tunnelManager: NETunnelProviderManager = NETunnelProviderManager()
     
     // Hard code VPN configurations
@@ -24,7 +25,8 @@ class TunnelProvider {
     let subnet = "255.255.255.0"
     let dns = "8.8.8.8"
     
-    init(button: UIButton, state: OktaOidcStateManager?) {
+    init(button: UIButton, state: OktaOidcStateManager?, direct: Bool) {
+        directConn = direct
         connectButton = button
         initTunnelProviderManager(state: state)
     }
@@ -65,7 +67,8 @@ class TunnelProvider {
                                         "dns": self.dns,
                                         "access": accessToken,
                                         "refresh": refreshToken,
-                                        "id": idToken
+                                        "id": idToken,
+                                        "direct": self.directConn ? "true" : "false"
                 ]
                 providerProtocol.serverAddress = self.serverAddress
                 
@@ -103,7 +106,11 @@ class TunnelProvider {
             break
         case .disconnected:
             print("Disconnected...")
-            connectButton.setTitle("Connect", for: .normal)
+            if (directConn) {
+                connectButton.setTitle("Connect Direct", for: .normal)
+            } else {
+                connectButton.setTitle("Connect", for: .normal)
+            }
             break
         case .invalid:
             print("Invalid")
@@ -118,7 +125,6 @@ class TunnelProvider {
 
     func connectDirect() {
         print("connect direct")
-                
         self.tunnelManager.loadFromPreferences { (error:Error?) in
             if let error = error {
                 print(error)
@@ -133,7 +139,6 @@ class TunnelProvider {
     
     func disconnectDirect() {
         print("disconnect direct")
-                
         self.tunnelManager.loadFromPreferences { (error:Error?) in
             if let error = error {
                 print(error)

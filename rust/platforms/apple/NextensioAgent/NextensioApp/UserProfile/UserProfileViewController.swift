@@ -42,7 +42,7 @@ class UserProfileViewController: AuthBaseViewController {
                     self?.connectButton.isEnabled = true
                     
                     // initialize NextensioPacketTunnel
-                    self?.gatewayProvider = TunnelProvider(button: (self?.connectButton)!, state: self?.oidcStateManager)
+                    self?.gatewayProvider = TunnelProvider(button: (self?.connectButton)!, state: self?.oidcStateManager, direct: false)
                 }
             })
         }
