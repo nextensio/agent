@@ -18,7 +18,7 @@ class TunnelViewController: AuthBaseViewController {
 
         self.navigationItem.title = "Nextensio Tunnel"
         
-        tunnelProvider = TunnelProvider(button: connectButton, state: nil)
+        tunnelProvider = TunnelProvider(button: connectButton, state: nil, direct: true)
     }
 
     override func didReceiveMemoryWarning() {
@@ -28,7 +28,7 @@ class TunnelViewController: AuthBaseViewController {
 
     @IBAction func connectDirect(_ sender: UIButton) {
         print("connect direct")
-        if (sender.title(for: .normal) == "Connect") {
+        if (sender.title(for: .normal) == "Connect Direct") {
             tunnelProvider?.connectDirect()
             signInButton.isEnabled = false;
         } else {
