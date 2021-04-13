@@ -14,13 +14,13 @@ typedef struct CRegistrationInfo {
     char *host;
     char *access_token;
     char *connect_id;
-    char *domains;
+    char **domains;
     int num_domains;
     char *ca_cert;
     int num_cacert;
     char *userid;
     char *uuid;
-    char *services;
+    char **services;
     int num_services;
 } CRegistrationInfo;
 

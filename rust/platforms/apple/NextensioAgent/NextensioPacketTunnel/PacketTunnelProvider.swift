@@ -58,10 +58,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             do {
                 //create json object from data
                 if let onboard = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
-                    //onBoard Agent
                     self.onboardNextensioAgent(accessToken: accessToken, json: onboard)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: {
+                        self.turnOnNextensioAgent()
+                    })
                 }
-                //onBoard Agent
             } catch _ {
                 os_log("error in json serialization")
             }
@@ -102,15 +103,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             self.pendingStartCompletion = nil
             
             if (self.conf["direct"] as! String) == "true" {
-                self.onboardController(accessToken: access)
                 self.startAgent(direct: "true")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: {
+                    self.turnOnNextensioAgent()
+                })
             } else {
-                self.startAgent(direct: "false")
+                // self.startAgent(direct: "false")
+                self.onboardController(accessToken: access)
             }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: {
-                self.turnOnNextensioAgent()
-            })
         }
     }
 
@@ -197,26 +197,54 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
         var registration = CRegistrationInfo()
         
-        os_log("rust-bridge registration info")
-
         registration.host = UnsafeMutablePointer<Int8>(mutating: (json["gateway"] as! NSString).utf8String)
         registration.access_token = UnsafeMutablePointer<Int8>(mutating: (accessToken as NSString).utf8String)
         registration.connect_id = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.uuid = UnsafeMutablePointer<Int8>(mutating: (UUID().uuidString as NSString).utf8String)
-        registration.domains = UnsafeMutablePointer<Int8>(mutating: ("" as NSString).utf8String)
-        registration.num_domains = 1
-        registration.services = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
-        registration.num_services = 1
-        let arr = (json["cacert"] as! NSMutableArray)
-        let cacert = UnsafeMutablePointer<Int8>.allocate(capacity: arr.count)
-        for i in 0..<arr.count {
-            cacert[i] = arr[i] as! Int8
-        }
-        // registration.ca_cert = UnsafeMutablePointer<Int8>(mutating: (json["ca_cert"] as! NSString).utf8String)
-        registration.num_cacert = 1
         
-        // onboard(registration)
+        let dom = json["domains"] as! NSMutableArray
+        registration.num_domains = Int32(dom.count)
+        if (dom.count > 0) {
+            registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
+            for i in 0..<dom.count {
+                registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (dom[i] as! NSString).utf8String)
+            }
+        } else {
+            registration.domains = nil
+        }
+                
+        registration.num_services = 1
+        registration.services = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
+        registration.services[0] = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
+        
+        let cert = (json["cacert"] as! NSMutableArray)
+        registration.num_cacert = Int32(cert.count)
+        registration.ca_cert = UnsafeMutablePointer<Int8>.allocate(capacity: cert.count)
+        
+        for i in 0..<cert.count {
+            registration.ca_cert[i] = cert[i] as! Int8
+        }
+        
+        print("onboarding agent")
+        onboard(registration)
+                
+        // start agent
+        self.startAgent(direct: "false")
+        
+        // cleanup
+//        registration.host.deallocate()
+//        registration.access_token.deallocate()
+//        registration.connect_id.deallocate()
+//        registration.userid.deallocate()
+//        registration.uuid.deallocate()
+        registration.ca_cert.deallocate()
+//        for i in 0..<dom.count {
+//            registration.domains[i]!.deallocate()
+//        }
+//        registration.domains.deallocate()
+//        registration.services[0]!.deallocate()
+        registration.services.deallocate()
     }
     
     // turn on NextensioAgent
@@ -241,17 +269,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 // Initialize RegistrationInfo
 extension CRegistrationInfo {
     init() {
-        let emptyStr = UnsafeMutablePointer<Int8>(mutating: ("" as NSString).utf8String)
-        self.init(host: emptyStr,
-                  access_token: emptyStr,
-                  connect_id: emptyStr,
-                  domains: emptyStr,
+        self.init(host: nil,
+                  access_token: nil,
+                  connect_id: nil,
+                  domains: nil,
                   num_domains: 0,
-                  ca_cert: emptyStr,
+                  ca_cert: nil,
                   num_cacert: 0,
-                  userid: emptyStr,
-                  uuid: emptyStr,
-                  services: emptyStr,
+                  userid: nil,
+                  uuid: nil,
+                  services: nil,
                   num_services: 0)
     }
 }
