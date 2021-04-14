@@ -700,6 +700,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				EXCLUDED_ARCHS = arm64;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
 				INFOPLIST_FILE = "NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -716,6 +717,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.1;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -738,6 +740,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioPacketTunnel/NextensioPacketTunnelMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				EXCLUDED_ARCHS = arm64;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
 				INFOPLIST_FILE = "NextensioAgent/NextensioPacketTunnel/Info-MacOSX.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
@@ -754,6 +757,8 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.1;
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -778,6 +783,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				EXCLUDED_ARCHS = "";
 				INFOPLIST_FILE = NextensioAgent/NextensioAppMacOSX/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -785,6 +791,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -810,6 +817,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMacOSX/NextensioAppMacOSXDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 2CM26W7US8;
+				EXCLUDED_ARCHS = "";
 				INFOPLIST_FILE = NextensioAgent/NextensioAppMacOSX/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -817,6 +825,8 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -972,7 +982,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -1006,7 +1016,8 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -1041,6 +1052,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1073,6 +1085,8 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
