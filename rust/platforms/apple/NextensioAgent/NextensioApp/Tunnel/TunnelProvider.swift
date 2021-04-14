@@ -17,7 +17,7 @@ class TunnelProvider {
     var tunnelManager: NETunnelProviderManager = NETunnelProviderManager()
     
     // Hard code VPN configurations
-    let tunnelBundleId = "com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel"
+    let tunnelBundleId = "io.nextensio.agent.tunnel"
     let serverAddress = "127.0.0.1"
     let serverPort = "8080"
     let mtu = "1500"

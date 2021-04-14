@@ -689,7 +689,7 @@
                         <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
                         <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
                         <rect key="contentRect" x="196" y="240" width="480" height="270"/>
-                        <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1027"/>
+                        <rect key="screenRect" x="0.0" y="0.0" width="1440" height="875"/>
                         <connections>
                             <outlet property="delegate" destination="B8D-0N-5wS" id="98r-iN-zZc"/>
                         </connections>
@@ -718,18 +718,6 @@
                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
-                            <button verticalHuggingPriority="750" misplaced="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Ioy-a5-3GZ">
-                                <rect key="frame" x="141" y="329" width="97" height="40"/>
-                                <buttonCell key="cell" type="push" title="Sign In" bezelStyle="rounded" alignment="center" controlSize="large" borderStyle="border" imageScaling="proportionallyUpOrDown" inset="2" id="cvv-Vj-Yjh">
-                                    <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                                    <font key="font" metaFont="system"/>
-                                </buttonCell>
-                                <color key="contentTintColor" name="AccentColor"/>
-                                <connections>
-                                    <action selector="loginTapped:" target="XfG-lQ-9wD" id="lVI-og-cPR"/>
-                                    <segue destination="IDK-6v-1Z1" kind="sheet" id="6lJ-Hi-PjM"/>
-                                </connections>
-                            </button>
                             <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="b0O-1Y-6iH">
                                 <rect key="frame" x="20" y="296" width="338" height="5"/>
                             </box>
@@ -836,9 +824,6 @@
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                     <font key="font" metaFont="system"/>
                                 </buttonCell>
-                                <connections>
-                                    <action selector="accessTokenViewTapped:" target="XfG-lQ-9wD" id="b6C-VQ-wWo"/>
-                                </connections>
                             </button>
                             <button verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="g1G-18-TpA">
                                 <rect key="frame" x="251" y="108" width="74" height="32"/>
@@ -850,8 +835,8 @@
                                     <action selector="refreshTokenViewTapped:" target="XfG-lQ-9wD" id="BeR-JI-l8O"/>
                                 </connections>
                             </button>
-                            <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="BBr-vp-qh4">
-                                <rect key="frame" x="31" y="31" width="97" height="32"/>
+                            <button verticalHuggingPriority="750" misplaced="YES" translatesAutoresizingMaskIntoConstraints="NO" id="BBr-vp-qh4">
+                                <rect key="frame" x="28" y="31" width="97" height="32"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="85" id="8m6-uF-iJs"/>
                                     <constraint firstAttribute="height" constant="20" id="F5O-ni-yV3"/>
@@ -859,11 +844,37 @@
                                 <buttonCell key="cell" type="push" title="Connect" bezelStyle="rounded" alignment="center" controlSize="large" borderStyle="border" imageScaling="proportionallyUpOrDown" inset="2" id="xjR-4y-4wh">
                                     <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
                                     <font key="font" metaFont="system"/>
-                                    <connections>
-                                        <action selector="connect_button:" target="XfG-lQ-9wD" id="egJ-xQ-a67"/>
-                                    </connections>
                                 </buttonCell>
                                 <color key="contentTintColor" name="AccentColor"/>
+                                <connections>
+                                    <action selector="connectTunnel:" target="XfG-lQ-9wD" id="Rsc-iY-9lx"/>
+                                </connections>
+                            </button>
+                            <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mUk-l9-hex">
+                                <rect key="frame" x="127" y="336" width="124" height="32"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="112" id="8Tn-zw-XkL"/>
+                                    <constraint firstAttribute="height" constant="20" id="hqx-co-l2H"/>
+                                </constraints>
+                                <buttonCell key="cell" type="push" title="Connect Direct" bezelStyle="rounded" alignment="center" controlSize="large" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="fXX-FW-I5W">
+                                    <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                    <connections>
+                                        <action selector="connectDirect:" target="XfG-lQ-9wD" id="HYt-GK-Tmi"/>
+                                    </connections>
+                                </buttonCell>
+                            </button>
+                            <button verticalHuggingPriority="750" ambiguous="YES" misplaced="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Ioy-a5-3GZ">
+                                <rect key="frame" x="141" y="27" width="97" height="40"/>
+                                <buttonCell key="cell" type="push" title="Sign In" bezelStyle="rounded" alignment="center" controlSize="large" borderStyle="border" imageScaling="proportionallyUpOrDown" inset="2" id="cvv-Vj-Yjh">
+                                    <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                </buttonCell>
+                                <color key="contentTintColor" name="AccentColor"/>
+                                <connections>
+                                    <action selector="loginTapped:" target="XfG-lQ-9wD" id="lVI-og-cPR"/>
+                                    <segue destination="IDK-6v-1Z1" kind="sheet" id="6lJ-Hi-PjM"/>
+                                </connections>
                             </button>
                         </subviews>
                         <constraints>
@@ -873,7 +884,8 @@
                             <constraint firstAttribute="trailing" secondItem="b0O-1Y-6iH" secondAttribute="trailing" constant="20" symbolic="YES" id="Ab1-8I-Sp9"/>
                             <constraint firstItem="nwL-Wg-43r" firstAttribute="baseline" secondItem="Lmk-mA-2mg" secondAttribute="baseline" id="Dt0-Sp-u0V"/>
                             <constraint firstItem="5MR-En-8ec" firstAttribute="leading" secondItem="dAa-a0-y71" secondAttribute="leading" id="EUD-EO-Ut0"/>
-                            <constraint firstItem="b0O-1Y-6iH" firstAttribute="top" secondItem="Ioy-a5-3GZ" secondAttribute="bottom" constant="36" id="HaX-yt-Upa"/>
+                            <constraint firstItem="mUk-l9-hex" firstAttribute="centerX" secondItem="b0O-1Y-6iH" secondAttribute="centerX" id="GfT-MU-Ggc"/>
+                            <constraint firstItem="mUk-l9-hex" firstAttribute="top" secondItem="gh1-2t-Xn5" secondAttribute="bottom" constant="33" id="KWn-kK-hym"/>
                             <constraint firstItem="efm-6b-dcx" firstAttribute="baseline" secondItem="CUR-4r-KKT" secondAttribute="baseline" id="M0S-Sp-uWZ"/>
                             <constraint firstItem="HWK-1r-tFm" firstAttribute="leading" secondItem="m2S-Jp-Qdl" secondAttribute="leading" constant="37" id="NGC-q3-PGt"/>
                             <constraint firstItem="5MR-En-8ec" firstAttribute="top" secondItem="dAa-a0-y71" secondAttribute="bottom" constant="7" id="Of1-3w-eBM"/>
@@ -887,7 +899,6 @@
                             <constraint firstAttribute="trailing" secondItem="pxa-z1-P9G" secondAttribute="trailing" constant="35" id="WM7-0l-9sz"/>
                             <constraint firstItem="b0O-1Y-6iH" firstAttribute="trailing" secondItem="qwa-zL-Ivq" secondAttribute="trailing" id="X5K-HY-HQO"/>
                             <constraint firstItem="BBr-vp-qh4" firstAttribute="top" secondItem="qwa-zL-Ivq" secondAttribute="bottom" constant="24" id="b0V-Zr-kWh"/>
-                            <constraint firstItem="Ioy-a5-3GZ" firstAttribute="top" secondItem="gh1-2t-Xn5" secondAttribute="bottom" constant="32" id="cr0-AV-iaT"/>
                             <constraint firstItem="dAa-a0-y71" firstAttribute="baseline" secondItem="AB3-dP-cBh" secondAttribute="baseline" id="eaK-zz-5ho"/>
                             <constraint firstItem="XmG-bh-c3p" firstAttribute="leading" secondItem="BFW-xr-jAJ" secondAttribute="leading" id="ern-ie-1wX"/>
                             <constraint firstItem="XmG-bh-c3p" firstAttribute="top" secondItem="HWK-1r-tFm" secondAttribute="bottom" constant="8" symbolic="YES" id="gAb-VS-RfZ"/>
@@ -898,6 +909,7 @@
                             <constraint firstItem="pxa-z1-P9G" firstAttribute="leading" secondItem="Ccr-qF-pYF" secondAttribute="leading" id="nS0-zm-13G"/>
                             <constraint firstItem="b0O-1Y-6iH" firstAttribute="centerX" secondItem="gh1-2t-Xn5" secondAttribute="centerX" id="nVK-G6-9BD"/>
                             <constraint firstItem="b0O-1Y-6iH" firstAttribute="centerX" secondItem="Ioy-a5-3GZ" secondAttribute="centerX" id="oXl-RQ-Upl"/>
+                            <constraint firstItem="b0O-1Y-6iH" firstAttribute="top" secondItem="mUk-l9-hex" secondAttribute="bottom" constant="43" id="obX-3w-0cK"/>
                             <constraint firstItem="XmG-bh-c3p" firstAttribute="leading" secondItem="CUR-4r-KKT" secondAttribute="leading" id="sZG-Ph-0Mh"/>
                             <constraint firstItem="Lmk-mA-2mg" firstAttribute="top" secondItem="XmG-bh-c3p" secondAttribute="bottom" constant="19" id="uk5-z9-BnR"/>
                             <constraint firstItem="XmG-bh-c3p" firstAttribute="leading" secondItem="HWK-1r-tFm" secondAttribute="leading" id="weD-f5-eFn"/>
@@ -908,14 +920,15 @@
                     <connections>
                         <outlet property="accessTokenLabel" destination="dAa-a0-y71" id="lQD-V8-Y4X"/>
                         <outlet property="accessTokenView" destination="Ccr-qF-pYF" id="9uL-WM-ekv"/>
-                        <outlet property="accessTokenViewButton" destination="Ccr-qF-pYF" id="KRi-KA-Dqx"/>
+                        <outlet property="accessTokenViewButton" destination="E1p-4R-w8d" id="vik-it-XKR"/>
                         <outlet property="connectButton" destination="xjR-4y-4wh" id="JBx-QU-i9U"/>
+                        <outlet property="connectDirectButton" destination="mUk-l9-hex" id="Z3y-uf-6bQ"/>
                         <outlet property="localeLabel" destination="efm-6b-dcx" id="vUz-c9-7uD"/>
                         <outlet property="loginButton" destination="Ioy-a5-3GZ" id="Fcb-um-04o"/>
                         <outlet property="logoutButton" destination="pxa-z1-P9G" id="362-oP-n2c"/>
                         <outlet property="refreshTokenLabel" destination="5MR-En-8ec" id="nIQ-Dx-ixX"/>
                         <outlet property="refreshTokenView" destination="g1G-18-TpA" id="ZCR-g5-gYa"/>
-                        <outlet property="refreshTokenViewButton" destination="g1G-18-TpA" id="jIp-5Z-gRN"/>
+                        <outlet property="refreshTokenViewButton" destination="g1G-18-TpA" id="nss-14-ZX2"/>
                         <outlet property="subtitleLabel" destination="XmG-bh-c3p" id="nrW-Ff-eMR"/>
                         <outlet property="timezoneLabel" destination="nwL-Wg-43r" id="k31-2M-vYQ"/>
                         <outlet property="titleLabel" destination="HWK-1r-tFm" id="dXV-Rw-vd9"/>

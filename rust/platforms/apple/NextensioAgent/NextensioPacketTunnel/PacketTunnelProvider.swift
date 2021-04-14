@@ -104,7 +104,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             
             if (self.conf["direct"] as! String) == "true" {
                 self.startAgent(direct: "true")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: {
                     self.turnOnNextensioAgent()
                 })
             } else {

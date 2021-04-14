@@ -716,7 +716,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -754,7 +754,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -785,7 +785,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
@@ -817,7 +817,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
@@ -973,7 +973,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
@@ -1007,7 +1007,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "NextensioRustBridge/NextensioApp-Bridging-Header.h";
@@ -1041,7 +1041,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = NO;
@@ -1073,7 +1073,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.nextensio.io.vpn.NextensioApp.NextensioPacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTS_MACCATALYST = NO;
