@@ -31,6 +31,7 @@ class ViewController: AuthBaseViewController {
     
     var vpnInited = false
     var vpnDirect = false
+    var userLogin = false
     
     // VPN Constructs
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
@@ -39,6 +40,7 @@ class ViewController: AuthBaseViewController {
         super.init(coder: coder)
         authFlowCoordinatorDelegate = AuthFlowCoordinator(with: self)
         
+        // Default is vpnDirect
         vpnDirect = true
         initVPNTunnelProviderManager(directConn: vpnDirect)
     }
@@ -53,31 +55,29 @@ class ViewController: AuthBaseViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        print("view did load")
         // OIDC setup - from okta.plist (will occur in the delegate)
         accessToken = ""
         refreshToken = ""
         idToken = ""
-        // Disable logoutButton until login occur
-        logoutButton.isEnabled = false
+        // default state of buttons
+        connectDirectButton.isEnabled = true
+        loginButton.isEnabled = true
         connectButton.isEnabled = false
+        logoutButton.isEnabled = false
+
     }
     
     override func viewWillDisappear() {
         super.viewWillDisappear();
         print("view will dissappear")
-        
-        if (vpnDirect) {
-            connectDirectButton.title = "Disconnect"
-            self.vpnManager.connection.stopVPNTunnel()
-        } else {
-            connectButton.title = "Disconnect"
-            self.vpnManager.connection.stopVPNTunnel()
-        }
+
+        self.vpnManager.connection.stopVPNTunnel()
     }
     
     override func viewWillAppear() {
         super.viewWillAppear()
-        print("ViewController.viewWillAppear()")
+        print("view will appear")
     }
     
     @IBAction func logoutTapped(_ sender: Any) {
@@ -118,15 +118,12 @@ class ViewController: AuthBaseViewController {
         } else {
             self.idToken = ""
         }
-        
-        // self?.viewTokensButton.isEnabled = true
-        logoutButton.isEnabled = true
-        connectButton.isEnabled = true
-        loginButton.isEnabled = false
-        connectDirectButton.isEnabled = false
-        
         // VPN configuration setup
         initVPNTunnelProviderManager(directConn: false)
+        // self?.viewTokensButton.isEnabled = true
+        logoutButton.isEnabled = true
+        loginButton.isEnabled = false
+        userLogin = true
     }
     
     override func logoutUserProfile() {
@@ -145,18 +142,16 @@ class ViewController: AuthBaseViewController {
         oidcStateManager = nil
         
         // Toggle VPN Button from Connect -> Disconnect
-        if (connectButton.title == "Disconnect") {
-            self.vpnManager.loadFromPreferences { (error:Error?) in
-                if let error = error {
-                    print("VPN Manager load from preference error:", error.localizedDescription)
-                }
-                self.vpnManager.connection.stopVPNTunnel()
+        self.vpnManager.loadFromPreferences { (error:Error?) in
+            if let error = error {
+                print("VPN Manager load from preference error:", error.localizedDescription)
             }
-            logoutButton.isEnabled = false
-            connectButton.isEnabled = false
-            loginButton.isEnabled = true
-            connectDirectButton.isEnabled = true
+            self.vpnManager.connection.stopVPNTunnel()
         }
+        
+        loginButton.isEnabled = true
+        logoutButton.isEnabled = false
+        userLogin = false
     }
     
     @IBAction func accessTokenViewTapped(_ sender: Any) {
@@ -166,7 +161,7 @@ class ViewController: AuthBaseViewController {
     }
 
     private func initVPNTunnelProviderManager(directConn: Bool) {
-        
+        print("init vpn tunnel provider manager")
         NETunnelProviderManager.loadAllFromPreferences { (savedManagers: [NETunnelProviderManager]?, error: Error?) in
             if let error = error {
                 print(error)
@@ -231,48 +226,54 @@ class ViewController: AuthBaseViewController {
         let status = self.vpnManager.connection.status
         switch status {
         case .connecting:
-            print("vpn status connecting...")
-            if (vpnDirect) {
-                connectDirectButton.title = "Disconnect"
-            } else {
-                connectButton.title = "Disconnect"
-            }
+            print("vpn status connecting...vpnDirect = \(vpnDirect)")
             break
         case .connected:
-            print("vpn status connected...")
-            if (vpnDirect) {
-                connectDirectButton.title = "Disconnect"
-            } else {
-                connectButton.title = "Disconnect"
-            }
+            print("vpn status connected...vpnDirect = \(vpnDirect)")
+            handleConnectButtons(status: true)
             break
         case .disconnecting:
-            print("vpn status disconnecting...")
+            print("vpn status disconnecting...vpnDirect = \(vpnDirect)")
             break
         case .disconnected:
-            print("vpn status disconnected...")
-            if (vpnDirect) {
-                connectDirectButton.title = "Connect Direct"
-                self.connectButton.isEnabled = false
-                self.loginButton.isEnabled = true
-                self.logoutButton.isEnabled = false
-            } else {
-                connectButton.title = "Connect"
-            }
+            print("vpn status disconnected...vpnDirect = \(vpnDirect)")
+            handleConnectButtons(status: false)
             break
         case .invalid:
-            print("vpn status invalid")
+            print("vpn status invalid...vpnDirect = \(vpnDirect)")
             break
         case .reasserting:
-            print("vpn status reasserting...")
+            print("vpn status reasserting...vpnDirect = \(vpnDirect)")
             break
         @unknown default:
             break
         }
     }
+    
+    func handleConnectButtons(status: Bool) {
+        if (vpnDirect) {
+            if (status) {
+                self.connectButton.isEnabled = false
+                self.connectDirectButton.title = "Disconnect"
+            } else {
+                self.connectButton.isEnabled = true
+                self.connectDirectButton.title = "Connect Direct"
+            }
+        } else {
+            if (status) {
+                connectDirectButton.isEnabled = false
+                connectButton.title = "Disconnect"
+            } else {
+                connectDirectButton.isEnabled = true
+                connectButton.title = "Connect"
+            }
+        }
+    }
 
     @IBAction func connectDirect(_ sender: Any) {
         print("connectDirect pressed")
+        vpnDirect = true
+
         DispatchQueue.main.asyncAfter(deadline: .now(), execute: {
             let button = sender as! NSButton
             self.vpnManager.loadFromPreferences { (error:Error?) in
@@ -283,18 +284,12 @@ class ViewController: AuthBaseViewController {
                     do {
                         print("start vpn tunnel direct")
                         try self.vpnManager.connection.startVPNTunnel()
-                        self.connectButton.isEnabled = false
-                        self.loginButton.isEnabled = false
-                        self.logoutButton.isEnabled = false
                     } catch {
                         print(error)
                     }
                 } else {
                     print("stop vpn tunnel direct")
                     self.vpnManager.connection.stopVPNTunnel()
-                    self.connectButton.isEnabled = false
-                    self.loginButton.isEnabled = true
-                    self.logoutButton.isEnabled = false
                 }
             }
         })
@@ -302,6 +297,10 @@ class ViewController: AuthBaseViewController {
     
     @IBAction func connectTunnel(_ sender: Any) {
         print("connectTunnel pressed")
+        if (!userLogin) {
+            _ = self.showError(message: "No user login")
+            return
+        }
         vpnDirect = false
 
         let button = sender as! NSButton
