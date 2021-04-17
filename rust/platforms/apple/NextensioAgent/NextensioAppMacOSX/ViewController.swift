@@ -253,6 +253,9 @@ class ViewController: AuthBaseViewController {
             print("vpn status disconnected...")
             if (vpnDirect) {
                 connectDirectButton.title = "Connect Direct"
+                self.connectButton.isEnabled = false
+                self.loginButton.isEnabled = true
+                self.logoutButton.isEnabled = false
             } else {
                 connectButton.title = "Connect"
             }
@@ -317,7 +320,6 @@ class ViewController: AuthBaseViewController {
             }
         }
     }
-    
     
     private func dialogOKCancel(question: String, text: String) -> Bool {
         let alert = NSAlert()

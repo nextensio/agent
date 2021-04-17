@@ -25,5 +25,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillEnterForeground(_ aNotification: Notification) { }
 
     func applicationDidBecomeActive(_ aNotification: Notification) { }
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
 }
 

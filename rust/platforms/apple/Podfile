@@ -12,12 +12,12 @@ target 'NextensioApp' do
   pod 'OktaJWT'
 end
 
-target 'NextensioAppMacOSX' do
+target 'NextensioAppMac' do
   platform :macos, '11.1'
   inherit! :search_paths
   # Comment the next line if you don't want to use dynamic frameworks
   use_frameworks!
-  # Pods for NextensioAppMacOSX
+  # Pods for NextensioAppMac
   pod 'OktaOidc'
   pod 'OktaAuthSdk'
   pod 'OktaJWT'
