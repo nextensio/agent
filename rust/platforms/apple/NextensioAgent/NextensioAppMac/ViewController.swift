@@ -73,6 +73,9 @@ class ViewController: AuthBaseViewController {
         print("view will dissappear")
 
         self.vpnManager.connection.stopVPNTunnel()
+        
+        vpnInited = false
+//        NotificationCenter.default.removeObserver(self, name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
     }
     
     override func viewWillAppear() {

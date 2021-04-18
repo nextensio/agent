@@ -27,6 +27,7 @@
 		6B394BA72619850300ED3660 /* AuthFlowCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B394BA42619850300ED3660 /* AuthFlowCoordinatorProtocol.swift */; };
 		6B394BAE2619946400ED3660 /* TunnelViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B394BAD2619946300ED3660 /* TunnelViewController.swift */; };
 		6B394BD02619956200ED3660 /* Tunnel.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6B394BCF2619956200ED3660 /* Tunnel.storyboard */; };
+		6B83DBB1262B953200956BAA /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B94CFC126293D4000D27909 /* NetworkExtension.framework */; };
 		6B94CFA226293C7F00D27909 /* SystemExtensions.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B94CFA126293C7F00D27909 /* SystemExtensions.framework */; };
 		6B94CFC726293D4C00D27909 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B94CFC126293D4000D27909 /* NetworkExtension.framework */; };
 		6B94CFCA26293D5500D27909 /* NextensioPacketTunnelMac.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6B0BA57F25D8FAE300F3B1C6 /* NextensioPacketTunnelMac.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -171,6 +172,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6B94CFA226293C7F00D27909 /* SystemExtensions.framework in Frameworks */,
+				6B83DBB1262B953200956BAA /* NetworkExtension.framework in Frameworks */,
 				6B15594F260733DE006788D8 /* libnextensioMacOSX.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1011,13 +1013,13 @@
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = NextensioAgent/NextensioApp/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.3;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -1045,13 +1047,13 @@
 				DEVELOPMENT_TEAM = 2CM26W7US8;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = NextensioAgent/NextensioApp/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.3;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.2;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1075,7 +1077,7 @@
 				ENABLE_BITCODE = NO;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
 				INFOPLIST_FILE = NextensioAgent/NextensioPacketTunnel/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.3;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1087,7 +1089,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1108,7 +1110,7 @@
 				ENABLE_BITCODE = NO;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
 				INFOPLIST_FILE = NextensioAgent/NextensioPacketTunnel/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.3;
 				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1120,7 +1122,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.2;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
