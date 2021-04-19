@@ -82,6 +82,8 @@ class UserProfileViewController: AuthBaseViewController {
                 }
             })
         }
+        // reset vpn profile settings
+        gatewayProvider?.resetTunnelProviderManager()
     }
     
     @IBAction func connectTapped(_ sender: UIButton) {

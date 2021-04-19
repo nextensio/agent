@@ -15,6 +15,7 @@ class TunnelProvider {
     weak var connectButton: UIButton!
     var directConn: Bool
     var tunnelManager: NETunnelProviderManager = NETunnelProviderManager()
+    var vpnInit = false
     
     // Hard code VPN configurations
     let tunnelBundleId = "io.nextensio.agent.tunnel"
@@ -28,10 +29,15 @@ class TunnelProvider {
     init(button: UIButton, state: OktaOidcStateManager?, direct: Bool) {
         directConn = direct
         connectButton = button
-        initTunnelProviderManager(state: state)
+        initTunnelProviderManager(state: state, direct: direct)
+    }
+    
+    func resetTunnelProviderManager() {
+        print("reset tunnel provider manager")
+        initTunnelProviderManager(state: nil, direct: true)
     }
 
-    private func initTunnelProviderManager(state: OktaOidcStateManager?) {
+    private func initTunnelProviderManager(state: OktaOidcStateManager?, direct: Bool) {
         NETunnelProviderManager.loadAllFromPreferences { (savedManagers: [NETunnelProviderManager]?, error: Error?) in
             if let error = error {
                 print(error)
@@ -68,7 +74,7 @@ class TunnelProvider {
                                         "access": accessToken,
                                         "refresh": refreshToken,
                                         "id": idToken,
-                                        "direct": self.directConn ? "true" : "false"
+                                        "direct": direct ? "true" : "false"
                 ]
                 providerProtocol.serverAddress = self.serverAddress
                 
@@ -86,7 +92,10 @@ class TunnelProvider {
             })
         }
         
-        NotificationCenter.default.addObserver(self, selector: #selector(TunnelProvider.VPNStatusDidChange(_:)), name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
+        if (vpnInit == false) {
+            NotificationCenter.default.addObserver(self, selector: #selector(TunnelProvider.VPNStatusDidChange(_:)), name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
+        }
+        vpnInit = true
     }
 
     @objc func VPNStatusDidChange(_ notification: Notification?) {
