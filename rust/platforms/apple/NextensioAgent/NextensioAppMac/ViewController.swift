@@ -29,6 +29,15 @@ class ViewController: AuthBaseViewController {
    
     @IBOutlet weak var connectDirectButton: NSButton!
     
+    // Hard code VPN configurations
+    let tunnelBundleId = "io.nextensio.agent.tunnel"
+    let serverAddress = "127.0.0.1"
+    let serverPort = "8080"
+    let mtu = "1500"
+    let ip = "169.254.2.1"
+    let subnet = "255.255.255.0"
+    let dns = "8.8.8.8"
+    
     var vpnInited = false
     var vpnDirect = false
     var userLogin = false
@@ -81,11 +90,8 @@ class ViewController: AuthBaseViewController {
     override func viewWillDisappear() {
         super.viewWillDisappear();
         print("view will dissappear")
-
         self.vpnManager.connection.stopVPNTunnel()
-        
         vpnInited = false
-//        NotificationCenter.default.removeObserver(self, name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
     }
     
     override func viewWillAppear() {
@@ -155,13 +161,11 @@ class ViewController: AuthBaseViewController {
         oidcStateManager = nil
         
         // Toggle VPN Button from Connect -> Disconnect
-        self.vpnManager.loadFromPreferences { (error:Error?) in
-            if let error = error {
-                print("VPN Manager load from preference error:", error.localizedDescription)
-            }
-            self.vpnManager.connection.stopVPNTunnel()
-        }
-        
+        self.vpnManager.connection.stopVPNTunnel()
+    
+        // reset configuration to directConn = true
+        initVPNTunnelProviderManager(directConn: true)
+
         loginButton.isEnabled = true
         logoutButton.isEnabled = false
         userLogin = false
@@ -174,7 +178,7 @@ class ViewController: AuthBaseViewController {
     }
 
     private func initVPNTunnelProviderManager(directConn: Bool) {
-        print("init vpn tunnel provider manager")
+        print("init vpn tunnel provider manager ..directConn = \(directConn)")
         NETunnelProviderManager.loadAllFromPreferences { (savedManagers: [NETunnelProviderManager]?, error: Error?) in
             if let error = error {
                 print(error)
@@ -191,29 +195,21 @@ class ViewController: AuthBaseViewController {
                 }
                 
                 // Hard code VPN configurations
-                let tunnelBundleId = "io.nextensio.agent.tunnel"
-                let serverAddress = "127.0.0.1"
-                let serverPort = "8080"
-                let mtu = "1500"
-                let ip = "169.254.2.1"
-                let subnet = "255.255.255.0"
-                let dns = "8.8.8.8"
-
                 let providerProtocol = NETunnelProviderProtocol()
                 
-                providerProtocol.providerBundleIdentifier = tunnelBundleId
-                providerProtocol.providerConfiguration = ["port": serverPort,
-                                                          "server": serverAddress,
-                                                          "ip": ip,
-                                                          "subnet": subnet,
-                                                          "mtu": mtu,
-                                                          "dns": dns,
+                providerProtocol.providerBundleIdentifier = self.tunnelBundleId
+                providerProtocol.providerConfiguration = ["port": self.serverPort,
+                                                          "server": self.serverAddress,
+                                                          "ip": self.ip,
+                                                          "subnet": self.subnet,
+                                                          "mtu": self.mtu,
+                                                          "dns": self.dns,
                                                           "access": self.accessToken as Any,
                                                           "refresh": self.refreshToken as Any,
                                                           "id": self.idToken as Any,
                                                           "direct": directConn ? "true" : "false"
                 ]
-                providerProtocol.serverAddress = serverAddress
+                providerProtocol.serverAddress = self.serverAddress
                 self.vpnManager.protocolConfiguration = providerProtocol
                 self.vpnManager.localizedDescription = "nextensio"
                 self.vpnManager.isEnabled = true

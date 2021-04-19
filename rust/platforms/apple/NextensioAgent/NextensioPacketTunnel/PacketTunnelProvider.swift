@@ -116,7 +116,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     @objc func runner(sender:Any) {
         let direct = sender as! String
-        os_log("agent_init direct = %{public}@", direct)
+        os_log("agent_init direct = %{public}@ %d", direct, direct == "true" ? 1 : 0)
         agent_init(1 /*apple*/, direct == "true" ? 1 : 0)
     }
     

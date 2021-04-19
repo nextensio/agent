@@ -15,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
-        print("applicationWillTerminate")
+        print("application will terminate")
     }
 
     func applicationWillResignActive(_ aNotification: Notification) { }
