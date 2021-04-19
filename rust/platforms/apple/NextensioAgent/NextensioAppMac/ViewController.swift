@@ -44,7 +44,18 @@ class ViewController: AuthBaseViewController {
         vpnDirect = true
         initVPNTunnelProviderManager(directConn: vpnDirect)
     }
-            
+    
+    override func shouldPerformSegue(withIdentifier identifier: String, sender: Any?) -> Bool {
+        if (vpnDirect) {
+            if (self.connectDirectButton.title == "Disconnect") {
+                // vpnDirect is running, pop up error message.
+                _ = self.showError(message: "Connect direct is on, disconnect first before logging in")
+                return false
+            }
+        }
+        return true
+    }
+    
     // OIDC Segue Declarations
     override func prepare(for segue: NSStoryboardSegue, sender: Any?) {
         print("calling prepare Segue")
@@ -65,7 +76,6 @@ class ViewController: AuthBaseViewController {
         loginButton.isEnabled = true
         connectButton.isEnabled = false
         logoutButton.isEnabled = false
-
     }
     
     override func viewWillDisappear() {
@@ -275,6 +285,10 @@ class ViewController: AuthBaseViewController {
 
     @IBAction func connectDirect(_ sender: Any) {
         print("connectDirect pressed")
+        if (userLogin) {
+            _ = self.showError(message: "User logged in, connect direct function disabled")
+            return
+        }
         vpnDirect = true
 
         DispatchQueue.main.asyncAfter(deadline: .now(), execute: {
@@ -301,7 +315,7 @@ class ViewController: AuthBaseViewController {
     @IBAction func connectTunnel(_ sender: Any) {
         print("connectTunnel pressed")
         if (!userLogin) {
-            _ = self.showError(message: "No user login")
+            _ = self.showError(message: "No login user")
             return
         }
         vpnDirect = false
