@@ -1,22 +1,7 @@
-FROM golang:1.15
-
-# Stuff required for selenium automated login script to work (login.py)
-# Note that the docker container is huge because of these chromium stuff,
-# we need this only for the test/automation environment
-RUN apt update
-RUN apt install -y python3-pip unzip iproute2 iptables net-tools
-RUN pip3 install chromedriver
-RUN pip3 install selenium
-RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-RUN apt install -y ./google-chrome-stable_current_amd64.deb
-RUN rm ./google-chrome-stable_current_amd64.deb
-RUN wget https://chromedriver.storage.googleapis.com/88.0.4324.96/chromedriver_linux64.zip
-RUN unzip chromedriver_linux64.zip 
-RUN mv chromedriver /usr/bin/
-RUN rm chromedriver_linux64.zip 
+FROM golang:1.15.7-alpine3.12
+RUN apk update && apk add lighttpd && apk add git && apk add openssh
 
 # For emulating a private URL webservice
-RUN apt-get install -y lighttpd
 RUN mkdir /etc/lighttpd/certs
 COPY files/http/certs/* /etc/lighttpd/certs/
 RUN chmod 400 /etc/lighttpd/certs/lighttpd.pem
@@ -41,6 +26,8 @@ RUN rm -r -f /go/src/app/* \
     && \rm -r -f /go/pkg/sumdb
 
 RUN rm /go/files/gitlab_rsa
+
+RUN apk del git && apk del openssh
 
 RUN chmod +x /go/files/run.sh
 EXPOSE 8180/tcp 8081/tcp 8080/tcp

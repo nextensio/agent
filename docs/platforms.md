@@ -38,9 +38,8 @@ We are following instructions mentioned here - https://medium.com/visly/rust-on-
 The steps are as below
 
 0. Install rust: ```curl https://sh.rustup.rs -sSf | sh``` (https://www.rust-lang.org/tools/install)
-   Use the "beta" toolchain for now, it will become a released version on march 25, just few days
-   away - ```rustup toolchain install beta``` and ```rustup default beta``` .. this is because we need a 
-   feature (https://github.com/rust-lang/cargo/issues/4866) which is right now only in beta
+   Make sure you have at least rust 1.51 toolchain .. this is because we need a 
+   feature (https://github.com/rust-lang/cargo/issues/4866) which is only in >= 1.51 toolchain
 
 1. Add rust targets
  

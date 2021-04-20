@@ -1,19 +1,13 @@
 use clap::{App, Arg};
-use libc::servent;
+use log::error;
 use nextensio::{agent_init, agent_on, onboard, CRegistrationInfo};
-use rouille::{router, Response};
 use serde::Deserialize;
 use std::ffi::CString;
 use std::fmt;
 use std::os::raw::{c_char, c_int};
 use std::process::Command;
-use std::{sync::atomic::AtomicBool, thread};
+use std::thread;
 use uuid::Uuid;
-
-const TUNSETIFF: u64 = 1074025674;
-const NXT_OKTA_RESULTS: usize = 8081;
-const NXT_OKTA_LOGIN: usize = 8180;
-static ONBOARDED: AtomicBool = AtomicBool::new(false);
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -79,58 +73,11 @@ fn create_tun() -> Result<i32, std::io::Error> {
         );
         let old = libc::fcntl(fd, libc::F_GETFL);
         libc::fcntl(fd, libc::F_SETFL, old | libc::O_NONBLOCK);
-        let rc = libc::ioctl(fd, TUNSETIFF, ifr.as_mut_ptr());
+        let rc = libc::ioctl(fd, 1074025674, ifr.as_mut_ptr());
+        error!("FD {} RC {}", fd, rc);
         println!("FD {} RC {}", fd, rc);
         Ok(fd)
     }
-}
-
-fn login_page() -> rouille::Response {
-    let mut response = Response::html(login::LOGIN);
-    response.status_code = 200;
-    response
-        .headers
-        .push(("Access-Control-Allow-Origin".into(), "*".into()));
-    response
-}
-
-fn onboard_status() -> rouille::Response {
-    if ONBOARDED.load(std::sync::atomic::Ordering::Relaxed) {
-        let mut response = Response::text("");
-        response.status_code = 201;
-        response
-    } else {
-        let mut response = Response::text("");
-        response.status_code = 200;
-        response
-    }
-}
-
-fn okta_login() {
-    rouille::start_server_with_pool(
-        format!("localhost:{}", NXT_OKTA_LOGIN),
-        Some(1),
-        move |request| {
-            router!(request,
-                (GET) (/) => {
-                    login_page()
-                },
-                (HEAD) (/) => {
-                    login_page()
-                },
-                (GET) (/onboardstatus) => {
-                    onboard_status()
-                },
-                (HEAD) (/onboardstatus) => {
-                    onboard_status()
-                },
-                _ => {
-                    println!("Nonexistant path: {:?}", request);
-                    rouille::Response::empty_404()
-                },
-            )
-        },
-    );
 }
 
 fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
@@ -165,59 +112,48 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
     unsafe { onboard(creg) };
 }
 
-fn okta_results(controller: String, services: String) {
-    rouille::start_server_with_pool(
-        format!("localhost:{}", NXT_OKTA_RESULTS),
-        Some(1),
-        move |request| {
-            router!(request,
-                (GET) (/accessid/{access: String}/{id: String}) => {
-                    // TODO: Once we start using proper certs for our production clusters, make this
-                    // accept_invalid_certs true only for test environment. Even test environments ideally
-                    // should have verifiable certs via a test.nextensio.net domain or something
-                    let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
-                    let get_url = format!("https://{}/api/v1/global/get/onboard", controller);
-                    let bearer = format!("Bearer {}", access);
-                    let resp = client.get(&get_url).header("Authorization", bearer).send();
-                    match resp {
-                        Ok(mut res) => {
-                            if res.status().is_success() {
-                                let onb: Result<OnboardInfo, reqwest::Error> = res.json();
-                                match onb {
-                                    Ok(o) => {
-                                        if o.Result != "ok" {
-                                            println!("Result from controller not ok {}", o.Result);
-                                        } else {
-                                            println!("Onboarded {}", o);
-                                            ONBOARDED.store(true, std::sync::atomic::Ordering::Relaxed);
-                                            let nxt_services;
-                                            if services != "" {
-                                                nxt_services = format!("{} {}", o.connectid, services);
-                                            } else {
-                                                nxt_services = o.connectid.clone();
-                                            }
-                                            agent_onboard(&o, access.clone(), nxt_services);
-                                        }
-                                    },
-                                    Err(e) => {println!("HTTP body failed {:?}", e);},
-                                }
+fn okta_init(controller: String, services: String, access_token: String) {
+    // TODO: Once we start using proper certs for our production clusters, make this
+    // accept_invalid_certs true only for test environment. Even test environments ideally
+    // should have verifiable certs via a test.nextensio.net domain or something
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let get_url = format!("https://{}/api/v1/global/get/onboard", controller);
+    let bearer = format!("Bearer {}", access_token);
+    let resp = client.get(&get_url).header("Authorization", bearer).send();
+    match resp {
+        Ok(mut res) => {
+            if res.status().is_success() {
+                let onb: Result<OnboardInfo, reqwest::Error> = res.json();
+                match onb {
+                    Ok(o) => {
+                        if o.Result != "ok" {
+                            error!("Result from controller not ok {}", o.Result);
+                        } else {
+                            error!("Onboarded {}", o);
+                            let nxt_services;
+                            if services != "" {
+                                nxt_services = format!("{} {}", o.connectid, services);
                             } else {
-                                println!("HTTP Get result {}, failed", res.status());
+                                nxt_services = o.connectid.clone();
                             }
-                        },
-                        Err(e) => {println!("HTTP Get failed {:?}", e);},
+                            agent_onboard(&o, access_token.clone(), nxt_services);
+                        }
                     }
-
-
-                    let mut response = Response::text("");
-                    response.status_code = 200;
-                    response.headers.push(("Access-Control-Allow-Origin".into(), "*".into()));
-                    response
-                },
-                _ => rouille::Response::empty_404(),
-            )
-        },
-    );
+                    Err(e) => {
+                        error!("HTTP body failed {:?}", e);
+                    }
+                }
+            } else {
+                error!("HTTP Get result {}, failed", res.status());
+            }
+        }
+        Err(e) => {
+            error!("HTTP Get failed {:?}", e);
+        }
+    }
 }
 
 fn main() {
@@ -234,6 +170,12 @@ fn main() {
                 .takes_value(true)
                 .help("Controller FQDN/ip address"),
         )
+        .arg(
+            Arg::with_name("access_token")
+                .long("access_token")
+                .takes_value(true)
+                .help("Access token"),
+        )
         .get_matches();
 
     let services = matches.value_of("service").unwrap_or("").to_owned();
@@ -241,19 +183,17 @@ fn main() {
         .value_of("controller")
         .unwrap_or("server.nextensio.net:8080")
         .to_owned();
+    let access_token = matches.value_of("access_token").unwrap_or("").to_owned();
 
-    println!("controller {}, service {}", controller, services);
+    error!("controller {}, service {}", controller, services);
 
     let fd = create_tun().unwrap();
     config_tun();
 
-    thread::spawn(move || okta_login());
-    thread::spawn(move || okta_results(controller, services));
+    thread::spawn(move || okta_init(controller, services, access_token));
 
     unsafe {
         agent_on(fd);
         agent_init(0 /*platform*/, 0 /*direct*/);
     }
 }
-
-mod login;

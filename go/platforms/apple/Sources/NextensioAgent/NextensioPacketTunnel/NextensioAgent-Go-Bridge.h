@@ -1,2 +1,0 @@
-#include "../../NextensioGoBridge/nxt.h"
-

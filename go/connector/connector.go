@@ -5,27 +5,28 @@ import (
 	"flag"
 	"log"
 	"net"
-	"nextensio/agent/shared"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"gitlab.com/nextensio/common/go"
+	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	"gitlab.com/nextensio/common/go/transport/netconn"
 )
 
 var controller string
-var regInfo shared.RegistrationInfo
+var regInfo RegistrationInfo
 var mainCtx context.Context
 var gwTun common.Transport
 var gwStreams chan common.NxtStream
 var unusedAppStreams chan common.NxtStream
 var unique uuid.UUID
 var onboardedOnce bool
+var username *string
+var password *string
 
-func gwToAppClose(tun common.Transport, dest shared.ConnStats) {
+func gwToAppClose(tun common.Transport, dest ConnStats) {
 	tun.Close()
 	if dest.Conn != nil {
 		dest.Conn.Close()
@@ -35,7 +36,7 @@ func gwToAppClose(tun common.Transport, dest shared.ConnStats) {
 // Stream coming from the gateway, create a new tcp/udp socket
 // and send the data over that socket
 func gwToApp(lg *log.Logger, tun common.Transport) {
-	var dest shared.ConnStats
+	var dest ConnStats
 
 	for {
 		hdr, buf, err := tun.Read()
@@ -71,7 +72,7 @@ func gwToApp(lg *log.Logger, tun common.Transport) {
 	}
 }
 
-func appToGwClose(src *shared.ConnStats, dest common.Transport, gwRx common.Transport) {
+func appToGwClose(src *ConnStats, dest common.Transport, gwRx common.Transport) {
 	src.Conn.Close()
 	dest.Close()
 	gwRx.Close()
@@ -79,7 +80,7 @@ func appToGwClose(src *shared.ConnStats, dest common.Transport, gwRx common.Tran
 
 // Data coming back from a tcp/udp socket. Send the data over the gateway
 // stream that initially created the socket
-func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow nxthdr.NxtFlow, gwRx common.Transport) {
+func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.NxtFlow, gwRx common.Transport) {
 
 	// Swap source and dest agents
 	s, d := flow.SourceAgent, flow.DestAgent
@@ -91,9 +92,9 @@ func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow 
 
 	for {
 		if flow.Proto == common.TCP {
-			src.Conn.SetReadDeadline(time.Now().Add(shared.TCP_AGER))
+			src.Conn.SetReadDeadline(time.Now().Add(TCP_AGER))
 		} else {
-			src.Conn.SetReadDeadline(time.Now().Add(shared.UDP_AGER))
+			src.Conn.SetReadDeadline(time.Now().Add(UDP_AGER))
 		}
 		rx := src.Rx
 		tx := src.Tx
@@ -131,9 +132,9 @@ func appToGw(lg *log.Logger, src *shared.ConnStats, dest common.Transport, flow 
 func monitorGw(lg *log.Logger) {
 	for {
 		if gwTun == nil || gwTun.IsClosed() {
-			newTun := shared.DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
+			newTun := DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
-				if shared.OnboardTunnel(lg, newTun, false, &regInfo, unique.String()) == nil {
+				if OnboardTunnel(lg, newTun, false, &regInfo, unique.String()) == nil {
 					gwTun = newTun
 					// Note that we are not launching an goroutines to read/write out of this
 					// stream (first stream to the gateway), appToGw() always creates a new
@@ -167,6 +168,8 @@ func onboarded(lg *log.Logger) {
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
 	s := flag.String("service", "", "services advertised by this agent")
+	username = flag.String("username", "", "connector onboarding userid")
+	password = flag.String("password", "", "connector onboarding password")
 	flag.Parse()
 	controller = *c
 	svcs := strings.TrimSpace(*s)
@@ -180,7 +183,17 @@ func main() {
 	unusedAppStreams = make(chan common.NxtStream)
 	lg := log.New(os.Stdout, "CNTR", 0)
 	args()
-	shared.OktaInit(lg, &regInfo, controller, onboarded)
+	for {
+		tokens := authenticate("https://dev-635657.okta.com", *username, *password)
+		if tokens == nil {
+			lg.Println("Unable to authenticate connector with the IDP, retrying in five seconds")
+			time.Sleep(5 * time.Second)
+		} else {
+			regInfo.AccessToken = tokens.AccessToken
+			break
+		}
+	}
+	OktaInit(lg, &regInfo, controller, onboarded)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction

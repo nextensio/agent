@@ -1,10 +1,9 @@
-package shared
+package main
 
 import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -14,11 +13,6 @@ import (
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	websock "gitlab.com/nextensio/common/go/transport/websocket"
-)
-
-const (
-	NXT_OKTA_RESULTS = 8081
-	NXT_OKTA_LOGIN   = 8180
 )
 
 const (
@@ -45,30 +39,6 @@ type RegistrationInfo struct {
 	Services    []string `json:"services"`
 }
 
-var nxtOnboardPending bool
-var nxtOnboarded bool
-
-func oktaLogin(lg *log.Logger) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Write([]byte(loginHtml))
-	})
-	// This is used just by testing scripts to know if onboarding was successful
-	mux.HandleFunc("/onboardstatus", func(w http.ResponseWriter, r *http.Request) {
-		if !nxtOnboarded {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusCreated)
-		}
-	})
-	addr := fmt.Sprintf(":%d", NXT_OKTA_LOGIN)
-	err := http.ListenAndServe(addr, mux)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
 	for {
 		// TODO: Once we start using proper certs for our production clusters, make this
@@ -87,8 +57,6 @@ func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, ca
 				if err == nil {
 					err = json.Unmarshal(body, regInfo)
 					if err == nil {
-						nxtOnboardPending = false
-						nxtOnboarded = true
 						regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
 						callback(lg)
 						break
@@ -103,24 +71,8 @@ func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, ca
 	}
 }
 
-func oktaResults(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/accessid/", func(w http.ResponseWriter, r *http.Request) {
-		regInfo.AccessToken = r.URL.Query().Get("access")
-		if !nxtOnboardPending {
-			nxtOnboardPending = true
-			go nxtOnboard(lg, regInfo, controller, callback)
-		}
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.WriteHeader(http.StatusOK)
-	})
-	addr := fmt.Sprintf(":%d", NXT_OKTA_RESULTS)
-	http.ListenAndServe(addr, mux)
-}
-
 func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
-	go oktaLogin(lg)
-	go oktaResults(lg, regInfo, controller, callback)
+	go nxtOnboard(lg, regInfo, controller, callback)
 }
 
 // Create a websocket session to the gateway
