@@ -39,40 +39,33 @@ type RegistrationInfo struct {
 	Services    []string `json:"services"`
 }
 
-func nxtOnboard(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
-	for {
-		// TODO: Once we start using proper certs for our production clusters, make this
-		// accept_invalid_certs true only for test environment. Even test environments ideally
-		// should have verifiable certs via a test.nextensio.net domain or something
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		client := &http.Client{Transport: tr}
-		req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
-		if err == nil {
-			req.Header.Add("Authorization", "Bearer "+regInfo.AccessToken)
-			resp, err := client.Do(req)
-			if err == nil {
-				body, err := ioutil.ReadAll(resp.Body)
-				if err == nil {
-					err = json.Unmarshal(body, regInfo)
-					if err == nil {
-						regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
-						callback(lg)
-						break
-					}
-				}
-			} else {
-				lg.Println("Onboard request failed", err)
-			}
-		}
-		lg.Println("Onboarding failed, will retry again", err)
-		time.Sleep(5 * time.Second)
+func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool {
+	// TODO: Once we start using proper certs for our production clusters, make this
+	// accept_invalid_certs true only for test environment. Even test environments ideally
+	// should have verifiable certs via a test.nextensio.net domain or something
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-}
-
-func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string, callback func(*log.Logger)) {
-	go nxtOnboard(lg, regInfo, controller, callback)
+	client := &http.Client{Transport: tr}
+	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
+	if err == nil {
+		req.Header.Add("Authorization", "Bearer "+regInfo.AccessToken)
+		resp, err := client.Do(req)
+		if err == nil {
+			body, err := ioutil.ReadAll(resp.Body)
+			if err == nil {
+				err = json.Unmarshal(body, regInfo)
+				if err == nil {
+					regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
+					return true
+				}
+			}
+		} else {
+			lg.Println("Onboard request failed", err)
+		}
+	}
+	lg.Println("Onboarding failed", err)
+	return false
 }
 
 // Create a websocket session to the gateway

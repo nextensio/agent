@@ -22,7 +22,6 @@ var gwTun common.Transport
 var gwStreams chan common.NxtStream
 var unusedAppStreams chan common.NxtStream
 var unique uuid.UUID
-var onboardedOnce bool
 var username *string
 var password *string
 
@@ -130,8 +129,13 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.
 
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
 func monitorGw(lg *log.Logger) {
+	flaps := 0
+	count := 0
 	for {
 		if gwTun == nil || gwTun.IsClosed() {
+			if gwTun != nil {
+				flaps += 1
+			}
 			newTun := DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
 				if OnboardTunnel(lg, newTun, false, &regInfo, unique.String()) == nil {
@@ -143,24 +147,23 @@ func monitorGw(lg *log.Logger) {
 					// all L3 packets
 				} else {
 					newTun.Close()
+					flaps += 1
 				}
+			} else {
+				flaps += 1
 			}
 		}
 		time.Sleep(2 * time.Second)
-	}
-}
-
-// Onboarding succesfully completed. Now start listening for data from the apps,
-// and establish tunnels to the gateway
-func onboarded(lg *log.Logger) {
-	if !onboardedOnce {
-		go monitorGw(lg)
-		onboardedOnce = true
-	} else {
-		// Well if the user is tryng to onboard again, we should disconnect
-		// our gateway tunnels and reconnect with the new onboarding info
-		if gwTun != nil {
-			gwTun.Close()
+		count += 1
+		if count >= 5 { /* 10 seconds */
+			if flaps >= 3 {
+				// Too many flaps, try onboarding again, maybe some parameters have been changed
+				// on the controller
+				authAndOnboard(lg)
+				lg.Println("Re onboarding")
+			}
+			count = 0
+			flaps = 0
 		}
 	}
 }
@@ -176,6 +179,16 @@ func args() {
 	regInfo.Services = strings.Fields(svcs)
 }
 
+func authAndOnboard(lg *log.Logger) bool {
+	tokens := authenticate("https://dev-635657.okta.com", *username, *password)
+	if tokens == nil {
+		lg.Println("Unable to authenticate connector with the IDP")
+		return false
+	}
+	regInfo.AccessToken = tokens.AccessToken
+	return OktaInit(lg, &regInfo, controller)
+}
+
 func main() {
 	mainCtx = context.Background()
 	unique = uuid.New()
@@ -184,16 +197,14 @@ func main() {
 	lg := log.New(os.Stdout, "CNTR", 0)
 	args()
 	for {
-		tokens := authenticate("https://dev-635657.okta.com", *username, *password)
-		if tokens == nil {
-			lg.Println("Unable to authenticate connector with the IDP, retrying in five seconds")
+		if authAndOnboard(lg) == false {
+			lg.Println("Unable to authenticate connector, retrying in five seconds")
 			time.Sleep(5 * time.Second)
 		} else {
-			regInfo.AccessToken = tokens.AccessToken
 			break
 		}
 	}
-	OktaInit(lg, &regInfo, controller, onboarded)
+	go monitorGw(lg)
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction

@@ -1,12 +1,13 @@
 use clap::{App, Arg};
 use log::error;
-use nextensio::{agent_init, agent_on, onboard, CRegistrationInfo};
+use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistrationInfo};
 use serde::Deserialize;
 use std::ffi::CString;
 use std::fmt;
 use std::os::raw::{c_char, c_int};
 use std::process::Command;
 use std::thread;
+use std::time::Duration;
 use uuid::Uuid;
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
@@ -112,7 +113,26 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
     unsafe { onboard(creg) };
 }
 
-fn okta_init(controller: String, services: String, access_token: String) {
+// Onboard the agent and see if there are too many tunnel flaps, in which case
+// do onboarding again in case the agent parameters are changed on the controller
+fn do_onboard(controller: String, services: String, access_token: String) {
+    okta_onboard(controller.clone(), services.clone(), access_token.clone());
+    let mut stats = AgentStats::default();
+    let mut gateway_flaps = 0;
+    loop {
+        unsafe {
+            agent_stats(&mut stats);
+        }
+        if stats.gateway_flaps - gateway_flaps >= 3 {
+            error!("Onboarding again");
+            okta_onboard(controller.clone(), services.clone(), access_token.clone());
+        }
+        gateway_flaps = stats.gateway_flaps;
+        thread::sleep(Duration::new(10, 0));
+    }
+}
+
+fn okta_onboard(controller: String, services: String, access_token: String) {
     // TODO: Once we start using proper certs for our production clusters, make this
     // accept_invalid_certs true only for test environment. Even test environments ideally
     // should have verifiable certs via a test.nextensio.net domain or something
@@ -190,7 +210,7 @@ fn main() {
     let fd = create_tun().unwrap();
     config_tun();
 
-    thread::spawn(move || okta_init(controller, services, access_token));
+    thread::spawn(move || do_onboard(controller, services, access_token));
 
     unsafe {
         agent_on(fd);

@@ -20,7 +20,7 @@ use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
-use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize, thread};
+use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize};
 use webproxy::WebProxy;
 use websock::WebSession;
 
@@ -87,13 +87,14 @@ pub struct CRegistrationInfo {
     pub num_services: c_int,
 }
 
+#[derive(Default, Debug)]
 #[repr(C)]
 pub struct AgentStats {
-    gateway_up: c_int,
-    gateway_flaps: c_int,
-    last_gateway_flap: c_int,
-    gateway_flows: c_int,
-    total_flows: c_int,
+    pub gateway_up: c_int,
+    pub gateway_flaps: c_int,
+    pub last_gateway_flap: c_int,
+    pub gateway_flows: c_int,
+    pub total_flows: c_int,
 }
 
 fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
@@ -332,12 +333,12 @@ fn flow_new(
             Ok(()) => {}
         }
         tx_stream = tun.new_stream();
-        // The async tcp socket has to be established properly after handshake 
-        // and mio has to signal us that tx is ready before we can write. For 
+        // The async tcp socket has to be established properly after handshake
+        // and mio has to signal us that tx is ready before we can write. For
         // UDP tx is ready from get go
-	let mut tx_ready = false;
-	if key.proto == common::UDP {
-	    tx_ready = true;
+        let mut tx_ready = false;
+        if key.proto == common::UDP {
+            tx_ready = true;
         }
         *next_tun_idx = tx_socket + 1;
         let mut tun = Tun {
@@ -408,7 +409,7 @@ fn flow_new(
 
 // Today this dials websocket, in future with different possible transports,
 // this can dial some other protocol, but eventually it returns a Transport trait
-fn dial_gateway(reginfo: &RegistrationInfo) -> WebSession {
+fn dial_gateway(reginfo: &RegistrationInfo) -> Option<WebSession> {
     let mut headers = HashMap::new();
     headers.insert(
         "x-nextensio-connect".to_string(),
@@ -419,16 +420,15 @@ fn dial_gateway(reginfo: &RegistrationInfo) -> WebSession {
     loop {
         match websocket.dial() {
             Err(e) => {
-                error!(
-                    "Dial gateway {} failed: {}, sleeping 2 seconds",
-                    &reginfo.host, e.detail
-                );
-                thread::sleep(Duration::new(2, 0));
+                error!("Dial gateway {} failed: {}", &reginfo.host, e.detail);
+                STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return None;
             }
-            Ok(_) => break,
+            Ok(_) => {
+                return Some(websocket);
+            }
         }
     }
-    websocket
 }
 
 fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
@@ -1105,24 +1105,25 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if !agent.idp_onboarded {
         return;
     }
-    let websocket = dial_gateway(&mut agent.reginfo);
-    let mut tun = Tun {
-        tun: Box::new(websocket),
-        pending_tx: VecDeque::with_capacity(1),
-        tx_ready: false,
-        flows: TunFlow::OneToMany(HashMap::new()),
-        proxy_client: false,
-    };
+    if let Some(websocket) = dial_gateway(&mut agent.reginfo) {
+        let mut tun = Tun {
+            tun: Box::new(websocket),
+            pending_tx: VecDeque::with_capacity(1),
+            tx_ready: false,
+            flows: TunFlow::OneToMany(HashMap::new()),
+            proxy_client: false,
+        };
 
-    match tun.tun.event_register(GWTUN_POLL, poll, RegType::Reg) {
-        Err(e) => {
-            error!("Gateway transport register failed {}", format!("{}", e));
-            tun.tun.close(0).ok();
-            return;
-        }
-        Ok(_) => {
-            error!("Gateway Transport Registered");
-            agent.tuns.insert(GWTUN_IDX, TunInfo::Tun(tun));
+        match tun.tun.event_register(GWTUN_POLL, poll, RegType::Reg) {
+            Err(e) => {
+                error!("Gateway transport register failed {}", format!("{}", e));
+                tun.tun.close(0).ok();
+                return;
+            }
+            Ok(_) => {
+                error!("Gateway Transport Registered");
+                agent.tuns.insert(GWTUN_IDX, TunInfo::Tun(tun));
+            }
         }
     }
 }
