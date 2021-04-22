@@ -185,6 +185,7 @@ func authAndOnboard(lg *log.Logger) bool {
 		lg.Println("Unable to authenticate connector with the IDP")
 		return false
 	}
+	regInfo = RegistrationInfo{}
 	regInfo.AccessToken = tokens.AccessToken
 	return OktaInit(lg, &regInfo, controller)
 }
