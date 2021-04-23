@@ -1472,9 +1472,6 @@ fn agent_main_thread(platform: usize, direct: usize) {
             .with_tag("NxtAgentLib"),
     );
 
-    #[cfg(target_os = "linux")]
-    stderrlog::new().module(module_path!()).init().unwrap();
-
     #[cfg(target_vendor = "apple")]
     OsLogger::new("com.nextensio.agent")
         .level_filter(LevelFilter::Debug)

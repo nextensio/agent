@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -170,13 +169,10 @@ func monitorGw(lg *log.Logger) {
 
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
-	s := flag.String("service", "", "services advertised by this agent")
 	username = flag.String("username", "", "connector onboarding userid")
 	password = flag.String("password", "", "connector onboarding password")
 	flag.Parse()
 	controller = *c
-	svcs := strings.TrimSpace(*s)
-	regInfo.Services = strings.Fields(svcs)
 }
 
 func authAndOnboard(lg *log.Logger) bool {

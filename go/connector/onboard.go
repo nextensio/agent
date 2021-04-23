@@ -56,7 +56,6 @@ func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool
 			if err == nil {
 				err = json.Unmarshal(body, regInfo)
 				if err == nil {
-					regInfo.Services = append(regInfo.Services, regInfo.ConnectID)
 					return true
 				}
 			}

@@ -30,7 +30,6 @@ dependencies = [
  "mio 0.7.10",
  "netconn",
  "oslog",
- "stderrlog",
  "webproxy",
  "websock",
 ]
@@ -379,6 +378,7 @@ dependencies = [
  "log",
  "reqwest",
  "serde",
+ "stderrlog",
  "uuid 0.8.2",
 ]
 

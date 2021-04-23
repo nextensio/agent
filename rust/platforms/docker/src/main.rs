@@ -25,6 +25,7 @@ struct OnboardInfo {
     tenant: String,
     gateway: String,
     domains: Vec<String>,
+    services: Vec<String>,
     connectid: String,
     cacert: Vec<u8>,
 }
@@ -81,7 +82,7 @@ fn create_tun() -> Result<i32, std::io::Error> {
     }
 }
 
-fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
+fn agent_onboard(onb: &OnboardInfo, access_token: String) {
     let c_access_token = CString::new(access_token).unwrap();
     let uuid = Uuid::new_v4();
     let uuid_str = format!("{}", uuid);
@@ -94,7 +95,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
         domains.push(CString::new(d.clone()).unwrap());
     }
     let mut c_services: Vec<CString> = Vec::new();
-    for s in services.split_whitespace() {
+    for s in &onb.services {
         c_services.push(CString::new(s.clone()).unwrap());
     }
     let creg = CRegistrationInfo {
@@ -115,8 +116,8 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, services: String) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(controller: String, services: String, access_token: String) {
-    okta_onboard(controller.clone(), services.clone(), access_token.clone());
+fn do_onboard(controller: String, username: String, password: String) {
+    okta_onboard(controller.clone(), username.clone(), password.clone());
     let mut stats = AgentStats::default();
     let mut gateway_flaps = 0;
     loop {
@@ -125,14 +126,40 @@ fn do_onboard(controller: String, services: String, access_token: String) {
         }
         if stats.gateway_flaps - gateway_flaps >= 3 {
             error!("Onboarding again");
-            okta_onboard(controller.clone(), services.clone(), access_token.clone());
+            okta_onboard(controller.clone(), username.clone(), password.clone());
         }
         gateway_flaps = stats.gateway_flaps;
         thread::sleep(Duration::new(10, 0));
     }
 }
 
-fn okta_onboard(controller: String, services: String, access_token: String) {
+// Gaah.. We need to rewrite this pkce.go in rust.
+// Taking the lazy route at the moment and just using the go version
+fn get_token(username: &str, password: &str) -> Option<String> {
+    let out = Command::new("/rust/files/pkce")
+        .arg("https://dev-635657.okta.com")
+        .arg(username)
+        .arg(password)
+        .output();
+    if let Ok(token) = out {
+        match token.status.code() {
+            Some(code) => {
+                if code == 0 {
+                    return Some(String::from_utf8_lossy(&token.stdout).trim().to_string());
+                }
+            }
+            _ => (),
+        }
+    }
+    return None;
+}
+fn okta_onboard(controller: String, username: String, password: String) {
+    let token = get_token(&username, &password);
+    if token.is_none() {
+        error!("Cannot get access token");
+        return;
+    }
+    let access_token = token.unwrap();
     // TODO: Once we start using proper certs for our production clusters, make this
     // accept_invalid_certs true only for test environment. Even test environments ideally
     // should have verifiable certs via a test.nextensio.net domain or something
@@ -153,13 +180,7 @@ fn okta_onboard(controller: String, services: String, access_token: String) {
                             error!("Result from controller not ok {}", o.Result);
                         } else {
                             error!("Onboarded {}", o);
-                            let nxt_services;
-                            if services != "" {
-                                nxt_services = format!("{} {}", o.connectid, services);
-                            } else {
-                                nxt_services = o.connectid.clone();
-                            }
-                            agent_onboard(&o, access_token.clone(), nxt_services);
+                            agent_onboard(&o, access_token.clone());
                         }
                     }
                     Err(e) => {
@@ -177,13 +198,8 @@ fn okta_onboard(controller: String, services: String, access_token: String) {
 }
 
 fn main() {
+    stderrlog::new().module(module_path!()).init().unwrap();
     let matches = App::new("NxtAgent")
-        .arg(
-            Arg::with_name("service")
-                .long("service")
-                .takes_value(true)
-                .help("Service names as space seperated strings"),
-        )
         .arg(
             Arg::with_name("controller")
                 .long("controller")
@@ -191,26 +207,32 @@ fn main() {
                 .help("Controller FQDN/ip address"),
         )
         .arg(
-            Arg::with_name("access_token")
-                .long("access_token")
+            Arg::with_name("username")
+                .long("username")
                 .takes_value(true)
-                .help("Access token"),
+                .help("User Id"),
+        )
+        .arg(
+            Arg::with_name("password")
+                .long("password")
+                .takes_value(true)
+                .help("Password"),
         )
         .get_matches();
 
-    let services = matches.value_of("service").unwrap_or("").to_owned();
     let controller = matches
         .value_of("controller")
         .unwrap_or("server.nextensio.net:8080")
         .to_owned();
-    let access_token = matches.value_of("access_token").unwrap_or("").to_owned();
+    let username = matches.value_of("username").unwrap_or("").to_owned();
+    let password = matches.value_of("password").unwrap_or("").to_owned();
 
-    error!("controller {}, service {}", controller, services);
+    error!("controller {}", controller);
 
     let fd = create_tun().unwrap();
     config_tun();
 
-    thread::spawn(move || do_onboard(controller, services, access_token));
+    thread::spawn(move || do_onboard(controller, username, password));
 
     unsafe {
         agent_on(fd);

@@ -12,6 +12,8 @@ COPY files/ /rust/files
 RUN chmod +x /rust/files/gitlab.sh
 RUN /rust/files/gitlab.sh
 COPY . .
+# This is used inside the platforms/docker to get tokens, once we rewrite
+# it in rust we can get rid of this
 RUN go build /rust/files/pkce.go
 RUN mv /rust/src/app/pkce /rust/files/
 RUN cd platforms/docker; CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --path .

@@ -11,6 +11,6 @@ mkdir -p /var/cache/lighttpd/uploads
 cp /go/files/index.html /var/www/html/index.lighttpd.html
 lighttpd -f /etc/lighttpd/lighttpd.conf
 
-2>&1 /go/bin/connector -service "$NXT_SERVICES" -controller $NXT_CONTROLLER -username $NXT_USERNAME -password $NXT_PWD > /var/log/connector.log &
+2>/var/log/connector.log 1>/var/log/connector.log /go/bin/connector -controller $NXT_CONTROLLER -username $NXT_USERNAME -password $NXT_PWD &
 
 tail -f /dev/null
