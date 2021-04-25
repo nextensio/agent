@@ -759,7 +759,6 @@ fn flow_data_to_external(
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
                     f.source_agent = reginfo.connect_id.clone();
-                    f.origin_agent = reginfo.connect_id.clone();
                     let mut found = false;
                     for d in reginfo.domains.iter() {
                         if flow.service.contains(d) {

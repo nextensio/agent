@@ -83,6 +83,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.
 	// Swap source and dest agents
 	s, d := flow.SourceAgent, flow.DestAgent
 	flow.SourceAgent, flow.DestAgent = d, s
+	flow.FromConnector = true
 
 	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
 	// the close is cascaded to the the cluster
