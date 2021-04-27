@@ -21,6 +21,10 @@ dummy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 netconn = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 webproxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 
+#[cfg(target_os = "linux")]
+counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
+perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
+
 [lib]
 name = "nextensio"
 crate-type = ["rlib", "staticlib"]

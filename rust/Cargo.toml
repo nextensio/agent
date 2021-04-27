@@ -12,6 +12,4 @@ opt-level = 0  # Controls the --opt-level the compiler builds with
 debug = true   # Controls whether the compiler passes `-g`
 
 [profile.release]
-lto = true
-codegen-units = 1
-opt-level = "z"
+opt-level = 3
