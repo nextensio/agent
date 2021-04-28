@@ -18,7 +18,7 @@ use uuid::Uuid;
 // But is SUCKS to see that the so called "simple" http server rouille (tiny-http) spawns
 // like eight threads when we open listeners on two ports (4 threads  per port ?)
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct OnboardInfo {
     Result: String,
     userid: String,
@@ -92,26 +92,35 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
     let c_userid = CString::new(onb.userid.clone()).unwrap();
     let c_host = CString::new(onb.gateway.clone()).unwrap();
     let c_connectid = CString::new(onb.connectid.clone()).unwrap();
-    let mut domains: Vec<CString> = Vec::new();
-    for d in onb.domains.iter() {
-        domains.push(CString::new(d.clone()).unwrap());
+    let mut c_domains: Vec<CString> = Vec::new();
+    let mut c_domains_ptr: Vec<*const c_char> = Vec::new();
+    for d in &onb.domains {
+        let s = CString::new(d.clone()).unwrap();
+        let p = s.as_ptr();
+        c_domains.push(s);
+        c_domains_ptr.push(p);
     }
     let mut c_services: Vec<CString> = Vec::new();
-    for s in &onb.services {
-        c_services.push(CString::new(s.clone()).unwrap());
+    let mut c_services_ptr: Vec<*const c_char> = Vec::new();
+    for svc in &onb.services {
+        let s = CString::new(svc.clone()).unwrap();
+        let p = s.as_ptr();
+        c_services.push(s);
+        c_services_ptr.push(p);
     }
+    c_services.push(CString::new("foobar").unwrap());
     let creg = CRegistrationInfo {
         host: c_host.as_ptr(),
         access_token: c_access_token.as_ptr(),
         connect_id: c_connectid.as_ptr(),
-        domains: domains.as_ptr() as *const *const c_char,
-        num_domains: domains.len() as c_int,
+        domains: c_domains_ptr.as_ptr() as *const *const c_char,
+        num_domains: c_domains_ptr.len() as c_int,
         ca_cert: onb.cacert.as_ptr() as *const c_char,
         num_cacert: onb.cacert.len() as c_int,
         userid: c_userid.as_ptr(),
         uuid: c_uuid_str.as_ptr(),
-        services: c_services.as_ptr() as *const *const c_char,
-        num_services: c_services.len() as c_int,
+        services: c_services_ptr.as_ptr() as *const *const c_char,
+        num_services: c_services_ptr.len() as c_int,
     };
     unsafe { onboard(creg) };
 }
@@ -238,6 +247,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, (2048 * 3));
+        agent_init(0 /*platform*/, 0 /*direct*/, 2048 * 3);
     }
 }
