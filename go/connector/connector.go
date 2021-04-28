@@ -188,6 +188,7 @@ func authAndOnboard(lg *log.Logger) bool {
 }
 
 func main() {
+	common.MAXBUF = (2048 * 4)
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)

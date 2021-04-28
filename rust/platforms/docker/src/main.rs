@@ -52,6 +52,8 @@ fn cmd(cmd: &str) {
 fn config_tun() {
     cmd("ifconfig tun0 up");
     cmd("ifconfig tun0 169.254.2.1 netmask 255.255.255.0");
+    // We pass 2048*3 as the MAXBUF size in agent_init, so set the mtu close to MAXBUF
+    cmd("ifconfig tun0 mtu 6000");
     cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 1");
     cmd("echo 201 nxt >> /etc/iproute2/rt_tables");
     cmd("ip rule add fwmark 1 table nxt");
@@ -236,6 +238,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/);
+        agent_init(0 /*platform*/, 0 /*direct*/, (2048 * 3));
     }
 }

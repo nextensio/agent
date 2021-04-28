@@ -60,7 +60,7 @@ const CLEANUP_NOW: usize = 5; // 5 seconds
 const CLEANUP_TCP_HALFOPEN: usize = 30; // 30 seconds
 const CLEANUP_TCP_IDLE: usize = 60 * 60; // one hour
 const CLEANUP_UDP_IDLE: usize = 4 * 60; // 4 minutes
-const CLEANUP_UDP_DNS: usize = 30; // 30 seconds
+const CLEANUP_UDP_DNS: usize = 10; // 10 seconds
 
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
 
@@ -153,6 +153,7 @@ struct FlowV4 {
     pending_tx_qed: bool,
     service: String,
     parse_pending: Option<Vec<u8>>,
+    dest_agent: String,
 }
 
 enum TunFlow {
@@ -437,6 +438,7 @@ fn flow_new(
         dead: false,
         pending_tx_qed: false,
         service: "".to_string(),
+        dest_agent: "".to_string(),
         parse_pending: None,
     };
     if need_parsing {
@@ -665,7 +667,7 @@ fn external_sock_tx(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     reginfo: &RegistrationInfo,
     poll: &mut Poll,
-    perf: &mut AgentPerf,
+    _perf: &mut AgentPerf,
 ) {
     tun.tx_ready = true;
 
@@ -673,7 +675,7 @@ fn external_sock_tx(
         if let Some(flow) = flows.get_mut(&key) {
             if !flow.dead {
                 flow.pending_tx_qed = false;
-                flow_data_to_external(&key, flow, tun, reginfo, poll, perf);
+                flow_data_to_external(&key, flow, tun, reginfo, poll, _perf);
                 // If the flow is back to waiting state then we cant send any more
                 // on this tunnel, so break out and try next time
                 if flow.pending_tx.is_some() {
@@ -685,34 +687,63 @@ fn external_sock_tx(
     tun.pending_tx.shrink_to_fit();
 }
 
-fn parse_https_and_http(flow: &mut FlowV4, data: &[u8]) -> bool {
+fn set_dest_agent(flow: &mut FlowV4, reginfo: &RegistrationInfo) {
+    let mut found = false;
+    let mut has_default = false;
+    for d in reginfo.domains.iter() {
+        if flow.service.contains(d) {
+            flow.dest_agent = d.clone();
+            found = true;
+            break;
+        }
+        if !has_default && "nextensio-default-internet" == d {
+            has_default = true;
+        }
+    }
+    if !found {
+        if has_default {
+            flow.dest_agent = "nextensio-default-internet".to_string();
+        }
+    }
+}
+
+fn parse_https_and_http(flow: &mut FlowV4, data: &[u8], reginfo: &RegistrationInfo) -> bool {
     if let Some(service) = parse_sni(data) {
         flow.service = service;
+        set_dest_agent(flow, reginfo);
         return true;
     }
     let (_, _, service) = parse_host(data);
     if service != "" {
         flow.service = service;
+        set_dest_agent(flow, reginfo);
         return true;
     }
 
     return false;
 }
+
 // Add more data to the pending buffer and see if we can parse a service name
 // with all that data. If we cant, keep waiting for more data. This flow will
 // be sitting in a parse_pending hashmap which is monitored every 100ms and if
 // it times out waiting for more data, we will just use the ip address as the
 // service and send the flow across to the destination
-fn parse_complete(key: &FlowV4Key, flow: &mut FlowV4, mut tx: NxtBufs) -> Option<NxtBufs> {
+fn parse_complete(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    mut tx: NxtBufs,
+    reginfo: &RegistrationInfo,
+) -> Option<NxtBufs> {
     if let Some(mut pending) = flow.parse_pending.take() {
         for b in tx.bufs {
             pending.extend_from_slice(&b[tx.headroom..]);
             tx.headroom = 0;
         }
-        if pending.len() >= common::MAXBUF {
-            if !parse_https_and_http(flow, &pending[0..]) {
+        if pending.len() >= common::get_maxbuf() {
+            if !parse_https_and_http(flow, &pending[0..], reginfo) {
                 // We dont want any more data to parse, we give up and use dest ip as service
                 flow.service = key.dip.clone();
+                set_dest_agent(flow, reginfo);
             }
             return Some(NxtBufs {
                 hdr: tx.hdr,
@@ -730,16 +761,17 @@ fn parse_complete(key: &FlowV4Key, flow: &mut FlowV4, mut tx: NxtBufs) -> Option
         // (for http). If the first buffer doesnt have the max data we want to attempt
         // to parse, then deep copy the buffers to one large buffer (very bad case ,( )
         if !tx.bufs.is_empty() {
-            if parse_https_and_http(flow, &tx.bufs[0][tx.headroom..]) {
+            if parse_https_and_http(flow, &tx.bufs[0][tx.headroom..], reginfo) {
                 return Some(tx);
             } else {
                 // We dont want any more data to parse, we give up and use dest ip as service
-                if tx.bufs[0][tx.headroom..].len() >= common::MAXBUF {
+                if tx.bufs[0][tx.headroom..].len() >= common::get_maxbuf() {
                     flow.service = key.dip.clone();
+                    set_dest_agent(flow, reginfo);
                     return Some(tx);
                 } else {
                     // We think more data will produce better parsing results, so wait for more data
-                    let mut pending = Vec::with_capacity(common::MAXBUF);
+                    let mut pending = Vec::with_capacity(common::get_maxbuf());
                     for b in tx.bufs {
                         pending.extend_from_slice(&b[tx.headroom..]);
                         tx.headroom = 0;
@@ -764,7 +796,7 @@ fn flow_data_to_external(
     tx_socket: &mut Tun,
     reginfo: &RegistrationInfo,
     poll: &mut Poll,
-    perf: &mut AgentPerf,
+    _perf: &mut AgentPerf,
 ) {
     flow_alive(&key, flow, true);
     while tx_socket.tx_ready {
@@ -786,7 +818,7 @@ fn flow_data_to_external(
             }
         }
         if flow.service == "" {
-            if let Some(p) = parse_complete(key, flow, tx) {
+            if let Some(p) = parse_complete(key, flow, tx, reginfo) {
                 tx = p;
             } else {
                 // Read more data
@@ -801,17 +833,7 @@ fn flow_data_to_external(
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
                     f.source_agent = reginfo.connect_id.clone();
-                    let mut found = false;
-                    for d in reginfo.domains.iter() {
-                        if flow.service.contains(d) {
-                            f.dest_agent = d.clone();
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        f.dest_agent = "default-internet".to_string();
-                    }
+                    f.dest_agent = flow.dest_agent.clone()
                 }
                 _ => {}
             }
@@ -908,7 +930,7 @@ fn proxyclient_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-    perf: &mut AgentPerf,
+    _perf: &mut AgentPerf,
 ) -> Option<TunInfo> {
     match tun_info {
         TunInfo::Tun(mut tun) => loop {
@@ -940,6 +962,7 @@ fn proxyclient_rx(
                         );
                         if let Some(flow) = flows.get_mut(&key) {
                             flow.service = key.dip.clone();
+                            set_dest_agent(flow, reginfo);
                             if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                 // Send the data on to the destination
                                 flow.pending_tx = Some(data);
@@ -949,7 +972,7 @@ fn proxyclient_rx(
                                     &mut tx_sock.tun(),
                                     reginfo,
                                     poll,
-                                    perf,
+                                    _perf,
                                 );
                             }
                             // trigger an immediate write back to the client by calling proxyclient_write().
@@ -981,7 +1004,7 @@ fn proxyclient_rx(
             if let Some(flow) = flows.get_mut(&key) {
                 if !flow.dead {
                     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                        flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll, perf);
+                        flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll, _perf);
                     }
                     flow.rx_socket
                         .event_register(tun_idx, poll, RegType::Rereg)
@@ -1039,7 +1062,7 @@ fn vpntun_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-    perf: &mut AgentPerf,
+    _perf: &mut AgentPerf,
 ) {
     for _ in 0..max_pkts {
         let ret = tun.tun.read();
@@ -1095,7 +1118,7 @@ fn vpntun_rx(
                                         &mut tx_sock.tun(),
                                         reginfo,
                                         poll,
-                                        perf,
+                                        _perf,
                                     );
                                     flow_data_from_external(&key, flow, tuns, poll);
                                 }
@@ -1308,7 +1331,7 @@ fn monitor_parse_pending(
     tuns: &mut HashMap<usize, TunInfo>,
     reginfo: &mut RegistrationInfo,
     poll: &mut Poll,
-    perf: &mut AgentPerf,
+    _perf: &mut AgentPerf,
 ) {
     let mut keys = Vec::new();
     for (k, _) in parse_pending.iter_mut() {
@@ -1317,6 +1340,7 @@ fn monitor_parse_pending(
                 if let Some(data) = f.parse_pending.take() {
                     // We couldnt parse the service, just use dest ip as service
                     f.service = k.dip.clone();
+                    set_dest_agent(f, reginfo);
                     // Send the data queued up for parsing immediately
                     f.pending_tx = Some(NxtBufs {
                         hdr: None,
@@ -1325,7 +1349,7 @@ fn monitor_parse_pending(
                     });
                     if let Some(tx_sock) = tuns.get_mut(&f.tx_socket) {
                         if !f.dead {
-                            flow_data_to_external(k, f, &mut tx_sock.tun(), reginfo, poll, perf);
+                            flow_data_to_external(k, f, &mut tx_sock.tun(), reginfo, poll, _perf);
                         }
                     }
                 }
@@ -1709,7 +1733,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
 // itself seems to work fine and hence we are leaving the thread creation to the
 // platform so it can choose the right priority etc..
 #[no_mangle]
-pub unsafe extern "C" fn agent_init(platform: usize, direct: usize) {
+pub unsafe extern "C" fn agent_init(platform: usize, direct: usize, maxbuf: usize) {
+    common::set_maxbuf(maxbuf);
     agent_main_thread(platform, direct);
 }
 

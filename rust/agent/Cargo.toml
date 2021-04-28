@@ -10,6 +10,10 @@ android_logger = "0.10"
 [target.'cfg(target_vendor = "apple")'.dependencies]
 oslog = "0.1.0"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
+perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
+
 [dependencies]
 log = "0.4.14"
 mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
@@ -20,10 +24,6 @@ l3proxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 dummy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 netconn = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 webproxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
-
-#[cfg(target_os = "linux")]
-counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
-perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 
 [lib]
 name = "nextensio"
