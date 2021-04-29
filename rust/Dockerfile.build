@@ -2,7 +2,7 @@ FROM instrumentisto/rust:1.51.0-beta
 
 # Gaah .. the go compiler is for compiling the pkce.go to get
 # access tokens. We should rewrite pkce.go in rust and get rid of this
-RUN apt update && apt install -y golang-go
+RUN apt update && apt install -y golang-go net-tools iptables
 
 # Now compile the code
 WORKDIR /rust/src/app

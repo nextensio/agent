@@ -45,9 +45,9 @@ func gwToApp(lg *log.Logger, tun common.Transport) {
 		if dest.Conn == nil {
 			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 			if flow.Proto == common.TCP {
-				dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.Dest, flow.Dport)
+				dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.DestSvc, flow.Dport)
 			} else {
-				dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.Dest, flow.Dport)
+				dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.DestSvc, flow.Dport)
 			}
 			e := dest.Conn.Dial(unusedAppStreams)
 			if e != nil {
@@ -83,7 +83,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.
 	// Swap source and dest agents
 	s, d := flow.SourceAgent, flow.DestAgent
 	flow.SourceAgent, flow.DestAgent = d, s
-	flow.FromConnector = true
+	flow.ResponseData = true
 
 	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
 	// the close is cascaded to the the cluster
@@ -188,6 +188,7 @@ func authAndOnboard(lg *log.Logger) bool {
 }
 
 func main() {
+	common.MAXBUF = (2048 * 4)
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)

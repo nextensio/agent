@@ -25,7 +25,7 @@ struct AgentStats
     int total_flows;
 };
 
-extern void agent_init(int platform, int direct);
+extern void agent_init(int platform, int direct, int maxbuf);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
@@ -33,7 +33,8 @@ extern void agent_stats(struct AgentStats *stats);
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    agent_init(0 /*android*/, 0 /*direct*/);
+    // We set the MAXBUF size to 2048*3
+    agent_init(0 /*android*/, 0 /*direct*/, 2048*3);
     return 0;
 }
 

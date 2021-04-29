@@ -52,6 +52,7 @@ func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool
 		req.Header.Add("Authorization", "Bearer "+regInfo.AccessToken)
 		resp, err := client.Do(req)
 		if err == nil {
+			defer resp.Body.Close()
 			body, err := ioutil.ReadAll(resp.Body)
 			if err == nil {
 				err = json.Unmarshal(body, regInfo)

@@ -24,7 +24,7 @@ typedef struct CRegistrationInfo {
     int num_services;
 } CRegistrationInfo;
 
-void agent_init(uintptr_t platform, uintptr_t direct);
+void agent_init(uintptr_t platform, uintptr_t direct, int32_t maxbuf);
 
 void agent_on(int32_t fd);
 
