@@ -80,6 +80,11 @@ class AuthFlowCoordinator {
         // Make SignInViewController as ROOT view
         rootViewController.pushViewController(signInViewController, animated: true)
     }
+    
+    func handleTerminateAuthView() {
+        let authBaseViewController = rootViewController.topViewController as! AuthBaseViewController
+        authBaseViewController.terminateAuthView()
+    }
 
     func handleSuccessStatus(status: OktaAuthStatus) {
         let successStatus = status as! OktaAuthStatusSuccess

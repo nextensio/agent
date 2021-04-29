@@ -19,6 +19,7 @@ import OktaAuthSdk
 
 class AuthBaseViewController: UIViewController {
     
+    var tunnelProvider: TunnelProvider?
     var status: OktaAuthStatus?
     weak var flowCoordinatorDelegate: AuthFlowCoordinatorProtocol?
 
@@ -50,6 +51,11 @@ class AuthBaseViewController: UIViewController {
         }
     }
 
+    func terminateAuthView() {
+        print("terminate auth view")
+        tunnelProvider?.terminateTunnelProviderManager()
+    }
+    
     func showError(message: String) {
         let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))

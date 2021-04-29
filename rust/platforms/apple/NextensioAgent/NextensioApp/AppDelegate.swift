@@ -20,7 +20,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         return true
     }
+    
+    func applicationWillTerminate(_ application: UIApplication) {
+        print("application will terminate")
+        authFlowCoordinator?.handleTerminateAuthView()
+    }
+    
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        print("application will enter foreground")
+    }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: UIApplication) -> Bool {
+        print("appShouldTerminateAfterLastWindowClosed")
+        return true
+    }
+    
 //    // MARK: UISceneSession Lifecycle
 //
 //    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
