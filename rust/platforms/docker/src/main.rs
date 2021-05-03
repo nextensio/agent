@@ -251,6 +251,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, MAXBUF);
+        agent_init(0 /*platform*/, 0 /*direct*/, MAXBUF, 24);
     }
 }

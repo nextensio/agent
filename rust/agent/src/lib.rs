@@ -1409,7 +1409,8 @@ fn monitor_buffers(
                     f.pending_tx = None;
                     if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
                         let tx_socket = tx_socket.tun();
-                        flow_close(k, f, &mut tx_socket.tun, poll)
+                        flow_close(k, f, &mut tx_socket.tun, poll);
+                        error!("Buffer close flow {}", k);
                     }
                 } else {
                     keys.push(k.clone());
