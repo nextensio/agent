@@ -20,7 +20,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         return true
     }
+    
+    func applicationWillTerminate(_ application: UIApplication) {
+        print("app will terminate")
+        authFlowCoordinator?.handleTerminateAuthView()
+    }
+    
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        print("app will enter foreground")
+    }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: UIApplication) -> Bool {
+        print("app should terminate after last window closed")
+        return true
+    }
+    
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        print("app did enter backgroud")
+    }
+    
 //    // MARK: UISceneSession Lifecycle
 //
 //    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -34,7 +52,4 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 //        // If any sessions were discarded while the application was not running, this will be called shortly after application:didFinishLaunchingWithOptions.
 //        // Use this method to release any resources that were specific to the discarded scenes, as they will not return.
 //    }
-
-
 }
-

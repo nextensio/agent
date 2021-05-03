@@ -9,7 +9,6 @@ import OktaAuthSdk
 
 class TunnelViewController: AuthBaseViewController {
 
-    var tunnelProvider: TunnelProvider?
     @IBOutlet weak var connectButton: UIButton!
     @IBOutlet weak var signInButton: UIButton!
 
@@ -18,6 +17,7 @@ class TunnelViewController: AuthBaseViewController {
 
         self.navigationItem.title = "Nextensio Tunnel"
         
+        // Direct Tunnel Provider
         tunnelProvider = TunnelProvider(button: connectButton, state: nil, direct: true)
     }
 

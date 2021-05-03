@@ -11,7 +11,6 @@ import OktaOidc
 
 class UserProfileViewController: AuthBaseViewController {
 
-    var gatewayProvider: TunnelProvider?
     var successStatus: OktaAuthStatusSuccess?
     var oidcStateManager: OktaOidcStateManager?
     
@@ -42,7 +41,7 @@ class UserProfileViewController: AuthBaseViewController {
                     self?.connectButton.isEnabled = true
                     
                     // initialize NextensioPacketTunnel
-                    self?.gatewayProvider = TunnelProvider(button: (self?.connectButton)!, state: self?.oidcStateManager, direct: false)
+                    self?.tunnelProvider = TunnelProvider(button: (self?.connectButton)!, state: self?.oidcStateManager, direct: false)
                 }
             })
         }
@@ -83,15 +82,15 @@ class UserProfileViewController: AuthBaseViewController {
             })
         }
         // reset vpn profile settings
-        gatewayProvider?.resetTunnelProviderManager()
+        tunnelProvider?.resetTunnelProviderManager()
     }
     
     @IBAction func connectTapped(_ sender: UIButton) {
         print("connect Tunnel Tapped")
         if (sender.title(for: .normal) == "Connect") {
-            gatewayProvider?.connectDirect()
+            tunnelProvider?.connectDirect()
         } else {
-            gatewayProvider?.disconnectDirect()
+            tunnelProvider?.disconnectDirect()
         }
 
     }

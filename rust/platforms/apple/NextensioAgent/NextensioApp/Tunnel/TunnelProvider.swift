@@ -32,6 +32,11 @@ class TunnelProvider {
         initTunnelProviderManager(state: state, direct: direct)
     }
     
+    func terminateTunnelProviderManager() {
+        print("terminate tunnel provider manager (disconnect)")
+        self.tunnelManager.connection.stopVPNTunnel()
+    }
+    
     func resetTunnelProviderManager() {
         print("reset tunnel provider manager")
         initTunnelProviderManager(state: nil, direct: true)
