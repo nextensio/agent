@@ -863,13 +863,15 @@ fn flow_data_to_external(
             Err((data, e)) => match e.code {
                 NxtErr::EWOULDBLOCK => {
                     tx_socket.tx_ready = false;
-                    flow.pending_tx = Some(data.unwrap());
-                    if !flow.pending_tx_qed {
-                        // Well The tx socket is not ready, so queue ourselves
-                        // upto be called when the tx socket becomes ready and
-                        // get out of the loop.
-                        tx_socket.pending_tx.push_back(key.clone());
-                        flow.pending_tx_qed = true;
+                    if data.is_some() {
+                        flow.pending_tx = data;
+                        if !flow.pending_tx_qed {
+                            // Well The tx socket is not ready, so queue ourselves
+                            // upto be called when the tx socket becomes ready and
+                            // get out of the loop.
+                            tx_socket.pending_tx.push_back(key.clone());
+                            flow.pending_tx_qed = true;
+                        }
                     }
                     return;
                 }
