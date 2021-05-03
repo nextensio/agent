@@ -10,6 +10,8 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
+const MAXBUF: usize = 64 * 1024;
+
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
 // but we do the ignore-certificate business today, or even if we dont ignore, we might
@@ -49,15 +51,17 @@ fn cmd(cmd: &str) {
     let mut shell = Command::new("bash");
     shell.arg("-c").arg(cmd).output().expect(cmd);
 }
-fn config_tun() {
+
+// The files/run.sh will create a route table named nxt and add
+// some rules to mark packets in that table etc.. BEFORe the agent runs
+fn config_tun(mtu: usize) {
     cmd("ifconfig tun0 up");
     cmd("ifconfig tun0 169.254.2.1 netmask 255.255.255.0");
-    // We pass 2048*3 as the MAXBUF size in agent_init, so set the mtu close to MAXBUF
-    cmd("ifconfig tun0 mtu 6000");
-    cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 1");
-    cmd("echo 201 nxt >> /etc/iproute2/rt_tables");
-    cmd("ip rule add fwmark 1 table nxt");
-    cmd("ip route add default via 169.254.2.1 dev tun0 table nxt");
+    cmd(&format!("ifconfig tun0 mtu {}", mtu));
+    cmd(&format!(
+        "ip route add default via 169.254.2.1 dev tun0 mtu {} table nxt",
+        mtu
+    ));
 }
 
 fn create_tun() -> Result<i32, std::io::Error> {
@@ -241,12 +245,12 @@ fn main() {
     error!("controller {}", controller);
 
     let fd = create_tun().unwrap();
-    config_tun();
+    config_tun(MAXBUF - 1);
 
     thread::spawn(move || do_onboard(controller, username, password));
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, 2048 * 3);
+        agent_init(0 /*platform*/, 0 /*direct*/, MAXBUF);
     }
 }

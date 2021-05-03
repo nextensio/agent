@@ -56,12 +56,14 @@ const VPNTUN_POLL: Token = Token(VPNTUN_IDX);
 const WEBPROXY_POLL: Token = Token(WEBPROXY_IDX);
 const GWTUN_POLL: Token = Token(GWTUN_IDX);
 
-const CLEANUP_NOW: usize = 5; // 5 seconds
+const CLEANUP_NOW: usize = 2; // 2 seconds
 const CLEANUP_TCP_HALFOPEN: usize = 30; // 30 seconds
 const CLEANUP_TCP_IDLE: usize = 60 * 60; // one hour
 const CLEANUP_UDP_IDLE: usize = 4 * 60; // 4 minutes
 const CLEANUP_UDP_DNS: usize = 10; // 10 seconds
+const CLEANUP_IDLE_BUFS: usize = 2; // 2 seconds
 
+const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
 
 #[derive(Default, Debug)]
@@ -147,13 +149,15 @@ struct FlowV4 {
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
     creation_time: Instant,
-    last_active: Instant,
+    last_packet: Instant,
+    last_rdwr: Instant,
     cleanup_after: usize,
     dead: bool,
     pending_tx_qed: bool,
     service: String,
     parse_pending: Option<Vec<u8>>,
     dest_agent: String,
+    active: bool,
 }
 
 enum TunFlow {
@@ -208,17 +212,20 @@ impl TunInfo {
 // This actually should be target-os linux AND target-arch x86_64, rdtsc is x86 only
 #[cfg(target_os = "linux")]
 struct AgentPerf {
-    counters: Counters,
-    perf_cnt: Perf,
+    _counters: Counters,
+    _perf_cnt: Perf,
 }
 
 #[cfg(target_os = "linux")]
 fn alloc_perf() -> AgentPerf {
     // the r2cnt utility expects a counter name of r2cnt, this can be changed later to
     // pass in some name of our choice
-    let mut counters = Counters::new("r2cnt").unwrap();
-    let perf_cnt = Perf::new("perf_cnt1", &mut counters);
-    return AgentPerf { counters, perf_cnt };
+    let mut _counters = Counters::new("r2cnt").unwrap();
+    let _perf_cnt = Perf::new("perf_cnt1", &mut _counters);
+    return AgentPerf {
+        _counters,
+        _perf_cnt,
+    };
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -245,6 +252,9 @@ struct AgentInfo {
     proxy_tun: Tun,
     reginfo_changed: usize,
     last_flap: Instant,
+    mtu: usize,
+    _max_qed_bufs: usize,
+    flows_active: HashMap<FlowV4Key, ()>,
     perf: AgentPerf,
 }
 
@@ -266,6 +276,9 @@ impl Default for AgentInfo {
             proxy_tun: Tun::default(),
             reginfo_changed: 0,
             last_flap: Instant::now(),
+            mtu: 0,
+            _max_qed_bufs: 0,
+            flows_active: HashMap::new(),
             perf: alloc_perf(),
         }
     }
@@ -279,8 +292,8 @@ impl Default for AgentInfo {
 // will hang around in idle state for a long time. And for dns we are being
 // super aggressive here, cleaning up in 30 seconds.
 fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4, alive: bool) {
-    flow.last_active = Instant::now();
     if alive {
+        flow.last_rdwr = Instant::now();
         if key.proto == common::TCP {
             flow.cleanup_after = CLEANUP_TCP_IDLE;
         } else {
@@ -311,6 +324,7 @@ fn flow_close(
         tx_socket.close(rx_stream).ok();
     }
     flow_alive(key, flow, false);
+
     // Unregister the poller so we dont keep polling till the flow is cleaned
     // up which can be many seconds away
     flow.rx_socket
@@ -432,7 +446,8 @@ fn flow_new(
         tx_socket,
         pending_tx: None,
         pending_rx: VecDeque::with_capacity(1),
-        last_active: Instant::now(),
+        last_packet: Instant::now(),
+        last_rdwr: Instant::now(),
         creation_time: Instant::now(),
         cleanup_after,
         dead: false,
@@ -440,6 +455,7 @@ fn flow_new(
         service: "".to_string(),
         dest_agent: "".to_string(),
         parse_pending: None,
+        active: false,
     };
     if need_parsing {
         parse_pending.insert(key.clone(), ());
@@ -533,7 +549,6 @@ fn flow_rx_data(
             // if this gets queued up for long ? Set it to None
             data.hdr = None;
             flow.pending_rx.push_back(data);
-            flow_alive(&key, flow, true);
             flow_data_from_external(&key, flow, tuns, poll);
             // this call will generate packets to be sent out back to the kernel
             // into the vpn_tx queue which will be processed in vpntun_tx
@@ -739,7 +754,7 @@ fn parse_complete(
             pending.extend_from_slice(&b[tx.headroom..]);
             tx.headroom = 0;
         }
-        if pending.len() >= common::get_maxbuf() {
+        if pending.len() >= PARSE_MAX {
             if !parse_https_and_http(flow, &pending[0..], reginfo) {
                 // We dont want any more data to parse, we give up and use dest ip as service
                 flow.service = key.dip.clone();
@@ -765,7 +780,7 @@ fn parse_complete(
                 return Some(tx);
             } else {
                 // We dont want any more data to parse, we give up and use dest ip as service
-                if tx.bufs[0][tx.headroom..].len() >= common::get_maxbuf() {
+                if tx.bufs[0][tx.headroom..].len() >= PARSE_MAX {
                     flow.service = key.dip.clone();
                     set_dest_agent(flow, reginfo);
                     return Some(tx);
@@ -798,14 +813,16 @@ fn flow_data_to_external(
     poll: &mut Poll,
     _perf: &mut AgentPerf,
 ) {
-    flow_alive(&key, flow, true);
     while tx_socket.tx_ready {
         let mut tx;
         if flow.pending_tx.is_some() {
             tx = flow.pending_tx.take().unwrap();
         } else {
             tx = match flow.rx_socket.read() {
-                Ok((_, t)) => t,
+                Ok((_, t)) => {
+                    flow_alive(&key, flow, true);
+                    t
+                }
                 Err(e) => match e.code {
                     NxtErr::EWOULDBLOCK => {
                         return;
@@ -891,8 +908,7 @@ fn flow_data_from_external(
                 }
             },
             Ok(_) => {
-                // See if the data we just gave the tcp/udp stack will be spit out
-                // by the stack as packets to be sent in the vpn_tx queue
+                flow_alive(key, flow, true);
             }
         }
     }
@@ -1062,6 +1078,8 @@ fn vpntun_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
+    mtu: usize,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
     _perf: &mut AgentPerf,
 ) {
     for _ in 0..max_pkts {
@@ -1082,7 +1100,7 @@ fn vpntun_rx(
                     if let Some(key) = decode_ipv4(&b[data.headroom..]) {
                         let mut f = flows.get_mut(&key);
                         if f.is_none() {
-                            let rx_socket = Box::new(Socket::new_client(&key, 1500));
+                            let rx_socket = Box::new(Socket::new_client(&key, mtu));
                             flow_new(
                                 &key,
                                 true,
@@ -1125,6 +1143,11 @@ fn vpntun_rx(
                                 // poll again to see if packets from external can be sent back to the flow/app via agent_tx
                                 flow.rx_socket.poll(vpn_rx, vpn_tx);
                                 assert!(vpn_rx.len() == 0);
+                                flow.last_packet = Instant::now();
+                                if !flow.active {
+                                    flows_active.insert(key.clone(), ());
+                                    flow.active = true;
+                                }
                             }
                         }
                     }
@@ -1364,6 +1387,42 @@ fn monitor_parse_pending(
     }
 }
 
+fn monitor_buffers(
+    poll: &mut Poll,
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    tuns: &mut HashMap<usize, TunInfo>,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
+) {
+    let mut keys = Vec::new();
+    for (k, _) in flows_active.iter() {
+        if let Some(mut f) = flows.get_mut(k) {
+            let active = f.last_packet + Duration::from_secs(CLEANUP_IDLE_BUFS as u64);
+            let now = Instant::now();
+            // No packets the last 2 seconds
+            if now > active {
+                // If the flow is still holding onto rx buffers, that means the rx buffers have
+                // tcp holes which are not getting filled in 2 seconds, that has to mean some serious
+                // trouble communicating with the OS kernel. Similarly, if it has tx buffers, that
+                // means its not getting ACKs from the OS kernel. Close the flow.
+                if !f.rx_socket.idle() || !f.pending_rx.is_empty() || f.pending_tx.is_some() {
+                    f.pending_rx.clear();
+                    f.pending_tx = None;
+                    if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
+                        let tx_socket = tx_socket.tun();
+                        flow_close(k, f, &mut tx_socket.tun, poll)
+                    }
+                } else {
+                    keys.push(k.clone());
+                    f.active = false;
+                }
+            }
+        }
+    }
+    for k in keys {
+        flows_active.remove(&k);
+    }
+}
+
 // TODO: This can be made more effective by using some kind of timer wheel
 // to sort the flows in the order of their expiry rather than having to walk
 // through them all. Right now the use case is for a couple of hundred flows
@@ -1373,15 +1432,26 @@ fn monitor_flows(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
+    vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
 ) {
     STATS_NUMFLOWS.store(flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
-        if Instant::now() > f.last_active + Duration::from_secs(f.cleanup_after as u64) {
+        let rdwr = f.last_rdwr + Duration::from_secs(f.cleanup_after as u64);
+        let now = Instant::now();
+        if now > rdwr {
             if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
                 let tx_socket = tx_socket.tun();
                 flow_close(k, f, &mut tx_socket.tun, poll);
+                // Generate a FIN/RST after the close above
+                f.rx_socket.poll(vpn_rx, vpn_tx);
+                if f.active {
+                    flows_active.remove_entry(k);
+                    f.active = false;
+                }
                 match tx_socket.flows {
                     TunFlow::OneToMany(ref mut sock_flows) => {
                         sock_flows.remove(&f.tx_stream);
@@ -1424,6 +1494,7 @@ fn monitor_flows(
         }
     }
     flows.shrink_to_fit();
+    flows_active.shrink_to_fit();
     tuns.shrink_to_fit();
 }
 
@@ -1534,7 +1605,7 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         .ok();
 }
 
-fn agent_main_thread(platform: usize, direct: usize) {
+fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -1561,6 +1632,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
         DIRECT.store(1, std::sync::atomic::Ordering::Relaxed);
     }
     agent.platform = platform;
+    agent.mtu = maxbuf;
+    agent._max_qed_bufs = nbufs;
     agent.next_tun_idx = TUN_START;
 
     proxy_init(&mut agent, &mut poll);
@@ -1568,6 +1641,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
     let mut flow_ager = Instant::now();
     let mut service_parse_ager = Instant::now();
     let mut monitor_ager = Instant::now();
+    let mut buffer_monitor = Instant::now();
+
     loop {
         let hundred_ms = Duration::from_millis(SERVICE_PARSE_TIMEOUT);
         match poll.poll(&mut events, Some(hundred_ms)) {
@@ -1591,6 +1666,8 @@ fn agent_main_thread(platform: usize, direct: usize) {
                             &mut poll,
                             agent.gw_onboarded,
                             &agent.reginfo,
+                            agent.mtu,
+                            &mut agent.flows_active,
                             &mut agent.perf,
                         );
                     }
@@ -1717,8 +1794,20 @@ fn agent_main_thread(platform: usize, direct: usize) {
                 &mut agent.flows,
                 &mut agent.parse_pending,
                 &mut agent.tuns,
+                &mut agent.vpn_rx,
+                &mut agent.vpn_tx,
+                &mut agent.flows_active,
             );
             flow_ager = Instant::now();
+        }
+        if Instant::now() > buffer_monitor + Duration::from_secs(2) {
+            monitor_buffers(
+                &mut poll,
+                &mut agent.flows,
+                &mut agent.tuns,
+                &mut agent.flows_active,
+            );
+            buffer_monitor = Instant::now();
         }
     }
 }
@@ -1733,9 +1822,9 @@ fn agent_main_thread(platform: usize, direct: usize) {
 // itself seems to work fine and hence we are leaving the thread creation to the
 // platform so it can choose the right priority etc..
 #[no_mangle]
-pub unsafe extern "C" fn agent_init(platform: usize, direct: usize, maxbuf: usize) {
+pub unsafe extern "C" fn agent_init(platform: usize, direct: usize, maxbuf: usize, nbufs: usize) {
     common::set_maxbuf(maxbuf);
-    agent_main_thread(platform, direct);
+    agent_main_thread(platform, direct, maxbuf, nbufs);
 }
 
 // We EXPECT the fd provied to us to be already non blocking

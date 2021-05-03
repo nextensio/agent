@@ -59,8 +59,8 @@ public class NxtAgentService extends VpnService {
             Builder builder = new Builder();
             builder.addAddress(VPN_ADDRESS, 32);
             builder.addRoute(VPN_ROUTE, 0);
-            // We set the MAXBUF to 2048*3 in agent_init, so set an mtu thats close by
-            builder.setMtu(6000);
+            // We also set the MAXBUF to 64*1024 in agent_init
+            builder.setMtu(64*1024-1);
             try {
                 // We dont want our own packets to be looped back via VPN to ourselves.
                 // Usually android does that using a "socket.protect" call for each socket

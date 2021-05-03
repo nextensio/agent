@@ -33,8 +33,8 @@ extern void agent_stats(struct AgentStats *stats);
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    // We set the MAXBUF size to 2048*3
-    agent_init(0 /*android*/, 0 /*direct*/, 2048*3);
+    // We set the MAXBUF size to 64*1024
+    agent_init(0 /*android*/, 0 /*direct*/, 64 * 1024);
     return 0;
 }
 
