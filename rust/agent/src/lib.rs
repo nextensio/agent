@@ -335,7 +335,7 @@ fn flow_close(
     flow.rx_socket
         .event_register(Token(flow.rx_socket_idx), poll, RegType::Dereg)
         .ok();
-    if flow.tx_socket != GWTUN_IDX {
+    if flow.tx_socket != GWTUN_IDX && flow.tx_socket != UNUSED_IDX {
         tx_socket
             .event_register(Token(flow.tx_socket), poll, RegType::Dereg)
             .ok();
@@ -344,26 +344,15 @@ fn flow_close(
     return pending;
 }
 
-fn flow_fail(mut rx_socket: Box<dyn Transport>, rx_socket_idx: Token, poll: &mut Poll) {
-    rx_socket
-        .event_register(rx_socket_idx, poll, RegType::Dereg)
-        .ok();
-    rx_socket.close(0).ok();
-}
-
-fn flow_new(
+fn set_tx_socket(
     key: &FlowV4Key,
-    need_parsing: bool,
-    rx_socket_idx: Token,
-    rx_socket: Box<dyn Transport>,
-    flows: &mut HashMap<FlowV4Key, FlowV4>,
-    parse_pending: &mut HashMap<FlowV4Key, ()>,
+    flow: &mut FlowV4,
+    mut direct: bool,
     tuns: &mut HashMap<usize, TunInfo>,
     next_tun_idx: &mut usize,
     poll: &mut Poll,
     gw_onboarded: bool,
 ) {
-    let mut direct = false;
     if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
         direct = true;
     }
@@ -374,6 +363,7 @@ fn flow_new(
         direct = true;
     }
 
+    let mut dummy = Tun::default();
     let tx_socket;
     let tx_stream;
     if direct {
@@ -387,7 +377,7 @@ fn flow_new(
         );
         match tun.dial() {
             Err(_) => {
-                flow_fail(rx_socket, rx_socket_idx, poll);
+                flow_close(key, flow, &mut dummy.tun, poll);
                 return;
             }
             Ok(()) => {}
@@ -413,7 +403,7 @@ fn flow_new(
             Err(e) => {
                 error!("Direct transport register failed {}", format!("{}", e));
                 tun.tun.close(0).ok();
-                flow_fail(rx_socket, rx_socket_idx, poll);
+                flow_close(key, flow, &mut tun.tun, poll);
                 return;
             }
             Ok(_) => {}
@@ -431,14 +421,27 @@ fn flow_new(
                 _ => panic!("We expect a hashmap for gateway flows"),
             }
         } else {
-            flow_fail(rx_socket, rx_socket_idx, poll);
+            flow_close(key, flow, &mut dummy.tun, poll);
             return;
         }
     } else {
-        flow_fail(rx_socket, rx_socket_idx, poll);
+        // flow is supposed to go via nextensio, but nextensio gateway connection
+        // is down at the moment, so close the flow
+        flow_close(key, flow, &mut dummy.tun, poll);
         return;
     }
+    flow.tx_socket = tx_socket;
+    flow.tx_stream = tx_stream;
+}
 
+fn flow_new(
+    key: &FlowV4Key,
+    need_parsing: bool,
+    rx_socket_idx: Token,
+    rx_socket: Box<dyn Transport>,
+    flows: &mut HashMap<FlowV4Key, FlowV4>,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
+) {
     let cleanup_after;
     if key.proto == common::TCP {
         cleanup_after = CLEANUP_TCP_HALFOPEN;
@@ -446,12 +449,15 @@ fn flow_new(
         cleanup_after = CLEANUP_UDP_IDLE;
     }
 
+    // The flow tx socket / stream parameters will get overridden later when we
+    // parse the flow's service and figure out if the flow is going direct or via
+    // nextensio
     let f = FlowV4 {
         rx_socket,
         rx_socket_idx: rx_socket_idx.0,
         rx_stream: None,
-        tx_stream,
-        tx_socket,
+        tx_stream: 0,
+        tx_socket: UNUSED_IDX,
         pending_tx: None,
         pending_rx: VecDeque::with_capacity(1),
         packet_age: 0,
@@ -686,7 +692,15 @@ fn external_sock_tx(
     tun.pending_tx.shrink_to_fit();
 }
 
-fn set_dest_agent(flow: &mut FlowV4, reginfo: &RegistrationInfo) {
+fn set_dest_agent(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    reginfo: &RegistrationInfo,
+    tuns: &mut HashMap<usize, TunInfo>,
+    next_tun_idx: &mut usize,
+    poll: &mut Poll,
+    gw_onboarded: bool,
+) {
     let mut found = false;
     let mut has_default = false;
     for d in reginfo.domains.iter() {
@@ -704,18 +718,36 @@ fn set_dest_agent(flow: &mut FlowV4, reginfo: &RegistrationInfo) {
             flow.dest_agent = "nextensio-default-internet".to_string();
         }
     }
+    set_tx_socket(
+        key,
+        flow,
+        !found && !has_default,
+        tuns,
+        next_tun_idx,
+        poll,
+        gw_onboarded,
+    );
 }
 
-fn parse_https_and_http(flow: &mut FlowV4, data: &[u8], reginfo: &RegistrationInfo) -> bool {
+fn parse_https_and_http(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    data: &[u8],
+    reginfo: &RegistrationInfo,
+    tuns: &mut HashMap<usize, TunInfo>,
+    next_tun_idx: &mut usize,
+    poll: &mut Poll,
+    gw_onboarded: bool,
+) -> bool {
     if let Some(service) = parse_sni(data) {
         flow.service = service;
-        set_dest_agent(flow, reginfo);
+        set_dest_agent(key, flow, reginfo, tuns, next_tun_idx, poll, gw_onboarded);
         return true;
     }
     let (_, _, service) = parse_host(data);
     if service != "" {
         flow.service = service;
-        set_dest_agent(flow, reginfo);
+        set_dest_agent(key, flow, reginfo, tuns, next_tun_idx, poll, gw_onboarded);
         return true;
     }
 
@@ -732,6 +764,10 @@ fn parse_complete(
     flow: &mut FlowV4,
     mut tx: NxtBufs,
     reginfo: &RegistrationInfo,
+    tuns: &mut HashMap<usize, TunInfo>,
+    next_tun_idx: &mut usize,
+    poll: &mut Poll,
+    gw_onboarded: bool,
 ) -> Option<NxtBufs> {
     if let Some(mut pending) = flow.parse_pending.take() {
         for b in tx.bufs {
@@ -739,10 +775,19 @@ fn parse_complete(
             tx.headroom = 0;
         }
         if pending.len() >= PARSE_MAX {
-            if !parse_https_and_http(flow, &pending[0..], reginfo) {
+            if !parse_https_and_http(
+                key,
+                flow,
+                &pending[0..],
+                reginfo,
+                tuns,
+                next_tun_idx,
+                poll,
+                gw_onboarded,
+            ) {
                 // We dont want any more data to parse, we give up and use dest ip as service
                 flow.service = key.dip.clone();
-                set_dest_agent(flow, reginfo);
+                set_dest_agent(key, flow, reginfo, tuns, next_tun_idx, poll, gw_onboarded);
             }
             return Some(NxtBufs {
                 hdr: tx.hdr,
@@ -760,13 +805,22 @@ fn parse_complete(
         // (for http). If the first buffer doesnt have the max data we want to attempt
         // to parse, then deep copy the buffers to one large buffer (very bad case ,( )
         if !tx.bufs.is_empty() {
-            if parse_https_and_http(flow, &tx.bufs[0][tx.headroom..], reginfo) {
+            if parse_https_and_http(
+                key,
+                flow,
+                &tx.bufs[0][tx.headroom..],
+                reginfo,
+                tuns,
+                next_tun_idx,
+                poll,
+                gw_onboarded,
+            ) {
                 return Some(tx);
             } else {
                 // We dont want any more data to parse, we give up and use dest ip as service
                 if tx.bufs[0][tx.headroom..].len() >= PARSE_MAX {
                     flow.service = key.dip.clone();
-                    set_dest_agent(flow, reginfo);
+                    set_dest_agent(key, flow, reginfo, tuns, next_tun_idx, poll, gw_onboarded);
                     return Some(tx);
                 } else {
                     // We think more data will produce better parsing results, so wait for more data
@@ -816,14 +870,6 @@ fn flow_data_to_external(
                         return;
                     }
                 },
-            }
-        }
-        if flow.service == "" {
-            if let Some(p) = parse_complete(key, flow, tx, reginfo) {
-                tx = p;
-            } else {
-                // Read more data
-                continue;
             }
         }
 
@@ -930,44 +976,43 @@ fn proxyclient_rx(
                 },
                 Ok((_, data)) => {
                     if let Some(key) = hdr_to_key(data.hdr.as_ref().unwrap()) {
-                        flow_new(
-                            &key,
-                            false,
-                            tun_idx,
-                            tun.tun,
-                            flows,
-                            parse_pending,
-                            tuns,
-                            next_tun_idx,
-                            poll,
-                            gw_onboarded,
-                        );
+                        flow_new(&key, false, tun_idx, tun.tun, flows, parse_pending);
                         if let Some(flow) = flows.get_mut(&key) {
                             flow.service = key.dip.clone();
-                            set_dest_agent(flow, reginfo);
+                            set_dest_agent(
+                                &key,
+                                flow,
+                                reginfo,
+                                tuns,
+                                next_tun_idx,
+                                poll,
+                                gw_onboarded,
+                            );
+                            let tun_info = TunInfo::Flow(key.clone());
                             if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                // Send the data on to the destination
-                                flow.pending_tx = Some(data);
-                                flow_data_to_external(
-                                    &key,
-                                    flow,
-                                    &mut tx_sock.tun(),
-                                    reginfo,
-                                    poll,
-                                    _perf,
-                                );
-                                // trigger an immediate write back to the client by calling proxyclient_write().
-                                // the dummy data here is just to trigger a write. The immediate write might be
-                                // necessary if the client needs to receive an http-ok for example
-                                flow.pending_rx.push_back(NxtBufs {
-                                    hdr: None,
-                                    bufs: vec![vec![]],
-                                    headroom: 0,
-                                });
-                                tx_sock.tun().pending_rx += 1;
+                                if !flow.dead {
+                                    // Send the data on to the destination
+                                    flow.pending_tx = Some(data);
+                                    flow_data_to_external(
+                                        &key,
+                                        flow,
+                                        &mut tx_sock.tun(),
+                                        reginfo,
+                                        poll,
+                                        _perf,
+                                    );
+                                    // trigger an immediate write back to the client by calling proxyclient_write().
+                                    // the dummy data here is just to trigger a write. The immediate write might be
+                                    // necessary if the client needs to receive an http-ok for example
+                                    flow.pending_rx.push_back(NxtBufs {
+                                        hdr: None,
+                                        bufs: vec![vec![]],
+                                        headroom: 0,
+                                    });
+                                    tx_sock.tun().pending_rx += 1;
+                                    proxyclient_tx(&tun_info, flows, tuns, poll);
+                                }
                             }
-                            let tun_info = TunInfo::Flow(key);
-                            proxyclient_tx(&tun_info, flows, tuns, poll);
                             return Some(tun_info);
                         } else {
                             // Flow creation failed for whatever reason. The flow_new() will close and
@@ -1018,6 +1063,62 @@ fn proxyclient_tx(
             }
         }
         _ => { /* Not yet ready for tx, we havent received the connect request yet */ }
+    }
+}
+
+// If the flow is fully parsed, return true. If the flow needs further parsing, return false
+fn flow_parse(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    poll: &mut Poll,
+    tuns: &mut HashMap<usize, TunInfo>,
+    reginfo: &RegistrationInfo,
+    next_tun_idx: &mut usize,
+    gw_onboarded: bool,
+) -> (bool, Option<NxtBufs>) {
+    if flow.dead {
+        // stop parsing any further
+        return (true, None);
+    }
+    if flow.service != "" {
+        // already parsed
+        return (true, None);
+    }
+
+    loop {
+        match flow.rx_socket.read() {
+            Ok((_, tx)) => {
+                flow_alive(&key, flow, true);
+                if let Some(p) = parse_complete(
+                    key,
+                    flow,
+                    tx,
+                    reginfo,
+                    tuns,
+                    next_tun_idx,
+                    poll,
+                    gw_onboarded,
+                ) {
+                    // succesfully parsed
+                    return (true, Some(p));
+                } else {
+                    // continue reading more data to try and complete the parse
+                }
+            }
+            Err(e) => match e.code {
+                NxtErr::EWOULDBLOCK => {
+                    // Need more data to parse
+                    return (false, None);
+                }
+                _ => {
+                    if let Some(tx_socket) = tuns.get_mut(&flow.tx_socket) {
+                        flow_close(key, flow, &mut tx_socket.tun().tun, poll);
+                    }
+                    // errored, stop parsing any further
+                    return (true, None);
+                }
+            },
+        }
     }
 }
 
@@ -1077,10 +1178,6 @@ fn vpntun_rx(
                                 rx_socket,
                                 flows,
                                 parse_pending,
-                                tuns,
-                                next_tun_idx,
-                                poll,
-                                gw_onboarded,
                             );
                             f = flows.get_mut(&key);
                         }
@@ -1101,7 +1198,20 @@ fn vpntun_rx(
                             // ACK might make more room for data from external queued up to be sent to the app
                             // so also attempt a flow_data_from_external call
                             flow.rx_socket.poll(vpn_rx, vpn_tx);
-                            if !flow.dead {
+                            let (parsed, data) = flow_parse(
+                                &key,
+                                flow,
+                                poll,
+                                tuns,
+                                reginfo,
+                                next_tun_idx,
+                                gw_onboarded,
+                            );
+                            if parsed && !flow.dead {
+                                if data.is_some() {
+                                    assert!(flow.pending_tx.is_none());
+                                    flow.pending_tx = data;
+                                }
                                 if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                     flow_data_to_external(
                                         &key,
@@ -1323,6 +1433,8 @@ fn monitor_parse_pending(
     tuns: &mut HashMap<usize, TunInfo>,
     reginfo: &mut RegistrationInfo,
     poll: &mut Poll,
+    next_tun_idx: &mut usize,
+    gw_onboarded: bool,
     _perf: &mut AgentPerf,
 ) {
     let mut keys = Vec::new();
@@ -1332,15 +1444,15 @@ fn monitor_parse_pending(
                 if let Some(data) = f.parse_pending.take() {
                     // We couldnt parse the service, just use dest ip as service
                     f.service = k.dip.clone();
-                    set_dest_agent(f, reginfo);
-                    // Send the data queued up for parsing immediately
-                    f.pending_tx = Some(NxtBufs {
-                        hdr: None,
-                        bufs: vec![data],
-                        headroom: 0,
-                    });
-                    if let Some(tx_sock) = tuns.get_mut(&f.tx_socket) {
-                        if !f.dead {
+                    set_dest_agent(k, f, reginfo, tuns, next_tun_idx, poll, gw_onboarded);
+                    if !f.dead {
+                        // Send the data queued up for parsing immediately
+                        f.pending_tx = Some(NxtBufs {
+                            hdr: None,
+                            bufs: vec![data],
+                            headroom: 0,
+                        });
+                        if let Some(tx_sock) = tuns.get_mut(&f.tx_socket) {
                             flow_data_to_external(k, f, &mut tx_sock.tun(), reginfo, poll, _perf);
                         }
                     }
@@ -1602,6 +1714,7 @@ fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize
     agent.mtu = maxbuf;
     agent._max_qed_bufs = nbufs;
     agent.next_tun_idx = TUN_START;
+    agent.tuns.insert(UNUSED_IDX, TunInfo::Tun(Tun::default()));
 
     proxy_init(&mut agent, &mut poll);
 
@@ -1749,6 +1862,8 @@ fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize
                 &mut agent.tuns,
                 &mut agent.reginfo,
                 &mut poll,
+                &mut agent.next_tun_idx,
+                agent.gw_onboarded,
                 &mut agent.perf,
             );
             service_parse_ager = Instant::now();
