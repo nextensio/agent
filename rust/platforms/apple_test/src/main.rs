@@ -32,6 +32,6 @@ fn main() {
     unsafe {
         agent_on(fd);
         // Set MAXBUF size to 2048*3
-        agent_init(1 /*platform*/, 1 /*direct*/, 2048*3);
+        agent_init(1 /*platform*/, 1 /*direct*/, 2048*3, 24);
     }
 }
