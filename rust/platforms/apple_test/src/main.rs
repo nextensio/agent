@@ -1,7 +1,8 @@
 use nextensio::{agent_init, agent_on};
 use std::process::Command;
 
-const MAXBUF: usize = 64 * 1024;
+const RXMTU: usize = 64 * 1024;
+const TXMTU: usize = 64 * 1024;
 const PKTMEM: usize = 16; // In Megabytes
 
 extern "C" {
@@ -34,10 +35,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(
-            1, /*platform*/
-            1, /*direct*/
-            MAXBUF, MAXBUF, PKTMEM,
-        );
+        agent_init(1 /*platform*/, 1 /*direct*/, RXMTU, TXMTU, PKTMEM);
     }
 }

@@ -10,7 +10,8 @@ use std::time::Duration;
 use std::{ffi::CString, usize};
 use uuid::Uuid;
 
-const MAXBUF: usize = 64 * 1024;
+const RXMTU: usize = 64 * 1024;
+const TXMTU: usize = 64 * 1024;
 const PKTMEM: usize = 16; // In megabytes
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
@@ -246,16 +247,13 @@ fn main() {
     error!("controller {}", controller);
 
     let fd = create_tun().unwrap();
-    config_tun(MAXBUF - 1);
+    // linux tun0 does not like mtu of 65536, it can only take 65535
+    config_tun(RXMTU - 1);
 
     thread::spawn(move || do_onboard(controller, username, password));
 
     unsafe {
         agent_on(fd);
-        agent_init(
-            0, /*platform*/
-            0, /*direct*/
-            MAXBUF, MAXBUF, PKTMEM,
-        );
+        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, PKTMEM);
     }
 }

@@ -19,11 +19,11 @@ use netconn::NetConn;
 use oslog::OsLogger;
 #[cfg(target_os = "linux")]
 use perf::Perf;
-use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
+use std::{ffi::CStr, usize};
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize};
 use webproxy::WebProxy;
 use websock::WebSession;
@@ -55,6 +55,7 @@ const UNUSED_POLL: Token = Token(UNUSED_IDX);
 const VPNTUN_POLL: Token = Token(VPNTUN_IDX);
 const WEBPROXY_POLL: Token = Token(WEBPROXY_IDX);
 const GWTUN_POLL: Token = Token(GWTUN_IDX);
+// TODO: Make this to be variable based on the agent.pktmem setting of the platform
 const MAX_PENDING_RX: usize = 1;
 
 const CLEANUP_NOW: usize = 5; // 5 seconds
@@ -289,62 +290,6 @@ impl Default for AgentInfo {
         }
     }
 }
-// Mark when the flow should be cleaned up. The internet RFCs stipulate
-// 4 hours for TCP idle flow, 5 minutes for UDP idle flow - we have made
-// it some more shorter here, that will pbbly have to be bumped up to match
-// the RFC eventually. As for terminated/FIN/RST flows, we clean that up
-// after a short 5 second delay just so that new packets coming into the
-// same tuple will not unnecessarily force us to create a socket again which
-// will hang around in idle state for a long time. And for dns we are being
-// super aggressive here, cleaning up in 30 seconds.
-fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4, alive: bool) {
-    if alive {
-        flow.last_rdwr = Instant::now();
-        if key.proto == common::TCP {
-            flow.cleanup_after = CLEANUP_TCP_IDLE;
-        } else {
-            if key.dport == 53 {
-                flow.cleanup_after = CLEANUP_UDP_DNS;
-            } else {
-                flow.cleanup_after = CLEANUP_UDP_IDLE;
-            }
-        }
-    } else {
-        flow.dead = true;
-        flow.cleanup_after = CLEANUP_NOW;
-        flow.pending_rx.clear();
-        flow.pending_tx = None;
-        flow.parse_pending = None;
-    }
-}
-
-fn flow_close(
-    key: &FlowV4Key,
-    flow: &mut FlowV4,
-    tx_socket: &mut Box<dyn Transport>,
-    poll: &mut Poll,
-) -> usize {
-    flow.rx_socket.close(0).ok();
-    tx_socket.close(flow.tx_stream).ok();
-    if let Some(rx_stream) = flow.rx_stream {
-        tx_socket.close(rx_stream).ok();
-    }
-    let pending = flow.pending_rx.len();
-    flow_alive(key, flow, false);
-
-    // Unregister the poller so we dont keep polling till the flow is cleaned
-    // up which can be many seconds away
-    flow.rx_socket
-        .event_register(Token(flow.rx_socket_idx), poll, RegType::Dereg)
-        .ok();
-    if flow.tx_socket != GWTUN_IDX && flow.tx_socket != UNUSED_IDX {
-        tx_socket
-            .event_register(Token(flow.tx_socket), poll, RegType::Dereg)
-            .ok();
-    }
-
-    return pending;
-}
 
 fn set_tx_socket(
     key: &FlowV4Key,
@@ -379,7 +324,7 @@ fn set_tx_socket(
         );
         match tun.dial() {
             Err(_) => {
-                flow_close(key, flow, &mut dummy.tun, poll);
+                flow_close(key, flow, Some(&mut dummy.tun), poll);
                 return;
             }
             Ok(()) => {}
@@ -405,7 +350,7 @@ fn set_tx_socket(
             Err(e) => {
                 error!("Direct transport register failed {}", format!("{}", e));
                 tun.tun.close(0).ok();
-                flow_close(key, flow, &mut tun.tun, poll);
+                flow_close(key, flow, Some(&mut tun.tun), poll);
                 return;
             }
             Ok(_) => {}
@@ -423,13 +368,13 @@ fn set_tx_socket(
                 _ => panic!("We expect a hashmap for gateway flows"),
             }
         } else {
-            flow_close(key, flow, &mut dummy.tun, poll);
+            flow_close(key, flow, Some(&mut dummy.tun), poll);
             return;
         }
     } else {
         // flow is supposed to go via nextensio, but nextensio gateway connection
         // is down at the moment, so close the flow
-        flow_close(key, flow, &mut dummy.tun, poll);
+        flow_close(key, flow, Some(&mut dummy.tun), poll);
         return;
     }
     flow.tx_socket = tx_socket;
@@ -605,7 +550,7 @@ fn external_sock_rx(
                     match tun.flows {
                         TunFlow::OneToOne(ref k) => {
                             if let Some(f) = flows.get_mut(k) {
-                                tun.pending_rx -= flow_close(k, f, &mut tun.tun, poll);
+                                tun.pending_rx -= flow_close(k, f, Some(&mut tun.tun), poll);
                             }
                         }
                         _ => {}
@@ -621,7 +566,8 @@ fn external_sock_rx(
                             TunFlow::OneToMany(ref mut tun_flows) => {
                                 if let Some(k) = tun_flows.get(&hdr.streamid) {
                                     if let Some(f) = flows.get_mut(k) {
-                                        tun.pending_rx -= flow_close(k, f, &mut tun.tun, poll);
+                                        tun.pending_rx -=
+                                            flow_close(k, f, Some(&mut tun.tun), poll);
                                     }
                                 }
                             }
@@ -860,7 +806,7 @@ fn flow_data_to_external(
         } else {
             tx = match flow.rx_socket.read() {
                 Ok((_, t)) => {
-                    flow_alive(&key, flow, true);
+                    flow_alive(&key, flow);
                     t
                 }
                 Err(e) => match e.code {
@@ -868,7 +814,8 @@ fn flow_data_to_external(
                         return;
                     }
                     _ => {
-                        tx_socket.pending_rx -= flow_close(key, flow, &mut tx_socket.tun, poll);
+                        tx_socket.pending_rx -=
+                            flow_close(key, flow, Some(&mut tx_socket.tun), poll);
                         return;
                     }
                 },
@@ -908,7 +855,7 @@ fn flow_data_to_external(
                     return;
                 }
                 _ => {
-                    tx_socket.pending_rx -= flow_close(key, flow, &mut tx_socket.tun, poll);
+                    tx_socket.pending_rx -= flow_close(key, flow, Some(&mut tx_socket.tun), poll);
                     return;
                 }
             },
@@ -930,13 +877,13 @@ fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun, po
                     return;
                 }
                 _ => {
-                    tun.pending_rx -= flow_close(key, flow, &mut tun.tun, poll);
+                    tun.pending_rx -= flow_close(key, flow, Some(&mut tun.tun), poll);
                     return;
                 }
             },
             Ok(_) => {
                 tun.pending_rx -= 1;
-                flow_alive(key, flow, true);
+                flow_alive(key, flow);
             }
         }
     }
@@ -1090,7 +1037,7 @@ fn flow_parse(
     loop {
         match flow.rx_socket.read() {
             Ok((_, tx)) => {
-                flow_alive(&key, flow, true);
+                flow_alive(&key, flow);
                 if let Some(p) = parse_complete(
                     key,
                     flow,
@@ -1114,7 +1061,7 @@ fn flow_parse(
                 }
                 _ => {
                     if let Some(tx_socket) = tuns.get_mut(&flow.tx_socket) {
-                        flow_close(key, flow, &mut tx_socket.tun().tun, poll);
+                        flow_close(key, flow, Some(&mut tx_socket.tun().tun), poll);
                     }
                     // errored, stop parsing any further
                     return (true, None);
@@ -1187,7 +1134,6 @@ fn vpntun_rx(
                             f = flows.get_mut(&key);
                         }
                         if let Some(flow) = f {
-                            flow.packet_age = 0;
                             if !flow.active {
                                 flows_active.insert(key.clone(), ());
                                 flow.active = true;
@@ -1325,8 +1271,10 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         return;
     }
 
-    if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
-        let gw_tun = &mut gw_tun.tun();
+    // Will be readded later down below
+    let gw_tun_info = agent.tuns.remove(&GWTUN_IDX);
+    if let Some(mut gw_tun_tun) = gw_tun_info {
+        let gw_tun = &mut gw_tun_tun.tun();
         if gw_tun.tun.is_closed(0) {
             STATS_GWUP.store(0, std::sync::atomic::Ordering::Relaxed);
             STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1337,8 +1285,14 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 .tun
                 .event_register(GWTUN_POLL, poll, RegType::Dereg)
                 .ok();
-            close_gateway_flows(&mut agent.flows, &mut agent.parse_pending, gw_tun, poll);
-            agent.tuns.remove(&GWTUN_IDX);
+            close_gateway_flows(
+                &mut agent.flows,
+                &mut agent.parse_pending,
+                &mut gw_tun_tun,
+                &mut agent.tuns,
+                poll,
+                &mut agent.flows_active,
+            );
             new_gw(agent, poll);
         } else {
             STATS_GWUP.store(1, std::sync::atomic::Ordering::Relaxed);
@@ -1350,7 +1304,10 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
                 }
                 _ => {}
             }
+            // Readded
+            agent.tuns.insert(GWTUN_IDX, gw_tun_tun);
         }
+
         let now = Instant::now();
         if now > agent.last_flap {
             STATS_LASTFLAP.store(
@@ -1391,20 +1348,28 @@ fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
             .event_register(VPNTUN_POLL, poll, RegType::Dereg)
             .ok();
         agent.vpn_fd = 0;
-        if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
+
+        // Will be readded down below
+        let gw_tun_info = agent.tuns.remove(&GWTUN_IDX);
+        if let Some(mut gw_tun) = gw_tun_info {
             close_gateway_flows(
                 &mut agent.flows,
                 &mut agent.parse_pending,
-                &mut gw_tun.tun(),
+                &mut gw_tun,
+                &mut agent.tuns,
                 poll,
+                &mut agent.flows_active,
             );
+            agent.tuns.insert(GWTUN_IDX, gw_tun);
         }
+
         // After closing gateway flows, what is left is direct flows
         close_direct_flows(
             &mut agent.flows,
             &mut agent.parse_pending,
             &mut agent.tuns,
             poll,
+            &mut agent.flows_active,
         );
     }
     if agent.vpn_fd != fd {
@@ -1448,10 +1413,12 @@ fn monitor_parse_pending(
     for (k, _) in parse_pending.iter_mut() {
         if let Some(f) = flows.get_mut(k) {
             if Instant::now() > f.creation_time + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
-                if let Some(data) = f.parse_pending.take() {
-                    // We couldnt parse the service, just use dest ip as service
+                // We couldnt parse the service, just use dest ip as service
+                if f.service == "" {
                     f.service = k.dip.clone();
                     set_dest_agent(k, f, reginfo, tuns, next_tun_idx, poll, gw_onboarded);
+                }
+                if let Some(data) = f.parse_pending.take() {
                     if !f.dead {
                         // Send the data queued up for parsing immediately
                         f.pending_tx = Some(NxtBufs {
@@ -1466,8 +1433,6 @@ fn monitor_parse_pending(
                 }
                 keys.push(k.clone());
             }
-        } else {
-            keys.push(k.clone());
         }
     }
     for k in keys {
@@ -1493,8 +1458,9 @@ fn monitor_buffers(
                 // means its not getting ACKs from the OS kernel. Close the flow.
                 if !f.rx_socket.idle(false) || !f.pending_rx.is_empty() || f.pending_tx.is_some() {
                     error!(
-                        "Buffer close flow {}, idle {}, pending_rx {}, pending_tx{}",
+                        "Buffer close flow {} / {}, idle {}, pending_rx {}, pending_tx {}",
                         k,
+                        f.service,
                         f.rx_socket.idle(false),
                         f.pending_rx.len(),
                         f.parse_pending.is_some()
@@ -1502,7 +1468,7 @@ fn monitor_buffers(
                     f.rx_socket.idle(true);
                     if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
                         let tx_socket = tx_socket.tun();
-                        tx_socket.pending_rx -= flow_close(k, f, &mut tx_socket.tun, poll);
+                        tx_socket.pending_rx -= flow_close(k, f, Some(&mut tx_socket.tun), poll);
                     }
                 }
                 keys.push(k.clone());
@@ -1514,6 +1480,123 @@ fn monitor_buffers(
     }
 }
 
+// Just punch the flow liveliness timestamp.
+// The internet RFCs stipulate 4 hours for TCP idle flow, 5 minutes for UDP idle flow -
+// we have made it some more shorter here, that will pbbly have to be bumped up to match
+// the RFC eventually. And for dns we are being super aggressive here, cleaning up in 30 seconds.
+fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4) {
+    // TODO: The last_rdwr can be gotten rid of and we can use the simple
+    // packet_age counter to do the flow-aged determination too
+    flow.last_rdwr = Instant::now();
+    flow.packet_age = 0;
+    if key.proto == common::TCP {
+        flow.cleanup_after = CLEANUP_TCP_IDLE;
+    } else {
+        if key.dport == 53 {
+            flow.cleanup_after = CLEANUP_UDP_DNS;
+        } else {
+            flow.cleanup_after = CLEANUP_UDP_IDLE;
+        }
+    }
+}
+
+// Send notifications to all parties (local kernel sockets, remote cluster etc..) that
+// this flow is closed. ie generate a FIN/RST to local and direct sockets if the flow is
+// direct,and send a message/signal to cluster if the flow is via nextensio. And then
+// cleanup EVERYTHING THAT CONSUMES MEMORY **RIGHT AWAY**. And we let the flow hang around
+// for a few more seconds to be cleaned up by monitor_flows - because even after we close
+// the flow, we might get a few packets and we dont want to try and create new flow for
+// those old packets etc..
+fn flow_close(
+    _key: &FlowV4Key,
+    flow: &mut FlowV4,
+    tx_socket: Option<&mut Box<dyn Transport>>,
+    poll: &mut Poll,
+) -> usize {
+    // Tell all parties local and remote that the flow is closed
+    if let Some(tx_socket) = tx_socket {
+        // There maybe two streams - one going to external via tx socket and one coming
+        // from external again via tx socket (forward and return). Close both
+        tx_socket.close(flow.tx_stream).ok();
+        if let Some(rx_stream) = flow.rx_stream {
+            tx_socket.close(rx_stream).ok();
+        }
+        if flow.tx_socket != GWTUN_IDX && flow.tx_socket != UNUSED_IDX {
+            tx_socket
+                .event_register(Token(flow.tx_socket), poll, RegType::Dereg)
+                .ok();
+        }
+    }
+    flow.rx_socket.close(0).ok();
+    // Unregister the poller so we dont keep polling till the flow is cleaned
+    // up which can be many seconds away
+    flow.rx_socket
+        .event_register(Token(flow.rx_socket_idx), poll, RegType::Dereg)
+        .ok();
+
+    // Free all memory occupying stuff
+    let pending = flow.pending_rx.len();
+    flow.pending_rx.clear();
+    flow.pending_tx = None;
+    flow.parse_pending = None;
+    flow.pending_tx_qed = false;
+    flow.pending_tx = None;
+
+    // Now let monitor_flows() clean up all other structures that has references/keys
+    // to this flow and release the flow itself from flow table
+    flow.dead = true;
+    flow.cleanup_after = CLEANUP_NOW;
+
+    return pending;
+}
+
+// Do all the close/cleanups etc.. and release the flow (ie remove from flow table)
+fn flow_terminate(
+    k: &FlowV4Key,
+    f: &mut FlowV4,
+    parse_pending: &mut HashMap<FlowV4Key, ()>,
+    tx_sock_in: Option<&mut TunInfo>,
+    tuns: &mut HashMap<usize, TunInfo>,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
+    poll: &mut Poll,
+) {
+    let tx_sock;
+    if tx_sock_in.is_some() {
+        tx_sock = tx_sock_in;
+    } else {
+        tx_sock = tuns.get_mut(&f.tx_socket);
+    }
+    if let Some(tx_socket) = tx_sock {
+        let tx_socket = tx_socket.tun();
+        if !f.dead {
+            tx_socket.pending_rx -= flow_close(k, f, Some(&mut tx_socket.tun), poll);
+        }
+        match tx_socket.flows {
+            TunFlow::OneToMany(ref mut sock_flows) => {
+                sock_flows.remove(&f.tx_stream);
+                if let Some(rx_stream) = f.rx_stream {
+                    sock_flows.remove(&rx_stream);
+                }
+            }
+            _ => {}
+        }
+        if f.tx_socket != GWTUN_IDX && f.tx_socket != UNUSED_IDX {
+            // Gateway socket is monitored seperately, if the flow is dead, just
+            // deregister the tx socket if its a 1:1 (direct flow case) socket
+            tuns.remove(&f.tx_socket);
+        }
+    } else {
+        if !f.dead {
+            flow_close(k, f, None, poll);
+        }
+    }
+    tuns.remove(&f.rx_socket_idx);
+    tuns.shrink_to_fit();
+    parse_pending.remove(k);
+    parse_pending.shrink_to_fit();
+    flows_active.remove_entry(k);
+    flows_active.shrink_to_fit();
+}
 // TODO: This can be made more effective by using some kind of timer wheel
 // to sort the flows in the order of their expiry rather than having to walk
 // through them all. Right now the use case is for a couple of hundred flows
@@ -1527,99 +1610,44 @@ fn monitor_flows(
 ) {
     STATS_NUMFLOWS.store(flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
 
-    let mut total_idle = 0;
-    let mut total_pending_rx = 0;
-    let mut total_pending_tx = 0;
-
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
-        if !f.rx_socket.idle(false) {
-            total_idle += 1;
-        }
-        total_pending_rx += f.pending_rx.len();
-        if f.pending_tx.is_some() {
-            total_pending_tx += 1;
-        }
         let rdwr = f.last_rdwr + Duration::from_secs(f.cleanup_after as u64);
         let now = Instant::now();
         if now > rdwr {
-            if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
-                let tx_socket = tx_socket.tun();
-                tx_socket.pending_rx -= flow_close(k, f, &mut tx_socket.tun, poll);
-                if f.active {
-                    flows_active.remove_entry(k);
-                    f.active = false;
-                }
-                match tx_socket.flows {
-                    TunFlow::OneToMany(ref mut sock_flows) => {
-                        sock_flows.remove(&f.tx_stream);
-                        if let Some(rx_stream) = f.rx_stream {
-                            sock_flows.remove(&rx_stream);
-                        }
-                    }
-                    _ => {}
-                }
-                if f.pending_tx.is_some() {
-                    // The flow key might be queued up in tx_socket.pending_tx, that will
-                    // get removed in the next iteration of external_sock_tx()
-                    f.pending_tx_qed = false;
-                    f.pending_tx = None;
-                }
-                if f.tx_socket != GWTUN_IDX {
-                    // Gateway socket is monitored seperately, if the flow is dead, just
-                    // deregister the tx socket if its a 1:1 (direct flow case) socket
-                    tx_socket
-                        .tun
-                        .event_register(Token(f.tx_socket), poll, RegType::Dereg)
-                        .ok();
-                    tuns.remove(&f.tx_socket);
-                }
-                f.rx_socket
-                    .event_register(Token(f.rx_socket_idx), poll, RegType::Dereg)
-                    .ok();
-                tuns.remove(&f.rx_socket_idx);
-            }
+            flow_terminate(k, f, parse_pending, None, tuns, flows_active, poll);
             keys.push(k.clone());
         }
     }
-    println!(
-        "TOTAL FLOWS {}, IDLE {} RX {} TX {}",
-        flows.len(),
-        total_idle,
-        total_pending_rx,
-        total_pending_tx
-    );
     for k in keys {
         flows.remove(&k);
-        if parse_pending.contains_key(&k) {
-            parse_pending.remove(&k);
-        }
     }
     flows.shrink_to_fit();
-    flows_active.shrink_to_fit();
-    tuns.shrink_to_fit();
 }
 
 fn close_gateway_flows(
     flows: &mut HashMap<FlowV4Key, FlowV4>,
     parse_pending: &mut HashMap<FlowV4Key, ()>,
-    tun: &mut Tun,
+    tun: &mut TunInfo,
+    tuns: &mut HashMap<usize, TunInfo>,
     poll: &mut Poll,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
 ) {
-    match tun.flows {
+    let mut keys = vec![];
+    match tun.tun().flows {
         TunFlow::OneToMany(ref mut tun_flows) => {
             for (_, k) in tun_flows.iter() {
-                if let Some(f) = flows.get_mut(k) {
-                    tun.pending_rx -= flow_close(k, f, &mut tun.tun, poll);
-                    flows.remove(k);
-                    if parse_pending.contains_key(k) {
-                        parse_pending.remove(k);
-                    }
-                }
+                keys.push(k.clone());
             }
             tun_flows.clear();
         }
         _ => panic!("Expecting hashmap for gateway tunnel"),
+    }
+    for k in keys {
+        if let Some(f) = flows.get_mut(&k) {
+            flow_terminate(&k, f, parse_pending, Some(tun), tuns, flows_active, poll);
+            flows.remove(&k);
+        }
     }
 }
 
@@ -1628,22 +1656,17 @@ fn close_direct_flows(
     parse_pending: &mut HashMap<FlowV4Key, ()>,
     tuns: &mut HashMap<usize, TunInfo>,
     poll: &mut Poll,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
 ) {
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
         if f.tx_socket != GWTUN_IDX {
-            if let Some(tun) = tuns.get_mut(&f.tx_socket) {
-                tun.tun().pending_rx -= flow_close(k, f, &mut tun.tun().tun, poll);
-                tuns.remove(&f.tx_socket);
-                keys.push(k.clone());
-            }
+            flow_terminate(k, f, parse_pending, None, tuns, flows_active, poll);
+            keys.push(k.clone());
         }
     }
     for k in keys {
         flows.remove(&k);
-        if parse_pending.contains_key(&k) {
-            parse_pending.remove(&k);
-        }
     }
 }
 
