@@ -2,15 +2,16 @@ use clap::{App, Arg};
 use log::error;
 use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistrationInfo};
 use serde::Deserialize;
-use std::ffi::CString;
 use std::fmt;
 use std::os::raw::{c_char, c_int};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+use std::{ffi::CString, usize};
 use uuid::Uuid;
 
 const MAXBUF: usize = 64 * 1024;
+const PKTMEM: usize = 16; // In megabytes
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -251,6 +252,10 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, MAXBUF, 24);
+        agent_init(
+            0, /*platform*/
+            0, /*direct*/
+            MAXBUF, MAXBUF, PKTMEM,
+        );
     }
 }

@@ -5,7 +5,7 @@ use common::{
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
     parse_host,
     tls::parse_sni,
-    FlowV4Key, NxtBufs, NxtErr, RegType, Transport,
+    FlowV4Key, NxtBufs, NxtErr, RegType, Transport, NXT_OVERHEADS,
 };
 #[cfg(target_os = "linux")]
 use counters::Counters;
@@ -256,8 +256,9 @@ struct AgentInfo {
     proxy_tun: Tun,
     reginfo_changed: usize,
     last_flap: Instant,
-    mtu: usize,
-    _max_qed_bufs: usize,
+    rx_mtu: usize,
+    tx_mtu: usize,
+    _pktmem: usize,
     flows_active: HashMap<FlowV4Key, ()>,
     perf: AgentPerf,
 }
@@ -280,8 +281,9 @@ impl Default for AgentInfo {
             proxy_tun: Tun::default(),
             reginfo_changed: 0,
             last_flap: Instant::now(),
-            mtu: 0,
-            _max_qed_bufs: 0,
+            rx_mtu: 0,
+            tx_mtu: 0,
+            _pktmem: 0,
             flows_active: HashMap::new(),
             perf: alloc_perf(),
         }
@@ -1148,7 +1150,8 @@ fn vpntun_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-    mtu: usize,
+    rx_mtu: usize,
+    tx_mtu: usize,
     flows_active: &mut HashMap<FlowV4Key, ()>,
     _perf: &mut AgentPerf,
 ) {
@@ -1161,6 +1164,7 @@ fn vpntun_rx(
                 }
                 _ => {
                     // This will trigger monitor_vpnfd() to close and cleanup etc..
+                    error!("VPN Tun Rx closed {}", x);
                     tun.tun.close(0).ok();
                     return;
                 }
@@ -1170,7 +1174,8 @@ fn vpntun_rx(
                     if let Some(key) = decode_ipv4(&b[data.headroom..]) {
                         let mut f = flows.get_mut(&key);
                         if f.is_none() {
-                            let rx_socket = Box::new(Socket::new_client(&key, mtu));
+                            let rx_socket =
+                                Box::new(Socket::new_client(&key, rx_mtu - NXT_OVERHEADS, tx_mtu));
                             flow_new(
                                 &key,
                                 true,
@@ -1241,6 +1246,7 @@ fn vpntun_rx(
 
 fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Vec<u8>)>) {
     while let Some((headroom, tx)) = vpn_tx.pop_front() {
+        let length = tx.len();
         match tun.tun.write(
             0,
             NxtBufs {
@@ -1259,6 +1265,7 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Vec<u8>)>) {
                 }
                 _ => {
                     // This will trigger monitor_vpnfd() to close and cleanup etc..
+                    error!("VPN TUN Tx closed {}, len {}", e, length);
                     tun.tun.close(0).ok();
                     return;
                 }
@@ -1520,8 +1527,19 @@ fn monitor_flows(
 ) {
     STATS_NUMFLOWS.store(flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
 
+    let mut total_idle = 0;
+    let mut total_pending_rx = 0;
+    let mut total_pending_tx = 0;
+
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
+        if !f.rx_socket.idle(false) {
+            total_idle += 1;
+        }
+        total_pending_rx += f.pending_rx.len();
+        if f.pending_tx.is_some() {
+            total_pending_tx += 1;
+        }
         let rdwr = f.last_rdwr + Duration::from_secs(f.cleanup_after as u64);
         let now = Instant::now();
         if now > rdwr {
@@ -1564,6 +1582,13 @@ fn monitor_flows(
             keys.push(k.clone());
         }
     }
+    println!(
+        "TOTAL FLOWS {}, IDLE {} RX {} TX {}",
+        flows.len(),
+        total_idle,
+        total_pending_rx,
+        total_pending_tx
+    );
     for k in keys {
         flows.remove(&k);
         if parse_pending.contains_key(&k) {
@@ -1684,7 +1709,7 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         .ok();
 }
 
-fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize) {
+fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize, pktmem: usize) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -1711,10 +1736,17 @@ fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize
         DIRECT.store(1, std::sync::atomic::Ordering::Relaxed);
     }
     agent.platform = platform;
-    agent.mtu = maxbuf;
-    agent._max_qed_bufs = nbufs;
+    // The mtu of the interface is set to the same as the buffer size, so we can READ packets as
+    // large as the buffer size. But some platforms (like android) seems to perform poor when we
+    // try to send packets closer to the interface mtu (mostly when mtu is large like 64K) and
+    // hence we want to keep the txmtu  size different from the rxmtu. We control the size of the
+    // tcp packets we receive to be rxmtu by doing mss-adjust when the tcp session is created
+    agent.rx_mtu = rxmtu;
+    agent.tx_mtu = txmtu;
+    agent._pktmem = pktmem;
     agent.next_tun_idx = TUN_START;
     agent.tuns.insert(UNUSED_IDX, TunInfo::Tun(Tun::default()));
+    common::set_maxbuf(rxmtu);
 
     proxy_init(&mut agent, &mut poll);
 
@@ -1746,7 +1778,8 @@ fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize
                             &mut poll,
                             agent.gw_onboarded,
                             &agent.reginfo,
-                            agent.mtu,
+                            agent.rx_mtu,
+                            agent.tx_mtu,
                             &mut agent.flows_active,
                             &mut agent.perf,
                         );
@@ -1901,9 +1934,15 @@ fn agent_main_thread(platform: usize, direct: usize, maxbuf: usize, nbufs: usize
 // itself seems to work fine and hence we are leaving the thread creation to the
 // platform so it can choose the right priority etc..
 #[no_mangle]
-pub unsafe extern "C" fn agent_init(platform: usize, direct: usize, maxbuf: usize, nbufs: usize) {
-    common::set_maxbuf(maxbuf);
-    agent_main_thread(platform, direct, maxbuf, nbufs);
+pub unsafe extern "C" fn agent_init(
+    platform: usize,
+    direct: usize,
+    rxmtu: usize,
+    txmtu: usize,
+    pktmem: usize,
+) {
+    assert!(rxmtu >= txmtu);
+    agent_main_thread(platform, direct, rxmtu, txmtu, pktmem);
 }
 
 // We EXPECT the fd provied to us to be already non blocking

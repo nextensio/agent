@@ -1,6 +1,9 @@
 use nextensio::{agent_init, agent_on};
 use std::process::Command;
 
+const MAXBUF: usize = 64 * 1024;
+const PKTMEM: usize = 16; // In Megabytes
+
 extern "C" {
     fn open_utun(num: u64) -> i32;
 }
@@ -31,7 +34,10 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        // Set MAXBUF size to 2048*3
-        agent_init(1 /*platform*/, 1 /*direct*/, 2048*3, 24);
+        agent_init(
+            1, /*platform*/
+            1, /*direct*/
+            MAXBUF, MAXBUF, PKTMEM,
+        );
     }
 }

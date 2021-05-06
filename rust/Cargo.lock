@@ -238,7 +238,7 @@ source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "etherparse",
  "httparse",
@@ -406,7 +406,7 @@ checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 [[package]]
 name = "dummy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
 ]
@@ -470,7 +470,7 @@ dependencies = [
 [[package]]
 name = "fd"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
  "libc",
@@ -794,7 +794,7 @@ dependencies = [
 [[package]]
 name = "l3proxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
  "smoltcp",
@@ -980,7 +980,7 @@ dependencies = [
 [[package]]
 name = "netconn"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
  "mio 0.7.11",
@@ -1630,7 +1630,7 @@ dependencies = [
 [[package]]
 name = "smoltcp"
 version = "0.6.0"
-source = "git+https://github.com/gopakumarce/smoltcp.git?branch=gopa-smoltcp#3a8905f9b5e46a4548d43a07640675f006ef6183"
+source = "git+https://github.com/gopakumarce/smoltcp.git?branch=gopa-smoltcp#fe8c3e0ee918b06f011999c8a763ed8d7924c4a2"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -2080,7 +2080,7 @@ checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 [[package]]
 name = "webproxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
  "mio 0.7.11",
@@ -2089,7 +2089,7 @@ dependencies = [
 [[package]]
 name = "websock"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#21dbe7eb83ff5a3b2016b8d20257cfee2071bcad"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#716099e843e7d41d4ad2f766a664c8c751845919"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
  "http 0.2.4",
