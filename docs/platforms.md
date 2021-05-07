@@ -45,7 +45,7 @@ The steps are as below
  
    Although the apple example link talks about armv7 and i386 targets, looks like
    they are unavailable now - maybe deprecated chipsets ? So all that will work is the below targets
-    ```rustup target add aarch64-apple-ios x86_64-apple-ios```
+    ```rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin```
 
    Install lipo: ```cargo install cargo-lipo```
 

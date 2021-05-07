@@ -15,6 +15,7 @@ if [ "$1" = "ios" ]; then
   cargo build --target x86_64-apple-ios --release
 elif [ "$1" = "macosx" ]; then
   echo "build_apple.sh building target macosx"
+  cargo build --target aarch64-apple-darwin --release
   cargo build --target x86_64-apple-darwin --release
 else
   echo "build_apple.sh missing target exiting"
