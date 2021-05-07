@@ -8,6 +8,7 @@ fi
 echo "[Environment]"
 env
 echo ""
+export CARGO_NET_GIT_FETCH_WITH_CLI=true
 
 if [ "$1" = "ios" ]; then
   echo "build_apple.sh building target ios"
