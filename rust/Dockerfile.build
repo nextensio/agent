@@ -21,6 +21,9 @@ RUN cd platforms/docker; CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --path 
 RUN rm /rust/files/gitlab_rsa
 RUN chmod +x /rust/files/run.sh
 
+RUN rm -rf /rust/src/app/* \
+    && \rm -rf /usr/local/cargo/
+
 EXPOSE 8180/tcp 8081/tcp 8080/tcp
 CMD /rust/files/run.sh
 
