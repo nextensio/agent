@@ -1,7 +1,7 @@
 #[cfg(target_os = "android")]
 use android_logger::Config;
 use common::{
-    decode_ipv4, hdr_to_key, key_to_hdr,
+    decode_ipv4, get_maxbuf, hdr_to_key, key_to_hdr,
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
     parse_host,
     tls::parse_sni,
@@ -68,6 +68,10 @@ const MONITOR_FLOW_AGE: u64 = 30; // 30 seconds
 const MONITOR_CONNECTIONS: u64 = 2; // 2 seconds
 const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
+
+// The maximum nextensio payload we are gonna send in one shot / as one websocket frame. This
+// is including all the nextensio headers and overheads.
+const MAXPAYLOAD: usize = 64 * 1024;
 
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -1071,6 +1075,24 @@ fn flow_parse(
     }
 }
 
+fn flow_rx_tx(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
+    tuns: &mut HashMap<usize, TunInfo>,
+    poll: &mut Poll,
+    reginfo: &RegistrationInfo,
+    _perf: &mut AgentPerf,
+) {
+    if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
+        flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll, _perf);
+        flow_data_from_external(&key, flow, &mut tx_sock.tun(), poll);
+        // poll again to see if packets from external can be sent back to the flow/app via agent_tx
+        flow.rx_socket.poll(vpn_rx, vpn_tx);
+    }
+}
+
 // let the smoltcp/l3proxy stack process a packet from the kernel stack by running its FSM. The rx_socket.poll
 // will read from the vpn_rx queue and potentially write data back to vpn_tx queue. vpn_rx and vpn_tx are just
 // a set of global queues shared by all flows. Its easy to understand why vpn_tx is global since Tx from all
@@ -1102,11 +1124,17 @@ fn vpntun_rx(
     flows_active: &mut HashMap<FlowV4Key, ()>,
     _perf: &mut AgentPerf,
 ) {
+    let mut tcp_flows = HashMap::new();
     for _ in 0..max_pkts {
         let ret = tun.tun.read();
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
+                    for (key, _) in tcp_flows {
+                        if let Some(flow) = flows.get_mut(&key) {
+                            flow_rx_tx(&key, flow, vpn_rx, vpn_tx, tuns, poll, reginfo, _perf);
+                        }
+                    }
                     return;
                 }
                 _ => {
@@ -1121,8 +1149,7 @@ fn vpntun_rx(
                     if let Some(key) = decode_ipv4(&b[data.headroom..]) {
                         let mut f = flows.get_mut(&key);
                         if f.is_none() {
-                            let rx_socket =
-                                Box::new(Socket::new_client(&key, rx_mtu - NXT_OVERHEADS, tx_mtu));
+                            let rx_socket = Box::new(Socket::new_client(&key, rx_mtu, tx_mtu));
                             flow_new(
                                 &key,
                                 true,
@@ -1163,18 +1190,14 @@ fn vpntun_rx(
                                     assert!(flow.pending_tx.is_none());
                                     flow.pending_tx = data;
                                 }
-                                if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                                    flow_data_to_external(
-                                        &key,
-                                        flow,
-                                        &mut tx_sock.tun(),
-                                        reginfo,
-                                        poll,
-                                        _perf,
+                                if key.proto != common::TCP {
+                                    flow_rx_tx(
+                                        &key, flow, vpn_rx, vpn_tx, tuns, poll, reginfo, _perf,
                                     );
-                                    flow_data_from_external(&key, flow, &mut tx_sock.tun(), poll);
-                                    // poll again to see if packets from external can be sent back to the flow/app via agent_tx
-                                    flow.rx_socket.poll(vpn_rx, vpn_tx);
+                                } else {
+                                    if !tcp_flows.contains_key(&key) {
+                                        tcp_flows.insert(key, ());
+                                    }
                                 }
                             }
                         }
@@ -1182,6 +1205,11 @@ fn vpntun_rx(
                     data.headroom = 0;
                 }
             }
+        }
+    }
+    for (key, _) in tcp_flows {
+        if let Some(flow) = flows.get_mut(&key) {
+            flow_rx_tx(&key, flow, vpn_rx, vpn_tx, tuns, poll, reginfo, _perf);
         }
     }
     // We read max_pkts and looks like we have more to read, yield and reregister
@@ -1321,8 +1349,8 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     }
 }
 
-fn app_transport(fd: i32, platform: usize) -> Box<dyn Transport> {
-    let mut vpn_tun = Fd::new_client(fd, platform);
+fn app_transport(fd: i32, platform: usize, rx_mtu: usize) -> Box<dyn Transport> {
+    let mut vpn_tun = Fd::new_client(fd, platform, rx_mtu);
     match vpn_tun.dial() {
         Err(e) => {
             error!("app dial failed {}", e.detail);
@@ -1373,7 +1401,7 @@ fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
         );
     }
     if agent.vpn_fd != fd {
-        let vpn_tun = app_transport(fd, agent.platform);
+        let vpn_tun = app_transport(fd, agent.platform, agent.rx_mtu);
         let mut tun = Tun {
             tun: vpn_tun,
             pending_tx: VecDeque::with_capacity(1),
@@ -1769,7 +1797,8 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
     agent._pktmem = pktmem;
     agent.next_tun_idx = TUN_START;
     agent.tuns.insert(UNUSED_IDX, TunInfo::Tun(Tun::default()));
-    common::set_maxbuf(rxmtu);
+    common::set_maxbuf(MAXPAYLOAD);
+    let rx_ratio = MAXPAYLOAD / rxmtu;
 
     proxy_init(&mut agent, &mut poll);
 
@@ -1790,7 +1819,7 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
                 VPNTUN_POLL => {
                     if event.is_readable() {
                         vpntun_rx(
-                            1,
+                            rx_ratio,
                             &mut agent.vpn_tun,
                             &mut agent.flows,
                             &mut agent.parse_pending,

@@ -34,8 +34,8 @@ extern void agent_stats(struct AgentStats *stats);
 // We set the rxmtu size to 64*1024, with txmtu on the tun interface being 32*1024,
 // and with 24 max buffers queued up at any time. Android does not perform well when
 // we send too many packets close to the interface mtu size
-#define RXMTU (64 * 1024)
-#define TXMTU (32 * 1024)
+#define RXMTU 1500
+#define TXMTU 1500
 #define PKTMEM 8 // In Megabytes
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
