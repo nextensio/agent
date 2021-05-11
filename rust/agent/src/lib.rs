@@ -625,6 +625,8 @@ fn external_sock_tx(
     reginfo: &RegistrationInfo,
     poll: &mut Poll,
     _perf: &mut AgentPerf,
+    vpn_rx: &mut VecDeque<(usize, Vec<u8>)>,
+    vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
 ) {
     tun.tx_ready = true;
 
@@ -632,6 +634,8 @@ fn external_sock_tx(
         if let Some(flow) = flows.get_mut(&key) {
             if !flow.dead {
                 flow.pending_tx_qed = false;
+                flow.rx_socket.write_ready();
+                flow.rx_socket.poll(vpn_rx, vpn_tx);
                 flow_data_to_external(&key, flow, tun, reginfo, poll, _perf);
                 // If the flow is back to waiting state then we cant send any more
                 // on this tunnel, so break out and try next time
@@ -1088,6 +1092,9 @@ fn flow_rx_tx(
     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
         flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll, _perf);
         flow_data_from_external(&key, flow, &mut tx_sock.tun(), poll);
+        if !flow.pending_tx.is_some() {
+            flow.rx_socket.write_ready();
+        }
         // poll again to see if packets from external can be sent back to the flow/app via agent_tx
         flow.rx_socket.poll(vpn_rx, vpn_tx);
     }
@@ -1910,6 +1917,8 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
                                     &agent.reginfo,
                                     &mut poll,
                                     &mut agent.perf,
+                                    &mut agent.vpn_rx,
+                                    &mut agent.vpn_tx,
                                 );
                             }
                             agent.tuns.insert(idx.0, tun_info);
