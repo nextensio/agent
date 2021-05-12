@@ -531,7 +531,6 @@ fn flow_rx_data(
 // But for direct flows if we find that our flow is getting backed up, we just stop reading
 // from the direct socket anymore till the flow queue gets drained
 fn external_sock_rx(
-    max_pkts: usize,
     tun: &mut Tun,
     tun_idx: Token,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
@@ -539,7 +538,13 @@ fn external_sock_rx(
     vpn_tx: &mut VecDeque<(usize, Vec<u8>)>,
     poll: &mut Poll,
 ) {
-    for _ in 0..max_pkts {
+    // NOTE: If we ever think of making this a break-after-count line in vpntun_rx
+    // rather than a for-ever loop, do keep in mind that the websocket library seems
+    // to have some oddities. So if there are two websocket frames, the websocket lib
+    // will read in both, but if we break out here after reading just one frame, and
+    // even if we re-register with mio, we wont be woken up again because theres no more
+    // data pending on the socket, its just sitting inside the websock lib
+    loop {
         if tun.pending_rx >= MAX_PENDING_RX {
             tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
             return;
@@ -615,8 +620,6 @@ fn external_sock_rx(
             }
         }
     }
-    // We read max_pkts and looks like we have more to read, yield and reregister
-    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
 }
 
 fn external_sock_tx(
@@ -1901,7 +1904,6 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
                         } else {
                             if event.is_readable() {
                                 external_sock_rx(
-                                    1,
                                     &mut tun_info.tun(),
                                     idx,
                                     &mut agent.flows,
