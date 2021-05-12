@@ -839,7 +839,7 @@ fn flow_data_to_external(
             hdr.streamop = StreamOp::Noop as i32;
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
-                    f.source_agent = reginfo.connect_id.clone();
+                    f.source_agent = reginfo.services[0].clone();
                     f.dest_agent = flow.dest_agent.clone()
                 }
                 _ => {}
