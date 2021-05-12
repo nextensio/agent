@@ -5,7 +5,7 @@ use common::{
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
     parse_host,
     tls::parse_sni,
-    FlowV4Key, NxtBufs, NxtErr, RegType, Transport, NXT_OVERHEADS,
+    FlowV4Key, NxtBufs, NxtErr, RegType, Transport,
 };
 #[cfg(target_os = "linux")]
 use counters::Counters;
