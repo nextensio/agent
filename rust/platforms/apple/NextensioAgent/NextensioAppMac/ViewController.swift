@@ -30,12 +30,7 @@ class ViewController: AuthBaseViewController {
     @IBOutlet weak var connectDirectButton: NSButton!
     
     // Hard code VPN configurations
-    let tunnelBundleId = "io.nextensio.agent.tunnel"
-    let serverAddress = "127.0.0.1"
-    let serverPort = "8080"
-    let mtu = "1500"
-    let ip = "169.254.2.1"
-    let subnet = "255.255.255.0"
+    let tunnelBundleId = "io.nextensio.agent1.tunnel"
     let dns = "8.8.8.8"
     
     var vpnInited = false
@@ -198,18 +193,15 @@ class ViewController: AuthBaseViewController {
                 let providerProtocol = NETunnelProviderProtocol()
                 
                 providerProtocol.providerBundleIdentifier = self.tunnelBundleId
-                providerProtocol.providerConfiguration = ["port": self.serverPort,
-                                                          "server": self.serverAddress,
-                                                          "ip": self.ip,
-                                                          "subnet": self.subnet,
-                                                          "mtu": self.mtu,
+                providerProtocol.providerConfiguration = [
                                                           "dns": self.dns,
                                                           "access": self.accessToken as Any,
                                                           "refresh": self.refreshToken as Any,
                                                           "id": self.idToken as Any,
-                                                          "direct": directConn ? "true" : "false"
+                                                          "direct": directConn ? "true" : "false",
+                                                          "highMem": true,
                 ]
-                providerProtocol.serverAddress = self.serverAddress
+                providerProtocol.serverAddress = "127.0.0.1"
                 self.vpnManager.protocolConfiguration = providerProtocol
                 self.vpnManager.localizedDescription = "nextensio"
                 self.vpnManager.isEnabled = true

@@ -2,7 +2,6 @@
 members = [
     "agent",
     "platforms/docker",
-    "platforms/apple_test",
 ]
 resolver = "2"
 

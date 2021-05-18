@@ -25,7 +25,7 @@ struct AgentStats
     int total_flows;
 };
 
-extern void agent_init(int platform, int direct, int rxmtu, int txmtu, int pktmem);
+extern void agent_init(int platform, int direct, int rxmtu, int txmtu, int highmem);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
@@ -36,11 +36,10 @@ extern void agent_stats(struct AgentStats *stats);
 // we send too many packets close to the interface mtu size
 #define RXMTU 1500
 #define TXMTU 1500
-#define PKTMEM 8 // In Megabytes
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    agent_init(0 /*android*/, 1 /*direct*/, RXMTU, TXMTU, PKTMEM);
+    agent_init(0 /*android*/, 1 /*direct*/, RXMTU, TXMTU, 0 /* low memory device */);
     return 0;
 }
 

@@ -8,6 +8,10 @@
 import NetworkExtension
 import os.log
 
+let rxmtu = 1500;
+let txmtu = 1500;
+var highmem = 0;
+
 enum IPVersion: UInt8 {
     case IPv4 = 4, IPv6 = 6
 }
@@ -35,7 +39,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         os_log("onboard Controller")
         
         //create the url with NSURL
-        let url = URL(string: "https://server.nextensio.net:8080/api/v1/global/get/onboard")! //change the url
+        let url = URL(string: "https://server.nextensio.net:8080/api/v1/global/get/onboard")! 
         //create the session object
         let session = URLSession.shared
         //now create the URLRequest object using the url object
@@ -72,7 +76,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     
     private func setupVPN() {
         // the `tunnelRemoteAddress` is meaningless because we are not creating a tunnel.
-        let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: self.protocolConfiguration.serverAddress!)
+        let networkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
         
         // Refers to NEIPv4Settings#includedRoutes or NEIPv4Settings#excludedRoutes,
         // which can be used as basic whitelist/blacklist routing.
@@ -83,32 +87,31 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             NEIPv4Route.default()
         ]
         ipv4Settings.excludedRoutes = [
-            NEIPv4Route(destinationAddress: "127.0.0.1", subnetMask: "255.255.0.0"),
-            NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
         ]
         networkSettings.ipv4Settings = ipv4Settings
-        networkSettings.mtu = Int(conf["mtu"] as! String) as NSNumber?
+        networkSettings.mtu = rxmtu as NSNumber?
 
         let dnsSettings = NEDNSSettings(servers: (conf["dns"] as! String).components(separatedBy: ","))
         // This overrides system DNS settings
         dnsSettings.matchDomains = [""]
         networkSettings.dnsSettings = dnsSettings
         
+        if (conf["highMem"] as! Bool) == true {
+            highmem = 1;
+        }
         let access = (conf["access"] as! String)
-        // let refresh = (conf["refresh"] as! String)
          
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
             self.pendingStartCompletion?(nil)
             self.pendingStartCompletion = nil
-            
+
             if (self.conf["direct"] as! String) == "true" {
                 self.startAgent(direct: "true")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: {
                     self.turnOnNextensioAgent()
                 })
             } else {
-                // self.startAgent(direct: "false")
                 self.onboardController(accessToken: access)
             }
         }
@@ -117,8 +120,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     @objc func runner(sender:Any) {
         let direct = sender as! String
         os_log("agent_init direct = %{public}@ %d", direct, direct == "true" ? 1 : 0)
-        // Setting the maxbuf size to 2048*3
-        agent_init(1 /*apple*/, direct == "true" ? 1 : 0, 2048*3)
+        Thread.setThreadPriority(1);
+        agent_init(1 /*apple*/, direct == "true" ? 1 : 0, Int32(rxmtu), Int32(txmtu), Int32(highmem))
     }
     
     func startAgent(direct: String) {

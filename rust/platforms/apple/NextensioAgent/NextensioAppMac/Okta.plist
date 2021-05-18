@@ -5,7 +5,7 @@
 	<key>scopes</key>
 	<string>openid profile offline_access</string>
 	<key>redirectUri</key>
-	<string>io.nextensio.agent:/callback</string>
+	<string>io.nextensio.agent1:/callback</string>
 	<key>clientId</key>
 	<string>0oaz5lndczD0DSUeh4x6</string>
 	<key>issuer</key>

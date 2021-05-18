@@ -18,12 +18,7 @@ class TunnelProvider {
     var vpnInit = false
     
     // Hard code VPN configurations
-    let tunnelBundleId = "io.nextensio.agent.tunnel"
-    let serverAddress = "127.0.0.1"
-    let serverPort = "8080"
-    let mtu = "1500"
-    let ip = "169.254.2.1"
-    let subnet = "255.255.255.0"
+    let tunnelBundleId = "io.nextensio.agent1.tunnel"
     let dns = "8.8.8.8"
     
     init(button: UIButton, state: OktaOidcStateManager?, direct: Bool) {
@@ -70,18 +65,15 @@ class TunnelProvider {
 
                 let providerProtocol = NETunnelProviderProtocol()
                 providerProtocol.providerBundleIdentifier = self.tunnelBundleId
-                providerProtocol.providerConfiguration = ["port": self.serverPort,
-                                        "server": self.serverAddress,
-                                        "ip": self.ip,
-                                        "subnet": self.subnet,
-                                        "mtu": self.mtu,
+                providerProtocol.providerConfiguration = [
                                         "dns": self.dns,
                                         "access": accessToken,
                                         "refresh": refreshToken,
                                         "id": idToken,
-                                        "direct": direct ? "true" : "false"
+                                        "direct": direct ? "true" : "false",
+                                        "highMem": false,
                 ]
-                providerProtocol.serverAddress = self.serverAddress
+                providerProtocol.serverAddress = "127.0.0.1"
                 
                 self.tunnelManager.protocolConfiguration = providerProtocol
                 self.tunnelManager.localizedDescription = "nextensio"

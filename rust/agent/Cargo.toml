@@ -16,6 +16,7 @@ perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 
 [dependencies]
 log = "0.4.14"
+object-pool = { git = "https://github.com/gopakumarce/object-pool.git", branch = "gopa-objpool" }
 mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
 common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 websock = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }

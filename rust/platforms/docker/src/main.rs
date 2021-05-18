@@ -10,9 +10,8 @@ use std::time::Duration;
 use std::{ffi::CString, usize};
 use uuid::Uuid;
 
-const RXMTU: usize = 64 * 1024;
-const TXMTU: usize = 64 * 1024;
-const PKTMEM: usize = 16; // In megabytes
+const RXMTU: usize = 1500;
+const TXMTU: usize = 1500;
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -215,7 +214,7 @@ fn okta_onboard(controller: String, username: String, password: String) {
 }
 
 fn main() {
-    stderrlog::new().module(module_path!()).init().unwrap();
+    env_logger::init();
     let matches = App::new("NxtAgent")
         .arg(
             Arg::with_name("controller")
@@ -254,6 +253,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, PKTMEM);
+        agent_init(0 /*platform*/, 1 /*direct*/, RXMTU, TXMTU, 1);
     }
 }
