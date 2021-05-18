@@ -253,6 +253,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 1 /*direct*/, RXMTU, TXMTU, 1);
+        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, 1);
     }
 }
