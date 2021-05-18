@@ -30,5 +30,5 @@ RUN rm /go/files/gitlab_rsa
 RUN apk del git && apk del openssh
 
 RUN chmod +x /go/files/run.sh
-EXPOSE 8180/tcp 8081/tcp 8080/tcp
+EXPOSE 8180/tcp 8081/tcp 8181/tcp
 CMD /go/files/run.sh

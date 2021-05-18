@@ -25,6 +25,6 @@ RUN rm -rf /rust/src/app/agent \
     && \rm -rf /rust/src/app/platforms \
     && \rm -rf /usr/local/cargo/
 
-EXPOSE 8180/tcp 8081/tcp 8080/tcp
+EXPOSE 8180/tcp 8081/tcp 8181/tcp
 CMD /rust/files/run.sh
 

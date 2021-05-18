@@ -14,12 +14,12 @@ quite similar. The basic theory of operation of this code is as follows
    prompts the user to login and authenticate themselves. 
 3. Once authenticated, the agent code uses the information obtained from authentication 
    to connect to a nextensio cluster using websocket
-4. The agent also opens a port 8080 which is a "web proxy" port - in your browser, you can
+4. The agent also opens a port 8181 which is a "web proxy" port - in your browser, you can
    open the broswer settings and ask the browser to forward any web browsing activity to 
-   http://localhost:8080
-5. When you browse a website, the browser forwards that request to port 8080 of the agent,
+   http://localhost:8181
+5. When you browse a website, the browser forwards that request to port 8181 of the agent,
    agent gets that and sends it to nextensio cluster websocket. Agent takes the response
-   from websocket and sends it back to the browser thats connected to agent's port 8080
+   from websocket and sends it back to the browser thats connected to agent's port 8181
 
 ### Basic Connector operation
 
@@ -52,7 +52,7 @@ any specific route, read the code and search for catchall to know more
 
 After the agent is launched, go to http://localhost:8180 on your browser and authenticate
 yourself. The authentication details are in a section later. After that in your browser 
-settings configure the proxy to point to localhost:8080 and assuming the connector has already
+settings configure the proxy to point to localhost:8181 and assuming the connector has already
 been launched and the nextensio gateways are all setup, your traffic will start flowing 
 through nextensio agent--gateway--connector at the point.
 
