@@ -97,7 +97,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         networkSettings.dnsSettings = dnsSettings
         
         if (conf["highMem"] as! Bool) == true {
-            highmem = 1;
+            highmem = 1; 
         }
         let access = (conf["access"] as! String)
          

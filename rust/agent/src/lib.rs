@@ -21,6 +21,7 @@ use oslog::OsLogger;
 #[cfg(target_os = "linux")]
 use perf::Perf;
 use std::slice;
+use std::sync::atomic::Ordering::Relaxed;
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
 use std::{ffi::CStr, usize};
@@ -59,8 +60,6 @@ const UNUSED_POLL: Token = Token(UNUSED_IDX);
 const VPNTUN_POLL: Token = Token(VPNTUN_IDX);
 const WEBPROXY_POLL: Token = Token(WEBPROXY_IDX);
 const GWTUN_POLL: Token = Token(GWTUN_IDX);
-// TODO: Make this to be variable based on the agent.pktmem setting of the platform
-const MAX_PENDING_RX: usize = 2;
 
 const CLEANUP_NOW: usize = 5; // 5 seconds
 const CLEANUP_TCP_HALFOPEN: usize = 30; // 30 seconds
@@ -74,6 +73,7 @@ const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
 const MAXPAYLOAD: usize = 64 * 1024;
 const MINPKTBUF: usize = 4096;
+const MAX_PENDING_RX: usize = 2;
 
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -312,7 +312,7 @@ fn set_tx_socket(
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
 ) {
-    if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
+    if DIRECT.load(Relaxed) == 1 {
         direct = true;
     }
 
@@ -440,7 +440,11 @@ fn flow_new(
 
 // Today this dials websocket, in future with different possible transports,
 // this can dial some other protocol, but eventually it returns a Transport trait
-fn dial_gateway(reginfo: &RegistrationInfo, tcp_pool: &Arc<Pool<Vec<u8>>>) -> Option<WebSession> {
+fn dial_gateway(
+    reginfo: &RegistrationInfo,
+    pkt_pool: &Arc<Pool<Vec<u8>>>,
+    tcp_pool: &Arc<Pool<Vec<u8>>>,
+) -> Option<WebSession> {
     let mut headers = HashMap::new();
     headers.insert(
         "x-nextensio-connect".to_string(),
@@ -452,18 +456,22 @@ fn dial_gateway(reginfo: &RegistrationInfo, tcp_pool: &Arc<Pool<Vec<u8>>>) -> Op
         443,
         headers,
         true,
+        pkt_pool.clone(),
         tcp_pool.clone(),
     );
-    loop {
-        match websocket.dial() {
-            Err(e) => {
-                error!("Dial gateway {} failed: {}", &reginfo.host, e.detail);
-                STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                return None;
-            }
-            Ok(_) => {
+    match websocket.dial() {
+        Err(e) => match e.code {
+            NxtErr::EWOULDBLOCK => {
                 return Some(websocket);
             }
+            _ => {
+                error!("Dial gateway {} failed: {}", &reginfo.host, e.detail);
+                STATS_NUMFLAPS.fetch_add(1, Relaxed);
+                return None;
+            }
+        },
+        Ok(_) => {
+            return Some(websocket);
         }
     }
 }
@@ -556,12 +564,6 @@ fn external_sock_rx(
     poll: &mut Poll,
     check_tuns: &mut HashMap<usize, ()>,
 ) {
-    // NOTE: If we ever think of making this a break-after-count line in vpntun_rx
-    // rather than a for-ever loop, do keep in mind that the websocket library seems
-    // to have some oddities. So if there are two websocket frames, the websocket lib
-    // will read in both, but if we break out here after reading just one frame, and
-    // even if we re-register with mio, we wont be woken up again because theres no more
-    // data pending on the socket, its just sitting inside the websock lib
     loop {
         if tun.pending_rx >= MAX_PENDING_RX {
             tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
@@ -571,6 +573,11 @@ fn external_sock_rx(
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
+                    // It would appear as if we dont have to re-register if the socket says
+                    // it will block. But in case of websocket library, it keeps data buffered,
+                    // and returns EWOULDBLOCK *after* reading in all it can. So for such libs,
+                    // we have to reregister even if read returns EWOULDBLOCK
+                    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
                     return;
                 }
                 _ => {
@@ -660,7 +667,7 @@ fn external_sock_tx(
                 flow.pending_tx_qed = false;
                 flow.rx_socket.write_ready();
                 flow.rx_socket.poll(vpn_rx, vpn_tx);
-                flow_data_to_external(&key, flow, tun, reginfo, poll, _perf);
+                flow_data_to_external(&key, flow, None, tun, reginfo, poll, _perf);
                 // If the flow is back to waiting state then we cant send any more
                 // on this tunnel, so break out and try next time
                 if flow.pending_tx.is_some() {
@@ -949,15 +956,23 @@ fn parse_complete(
 fn flow_data_to_external(
     key: &FlowV4Key,
     flow: &mut FlowV4,
+    mut init_data: Option<NxtBufs>,
     tx_socket: &mut Tun,
     reginfo: &RegistrationInfo,
     poll: &mut Poll,
     _perf: &mut AgentPerf,
 ) {
-    while tx_socket.tx_ready {
+    loop {
+        let mut tx_init = true;
         let mut tx;
-        if flow.pending_tx.is_some() {
+        if init_data.is_some() {
+            tx = init_data.unwrap();
+            init_data = None;
+        } else if flow.pending_tx.is_some() {
             tx = flow.pending_tx.take().unwrap();
+            // Something is queued up because it couldnt be sent last time, DONT
+            // muck around with it, send it EXACTLY as it is to the tx socket.
+            tx_init = false;
         } else {
             tx = match flow.rx_socket.read() {
                 Ok((_, t)) => {
@@ -977,7 +992,7 @@ fn flow_data_to_external(
             }
         }
 
-        if flow.tx_socket == GWTUN_IDX {
+        if flow.tx_socket == GWTUN_IDX && tx_init {
             let mut hdr = key_to_hdr(key, &flow.service);
             hdr.streamid = flow.tx_stream;
             hdr.streamop = StreamOp::Noop as i32;
@@ -997,6 +1012,12 @@ fn flow_data_to_external(
             Err((data, e)) => match e.code {
                 NxtErr::EWOULDBLOCK => {
                     tx_socket.tx_ready = false;
+                    if !tx_socket.tx_ready {
+                        tx_socket
+                            .tun
+                            .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
+                            .ok();
+                    }
                     if data.is_some() {
                         flow.pending_tx = data;
                         if !flow.pending_tx_qed {
@@ -1111,11 +1132,10 @@ fn proxyclient_rx(
                             let tun_info = TunInfo::Flow(key.clone());
                             if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
                                 if !flow.dead {
-                                    // Send the data on to the destination
-                                    flow.pending_tx = Some(data);
                                     flow_data_to_external(
                                         &key,
                                         flow,
+                                        Some(data),
                                         &mut tx_sock.tun(),
                                         reginfo,
                                         poll,
@@ -1157,7 +1177,15 @@ fn proxyclient_rx(
             if let Some(flow) = flows.get_mut(&key) {
                 if !flow.dead {
                     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-                        flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll, _perf);
+                        flow_data_to_external(
+                            &key,
+                            flow,
+                            None,
+                            &mut tx_sock.tun(),
+                            reginfo,
+                            poll,
+                            _perf,
+                        );
                     }
                     flow.rx_socket
                         .event_register(tun_idx, poll, RegType::Rereg)
@@ -1255,6 +1283,7 @@ fn flow_parse(
 fn flow_rx_tx(
     key: &FlowV4Key,
     flow: &mut FlowV4,
+    init_data: Option<NxtBufs>,
     vpn_rx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     tuns: &mut HashMap<usize, TunInfo>,
@@ -1264,7 +1293,15 @@ fn flow_rx_tx(
     _perf: &mut AgentPerf,
 ) {
     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
-        flow_data_to_external(&key, flow, &mut tx_sock.tun(), reginfo, poll, _perf);
+        flow_data_to_external(
+            &key,
+            flow,
+            init_data,
+            &mut tx_sock.tun(),
+            reginfo,
+            poll,
+            _perf,
+        );
         flow_data_from_external(&key, flow, &mut tx_sock.tun(), poll, check_tuns);
         if !flow.pending_tx.is_some() {
             flow.rx_socket.write_ready();
@@ -1317,10 +1354,11 @@ fn vpntun_rx(
         match ret {
             Err(x) => match x.code {
                 NxtErr::EWOULDBLOCK => {
-                    for (key, _) in tcp_flows {
+                    for (key, data) in tcp_flows {
                         if let Some(flow) = flows.get_mut(&key) {
                             flow_rx_tx(
-                                &key, flow, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, _perf,
+                                &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns,
+                                _perf,
                             );
                         }
                     }
@@ -1384,18 +1422,14 @@ fn vpntun_rx(
                                 tcp_pool,
                             );
                             if parsed && !flow.dead {
-                                if data.is_some() {
-                                    assert!(flow.pending_tx.is_none());
-                                    flow.pending_tx = data;
-                                }
                                 if key.proto != common::TCP {
                                     flow_rx_tx(
-                                        &key, flow, vpn_rx, vpn_tx, tuns, poll, reginfo,
+                                        &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo,
                                         check_tuns, _perf,
                                     );
                                 } else {
                                     if !tcp_flows.contains_key(&key) {
-                                        tcp_flows.insert(key, ());
+                                        tcp_flows.insert(key, data);
                                     }
                                 }
                             }
@@ -1406,10 +1440,10 @@ fn vpntun_rx(
             }
         }
     }
-    for (key, _) in tcp_flows {
+    for (key, data) in tcp_flows {
         if let Some(flow) = flows.get_mut(&key) {
             flow_rx_tx(
-                &key, flow, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, _perf,
+                &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, _perf,
             );
         }
     }
@@ -1455,7 +1489,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if !agent.idp_onboarded {
         return;
     }
-    if let Some(websocket) = dial_gateway(&mut agent.reginfo, &agent.tcp_pool) {
+    if let Some(websocket) = dial_gateway(&mut agent.reginfo, &agent.pkt_pool, &agent.tcp_pool) {
         let mut tun = Tun {
             tun: Box::new(websocket),
             pending_tx: VecDeque::with_capacity(1),
@@ -1480,7 +1514,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 }
 
 fn monitor_onboard(agent: &mut AgentInfo) {
-    let cur_reginfo = REGINFO_CHANGED.load(std::sync::atomic::Ordering::Relaxed);
+    let cur_reginfo = REGINFO_CHANGED.load(Relaxed);
     if agent.reginfo_changed == cur_reginfo {
         return;
     }
@@ -1496,7 +1530,7 @@ fn monitor_onboard(agent: &mut AgentInfo) {
 
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     // If we want the agent to be in all-direct mode, dont bother about gateway
-    if DIRECT.load(std::sync::atomic::Ordering::Relaxed) == 1 {
+    if DIRECT.load(Relaxed) == 1 {
         return;
     }
 
@@ -1505,8 +1539,8 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if let Some(mut gw_tun_tun) = gw_tun_info {
         let gw_tun = &mut gw_tun_tun.tun();
         if gw_tun.tun.is_closed(0) {
-            STATS_GWUP.store(0, std::sync::atomic::Ordering::Relaxed);
-            STATS_NUMFLAPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            STATS_GWUP.store(0, Relaxed);
+            STATS_NUMFLAPS.fetch_add(1, Relaxed);
             agent.last_flap = Instant::now();
             error!("Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
@@ -1524,12 +1558,11 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
             );
             new_gw(agent, poll);
         } else {
-            STATS_GWUP.store(1, std::sync::atomic::Ordering::Relaxed);
+            STATS_GWUP.store(1, Relaxed);
             match gw_tun.flows {
                 TunFlow::OneToMany(ref mut tun_flows) => {
                     tun_flows.shrink_to_fit();
-                    STATS_GWFLOWS
-                        .store(tun_flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
+                    STATS_GWFLOWS.store(tun_flows.len() as i32, Relaxed);
                 }
                 _ => {}
             }
@@ -1539,13 +1572,10 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 
         let now = Instant::now();
         if now > agent.last_flap {
-            STATS_LASTFLAP.store(
-                (now - agent.last_flap).as_secs() as i32,
-                std::sync::atomic::Ordering::Relaxed,
-            );
+            STATS_LASTFLAP.store((now - agent.last_flap).as_secs() as i32, Relaxed);
         }
     } else {
-        STATS_LASTFLAP.store(0, std::sync::atomic::Ordering::Relaxed);
+        STATS_LASTFLAP.store(0, Relaxed);
         new_gw(agent, poll);
     }
 }
@@ -1567,7 +1597,7 @@ fn app_transport(
 }
 
 fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
-    let fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
+    let fd = VPNFD.load(Relaxed);
     if agent.vpn_fd != 0 && (agent.vpn_fd != fd || agent.vpn_tun.tun.is_closed(0)) {
         error!(
             "App transport closed, try opening again {}/{}/{}",
@@ -1667,13 +1697,21 @@ fn monitor_parse_pending(
                 if let Some(data) = f.parse_pending.take() {
                     if !f.dead {
                         // Send the data queued up for parsing immediately
-                        f.pending_tx = Some(NxtBufs {
+                        let data = Some(NxtBufs {
                             hdr: None,
                             bufs: vec![data],
                             headroom: 0,
                         });
                         if let Some(tx_sock) = tuns.get_mut(&f.tx_socket) {
-                            flow_data_to_external(k, f, &mut tx_sock.tun(), reginfo, poll, _perf);
+                            flow_data_to_external(
+                                k,
+                                f,
+                                data,
+                                &mut tx_sock.tun(),
+                                reginfo,
+                                poll,
+                                _perf,
+                            );
                         }
                     }
                 }
@@ -1857,7 +1895,7 @@ fn monitor_flows(
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
 ) {
-    STATS_NUMFLOWS.store(flows.len() as i32, std::sync::atomic::Ordering::Relaxed);
+    STATS_NUMFLOWS.store(flows.len() as i32, Relaxed);
 
     let mut udp = 0;
     let mut dns = 0;
@@ -2029,15 +2067,9 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: usize, txmtu: usize, highmem: 
     // laptops and highmem: 0 is a mobile device. So we just use half the memory on a mobile device
     // compared to a laptop thats about it. Note that we might be able to bring these numbers down
     // even lesser, will bring it down after this software gets more runtime on various devices
-    let npkts;
-    let ntcp;
-    if highmem == 1 {
-        npkts = 128;
-        ntcp = 30;
-    } else {
-        npkts = 64;
-        ntcp = 20;
-    }
+    let npkts = 64 * (highmem + 1);
+    let ntcp = 22 * (highmem + 1);
+
     agent.pkt_pool = Arc::new(Pool::new(npkts, || Vec::with_capacity(pktbuf_len)));
     agent.tcp_pool = Arc::new(Pool::new(ntcp, || Vec::with_capacity(MAXPAYLOAD)));
 }
@@ -2066,7 +2098,7 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
 
     let mut agent = AgentInfo::default();
     if direct == 1 {
-        DIRECT.store(1, std::sync::atomic::Ordering::Relaxed);
+        DIRECT.store(1, Relaxed);
     }
     agent.platform = platform;
     agent_init_pools(&mut agent, rxmtu, txmtu, highmem);
@@ -2342,29 +2374,29 @@ pub unsafe extern "C" fn agent_init(
 // We EXPECT the fd provied to us to be already non blocking
 #[no_mangle]
 pub unsafe extern "C" fn agent_on(fd: i32) {
-    let old_fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
+    let old_fd = VPNFD.load(Relaxed);
     error!("Agent on, old {}, new {}", old_fd, fd);
-    VPNFD.store(fd, std::sync::atomic::Ordering::Relaxed);
+    VPNFD.store(fd, Relaxed);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn agent_off() {
-    let fd = VPNFD.load(std::sync::atomic::Ordering::Relaxed);
+    let fd = VPNFD.load(Relaxed);
     error!("Agent off {}", fd);
-    VPNFD.store(0, std::sync::atomic::Ordering::Relaxed);
+    VPNFD.store(0, Relaxed);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn onboard(info: CRegistrationInfo) {
     REGINFO = Some(Box::new(creginfo_translate(info)));
-    REGINFO_CHANGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    REGINFO_CHANGED.fetch_add(1, Relaxed);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn agent_stats(stats: *mut AgentStats) {
-    (*stats).gateway_up = STATS_GWUP.load(std::sync::atomic::Ordering::Relaxed);
-    (*stats).gateway_flaps = STATS_NUMFLAPS.load(std::sync::atomic::Ordering::Relaxed);
-    (*stats).last_gateway_flap = STATS_LASTFLAP.load(std::sync::atomic::Ordering::Relaxed);
-    (*stats).gateway_flows = STATS_GWFLOWS.load(std::sync::atomic::Ordering::Relaxed);
-    (*stats).total_flows = STATS_NUMFLOWS.load(std::sync::atomic::Ordering::Relaxed);
+    (*stats).gateway_up = STATS_GWUP.load(Relaxed);
+    (*stats).gateway_flaps = STATS_NUMFLAPS.load(Relaxed);
+    (*stats).last_gateway_flap = STATS_LASTFLAP.load(Relaxed);
+    (*stats).gateway_flows = STATS_GWFLOWS.load(Relaxed);
+    (*stats).total_flows = STATS_NUMFLOWS.load(Relaxed);
 }
