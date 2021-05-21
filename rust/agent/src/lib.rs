@@ -5,7 +5,9 @@ use common::{
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
     parse_host,
     tls::parse_sni,
-    FlowV4Key, NxtBufs, NxtErr, RegType, Transport,
+    FlowV4Key, NxtBufs,
+    NxtErr::EWOULDBLOCK,
+    NxtError, RegType, Transport,
 };
 #[cfg(target_os = "linux")]
 use counters::Counters;
@@ -73,7 +75,8 @@ const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
 const MAXPAYLOAD: usize = 64 * 1024;
 const MINPKTBUF: usize = 4096;
-const MAX_PENDING_RX: usize = 2;
+const MAX_PENDING_RX: usize = 4;
+const FLOW_BUFFER_HOG: u64 = 4; // seconds;
 
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -158,7 +161,6 @@ struct FlowV4 {
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
     creation_time: Instant,
-    packet_age: usize,
     last_rdwr: Instant,
     cleanup_after: usize,
     dead: bool,
@@ -267,6 +269,8 @@ struct AgentInfo {
     tx_mtu: usize,
     flows_active: HashMap<FlowV4Key, ()>,
     check_tuns: HashMap<usize, ()>,
+    npkts: usize,
+    ntcp: usize,
     pkt_pool: Arc<Pool<Vec<u8>>>,
     tcp_pool: Arc<Pool<Vec<u8>>>,
     perf: AgentPerf,
@@ -294,6 +298,8 @@ impl Default for AgentInfo {
             tx_mtu: 0,
             flows_active: HashMap::new(),
             check_tuns: HashMap::new(),
+            npkts: 0,
+            ntcp: 0,
             pkt_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
             tcp_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
             perf: alloc_perf(),
@@ -322,7 +328,6 @@ fn set_tx_socket(
         direct = true;
     }
 
-    let mut dummy = Tun::default();
     let tx_socket;
     let tx_stream;
     if direct {
@@ -338,7 +343,7 @@ fn set_tx_socket(
         );
         match tun.dial() {
             Err(_) => {
-                flow_close(key, flow, Some(&mut dummy.tun), poll);
+                flow_close(key, flow, None, poll);
                 return;
             }
             Ok(()) => {}
@@ -364,7 +369,7 @@ fn set_tx_socket(
             Err(e) => {
                 error!("Direct transport register failed {}", format!("{}", e));
                 tun.tun.close(0).ok();
-                flow_close(key, flow, Some(&mut tun.tun), poll);
+                flow_close(key, flow, Some(&mut tun), poll);
                 return;
             }
             Ok(_) => {}
@@ -382,13 +387,13 @@ fn set_tx_socket(
                 _ => panic!("We expect a hashmap for gateway flows"),
             }
         } else {
-            flow_close(key, flow, Some(&mut dummy.tun), poll);
+            flow_close(key, flow, None, poll);
             return;
         }
     } else {
         // flow is supposed to go via nextensio, but nextensio gateway connection
         // is down at the moment, so close the flow
-        flow_close(key, flow, Some(&mut dummy.tun), poll);
+        flow_close(key, flow, None, poll);
         return;
     }
     flow.tx_socket = tx_socket;
@@ -421,7 +426,6 @@ fn flow_new(
         tx_socket: UNUSED_IDX,
         pending_tx: None,
         pending_rx: VecDeque::with_capacity(1),
-        packet_age: 0,
         last_rdwr: Instant::now(),
         creation_time: Instant::now(),
         cleanup_after,
@@ -461,7 +465,7 @@ fn dial_gateway(
     );
     match websocket.dial() {
         Err(e) => match e.code {
-            NxtErr::EWOULDBLOCK => {
+            EWOULDBLOCK => {
                 return Some(websocket);
             }
             _ => {
@@ -496,7 +500,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
         },
     ) {
         Err((_, e)) => match e.code {
-            NxtErr::EWOULDBLOCK => {
+            EWOULDBLOCK => {
                 tun.tx_ready = false;
                 false
             }
@@ -522,6 +526,7 @@ fn flow_rx_data(
     vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     poll: &mut Poll,
     check_tuns: &mut HashMap<usize, ()>,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
 ) -> bool {
     if let Some(flow) = flows.get_mut(key) {
         if !flow.dead {
@@ -543,6 +548,10 @@ fn flow_rx_data(
             // this call will generate packets to be sent out back to the kernel
             // into the vpn_tx queue which will be processed in vpntun_tx
             flow.rx_socket.poll(vpn_rx, vpn_tx);
+            if !flow.active {
+                flows_active.insert(key.clone(), ());
+                flow.active = true;
+            }
             return true;
         }
     }
@@ -563,91 +572,111 @@ fn external_sock_rx(
     vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     poll: &mut Poll,
     check_tuns: &mut HashMap<usize, ()>,
+    flows_active: &mut HashMap<FlowV4Key, ()>,
 ) {
-    loop {
-        if tun.pending_rx >= MAX_PENDING_RX {
-            tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
-            return;
-        }
-        let ret = tun.tun.read();
-        match ret {
-            Err(x) => match x.code {
-                NxtErr::EWOULDBLOCK => {
-                    // It would appear as if we dont have to re-register if the socket says
-                    // it will block. But in case of websocket library, it keeps data buffered,
-                    // and returns EWOULDBLOCK *after* reading in all it can. So for such libs,
-                    // we have to reregister even if read returns EWOULDBLOCK
-                    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
-                    return;
-                }
-                _ => {
-                    match tun.flows {
-                        TunFlow::OneToOne(ref k) => {
-                            if let Some(f) = flows.get_mut(k) {
-                                tun.pending_rx -= flow_close(k, f, Some(&mut tun.tun), poll);
-                            }
-                        }
-                        _ => {}
+    if tun.pending_rx >= MAX_PENDING_RX {
+        tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+        return;
+    }
+    let ret = tun.tun.read();
+    match ret {
+        Err(x) => match x.code {
+            EWOULDBLOCK => {
+                // It would appear as if we dont have to re-register if the socket says
+                // it will block. But in case of websocket library, it keeps data buffered,
+                // and returns EWOULDBLOCK *after* reading in all it can. So for such libs,
+                // we have to reregister even if read returns EWOULDBLOCK
+                tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+                return;
+            }
+            _ => {
+                let mut ck = FlowV4Key::default();
+                match tun.flows {
+                    TunFlow::OneToOne(ref k) => {
+                        ck = k.clone();
                     }
-                    return;
+                    _ => {}
                 }
-            },
-            Ok((stream, data)) => {
-                if let Some(hdr) = data.hdr.as_ref() {
-                    // The stream close will only provide streamid, none of the other information will be valid
-                    if hdr.streamop == StreamOp::Close as i32 {
-                        match tun.flows {
-                            TunFlow::OneToMany(ref mut tun_flows) => {
-                                if let Some(k) = tun_flows.get(&hdr.streamid) {
-                                    if let Some(f) = flows.get_mut(k) {
-                                        tun.pending_rx -=
-                                            flow_close(k, f, Some(&mut tun.tun), poll);
-                                    }
-                                }
-                            }
-                            _ => panic!("We expect hashmap for gateway flows"),
-                        }
-                    } else {
-                        match hdr.hdr.as_ref().unwrap() {
-                            Hdr::Onboard(onb) => {
-                                assert_eq!(stream, 0);
-                                error!(
-                                    "Got onboard response, user {}, uuid {}",
-                                    onb.userid, onb.uuid
-                                );
-                            }
-                            Hdr::Flow(_) => {
-                                let mut found = false;
-                                if let Some(key) = hdr_to_key(&hdr) {
-                                    found = flow_rx_data(
-                                        stream, tun, &key, flows, data, vpn_rx, vpn_tx, poll,
-                                        check_tuns,
-                                    );
-                                }
-                                if !found {
-                                    tun.tun.close(stream).ok();
-                                }
+                if let Some(f) = flows.get_mut(&ck) {
+                    flow_close(&ck, f, Some(tun), poll);
+                }
+                return;
+            }
+        },
+        Ok((stream, data)) => {
+            if let Some(hdr) = data.hdr.as_ref() {
+                // The stream close will only provide streamid, none of the other information will be valid
+                if hdr.streamop == StreamOp::Close as i32 {
+                    let mut ck = FlowV4Key::default();
+                    match tun.flows {
+                        TunFlow::OneToMany(ref mut tun_flows) => {
+                            if let Some(k) = tun_flows.get(&hdr.streamid) {
+                                ck = k.clone();
                             }
                         }
+                        _ => panic!("We expect hashmap for gateway flows"),
+                    }
+                    if let Some(f) = flows.get_mut(&ck) {
+                        flow_close(&ck, f, Some(tun), poll);
                     }
                 } else {
-                    let key;
-                    match tun.flows {
+                    match hdr.hdr.as_ref().unwrap() {
+                        Hdr::Onboard(onb) => {
+                            assert_eq!(stream, 0);
+                            error!(
+                                "Got onboard response, user {}, uuid {}",
+                                onb.userid, onb.uuid
+                            );
+                        }
+                        Hdr::Flow(_) => {
+                            let mut found = false;
+                            if let Some(key) = hdr_to_key(&hdr) {
+                                found = flow_rx_data(
+                                    stream,
+                                    tun,
+                                    &key,
+                                    flows,
+                                    data,
+                                    vpn_rx,
+                                    vpn_tx,
+                                    poll,
+                                    check_tuns,
+                                    flows_active,
+                                );
+                            }
+                            if !found {
+                                tun.tun.close(stream).ok();
+                            }
+                        }
+                    }
+                }
+            } else {
+                let key;
+                match tun.flows {
                         TunFlow::OneToOne(ref k) => {
                             key = k.clone();
                         }
                         _=> panic!("We either need an nxthdr to identify the flow or we need the tun to map 1:1 to the flow"),
                     }
-                    let found = flow_rx_data(
-                        stream, tun, &key, flows, data, vpn_rx, vpn_tx, poll, check_tuns,
-                    );
-                    if !found {
-                        tun.tun.close(stream).ok();
-                    }
+                let found = flow_rx_data(
+                    stream,
+                    tun,
+                    &key,
+                    flows,
+                    data,
+                    vpn_rx,
+                    vpn_tx,
+                    poll,
+                    check_tuns,
+                    flows_active,
+                );
+                if !found {
+                    tun.tun.close(stream).ok();
                 }
             }
         }
     }
+    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
 }
 
 fn external_sock_tx(
@@ -795,6 +824,7 @@ fn parse_copy(
                 new.extend_from_slice(&b[tx.headroom + remaining..]);
                 out.push(new);
             } else {
+                // We dont know the tx-socket yet, hence the None parameter
                 flow_close(key, flow, None, poll);
                 return (out, None);
             }
@@ -916,6 +946,7 @@ fn parse_complete(
             p.clear();
             pending = p;
         } else {
+            // We dont know the tx-socket yet, hence the None parameter
             flow_close(key, flow, None, poll);
             return None;
         }
@@ -980,12 +1011,11 @@ fn flow_data_to_external(
                     t
                 }
                 Err(e) => match e.code {
-                    NxtErr::EWOULDBLOCK => {
+                    EWOULDBLOCK => {
                         return;
                     }
                     _ => {
-                        tx_socket.pending_rx -=
-                            flow_close(key, flow, Some(&mut tx_socket.tun), poll);
+                        flow_close(key, flow, Some(tx_socket), poll);
                         return;
                     }
                 },
@@ -1008,9 +1038,21 @@ fn flow_data_to_external(
 
         // Now try writing the payload to the destination socket. If the destination
         // socket says EWOULDBLOCK, then queue up the data as pending and try next time
-        match tx_socket.tun.write(flow.tx_stream, tx) {
+        let ret;
+        if !tx_socket.tx_ready {
+            ret = Err((
+                Some(tx),
+                NxtError {
+                    code: EWOULDBLOCK,
+                    detail: "".to_string(),
+                },
+            ))
+        } else {
+            ret = tx_socket.tun.write(flow.tx_stream, tx);
+        }
+        match ret {
             Err((data, e)) => match e.code {
-                NxtErr::EWOULDBLOCK => {
+                EWOULDBLOCK => {
                     tx_socket.tx_ready = false;
                     if !tx_socket.tx_ready {
                         tx_socket
@@ -1031,7 +1073,7 @@ fn flow_data_to_external(
                     return;
                 }
                 _ => {
-                    tx_socket.pending_rx -= flow_close(key, flow, Some(&mut tx_socket.tun), poll);
+                    flow_close(key, flow, Some(tx_socket), poll);
                     return;
                 }
             },
@@ -1051,25 +1093,26 @@ fn flow_data_from_external(
     check_tuns: &mut HashMap<usize, ()>,
 ) {
     while let Some(rx) = flow.pending_rx.pop_front() {
+        tun.pending_rx -= 1;
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
-                NxtErr::EWOULDBLOCK => {
+                EWOULDBLOCK => {
                     // The stack cant accept these pkts now, return the data to the head again
                     flow.pending_rx.push_front(data.unwrap());
+                    tun.pending_rx += 1;
                     return;
                 }
                 _ => {
-                    tun.pending_rx -= flow_close(key, flow, Some(&mut tun.tun), poll);
+                    flow_close(key, flow, Some(tun), poll);
                     return;
                 }
             },
             Ok(_) => {
-                if tun.pending_rx >= MAX_PENDING_RX && tun.pending_rx - 1 <= MAX_PENDING_RX {
+                if tun.pending_rx < MAX_PENDING_RX {
                     if !check_tuns.contains_key(&flow.tx_socket) {
                         check_tuns.insert(flow.tx_socket, ());
                     }
                 }
-                tun.pending_rx -= 1;
                 flow_alive(key, flow);
             }
         }
@@ -1104,7 +1147,7 @@ fn proxyclient_rx(
             let ret = tun.tun.read();
             match ret {
                 Err(x) => match x.code {
-                    NxtErr::EWOULDBLOCK => {
+                    EWOULDBLOCK => {
                         return Some(TunInfo::Tun(tun));
                     }
                     _ => {
@@ -1141,6 +1184,8 @@ fn proxyclient_rx(
                                         poll,
                                         _perf,
                                     );
+                                }
+                                if !flow.dead {
                                     if let Some(mut empty) = common::pool_get(pkt_pool.clone()) {
                                         empty.clear();
                                         // trigger an immediate write back to the client by calling proxyclient_write().
@@ -1154,7 +1199,7 @@ fn proxyclient_rx(
                                         tx_sock.tun().pending_rx += 1;
                                         proxyclient_tx(&tun_info, flows, tuns, poll, check_tuns);
                                     } else {
-                                        flow_close(&key, flow, Some(&mut tx_sock.tun().tun), poll);
+                                        flow_close(&key, flow, Some(&mut tx_sock.tun()), poll);
                                     }
                                 }
                             }
@@ -1264,13 +1309,13 @@ fn flow_parse(
                 }
             }
             Err(e) => match e.code {
-                NxtErr::EWOULDBLOCK => {
+                EWOULDBLOCK => {
                     // Need more data to parse
                     return (false, None);
                 }
                 _ => {
                     if let Some(tx_socket) = tuns.get_mut(&flow.tx_socket) {
-                        flow_close(key, flow, Some(&mut tx_socket.tun().tun), poll);
+                        flow_close(key, flow, Some(&mut tx_socket.tun()), poll);
                     }
                     // errored, stop parsing any further
                     return (true, None);
@@ -1292,6 +1337,10 @@ fn flow_rx_tx(
     check_tuns: &mut HashMap<usize, ()>,
     _perf: &mut AgentPerf,
 ) {
+    if flow.dead {
+        return;
+    }
+
     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
         flow_data_to_external(
             &key,
@@ -1353,7 +1402,7 @@ fn vpntun_rx(
         let ret = tun.tun.read();
         match ret {
             Err(x) => match x.code {
-                NxtErr::EWOULDBLOCK => {
+                EWOULDBLOCK => {
                     for (key, data) in tcp_flows {
                         if let Some(flow) = flows.get_mut(&key) {
                             flow_rx_tx(
@@ -1465,7 +1514,7 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>) {
             },
         ) {
             Err((data, e)) => match e.code {
-                NxtErr::EWOULDBLOCK => {
+                EWOULDBLOCK => {
                     tun.tx_ready = false;
                     // Return the data to the head again
                     let mut data = data.unwrap();
@@ -1724,6 +1773,18 @@ fn monitor_parse_pending(
     }
 }
 
+// The goal of this api is to handle cases where say someone is using an app on
+// their phone, that app has some tcp sessions open and is in the middle of some
+// read / write, and in the middle of that the user switches that app to
+// the background. And on devices like apple ios, there is no activity by a
+// background app, its completely suspended (I guess androind is the same?). So
+// then we will have a case where a ton of inactive flows are lying around
+// potentially holding on to buffers which they were using before they went inactive.
+// So we come here and close such flows IF they happened to be holding buffers
+// when they were switched to background. We dont have any problem if a flow is
+// idle and its not holding onto buffers - which is the most common case when an
+// active app has tcp/udp sessions that are idle - they will continue to be open,
+// but they are not taking up any buffer space.
 fn monitor_buffers(
     poll: &mut Poll,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
@@ -1731,16 +1792,21 @@ fn monitor_buffers(
     flows_active: &mut HashMap<FlowV4Key, ()>,
 ) {
     let mut keys = Vec::new();
+    let now = Instant::now();
     for (k, _) in flows_active.iter() {
         if let Some(mut f) = flows.get_mut(k) {
-            f.packet_age += 1;
-            // No packets the last 5 rounds (5secs)
-            if f.packet_age >= 5 {
-                // If the flow is still holding onto rx buffers, that means the rx buffers have
-                // tcp holes which are not getting filled in 2 seconds, that has to mean some serious
-                // trouble communicating with the OS kernel. Similarly, if it has tx buffers, that
-                // means its not getting ACKs from the OS kernel. Close the flow.
-                if !f.rx_socket.idle(false) || !f.pending_rx.is_empty() || f.pending_tx.is_some() {
+            let mut b = 0;
+            if !f.rx_socket.idle(false) {
+                // It can actually be one or two buffers (rx/tx/both), we dont
+                // have that granular output from the idle() API.
+                b += 1;
+            }
+            b += f.pending_rx.len();
+            if f.pending_tx.is_some() {
+                b += 1;
+            }
+            if now >= f.last_rdwr + Duration::from_secs(FLOW_BUFFER_HOG) {
+                if b != 0 {
                     error!(
                         "Buffer close flow {} / {}, idle {}, pending_rx {}, pending_tx {}",
                         k,
@@ -1749,13 +1815,13 @@ fn monitor_buffers(
                         f.pending_rx.len(),
                         f.parse_pending.is_some()
                     );
-                    f.rx_socket.idle(true);
                     if let Some(tx_socket) = tuns.get_mut(&f.tx_socket) {
-                        let tx_socket = tx_socket.tun();
-                        tx_socket.pending_rx -= flow_close(k, f, Some(&mut tx_socket.tun), poll);
+                        let mut tx_socket = tx_socket.tun();
+                        flow_close(k, f, Some(&mut tx_socket), poll);
                     }
                 }
                 keys.push(k.clone());
+                f.active = false;
             }
         }
     }
@@ -1770,10 +1836,7 @@ fn monitor_buffers(
 // we have made it some more shorter here, that will pbbly have to be bumped up to match
 // the RFC eventually. And for dns we are being super aggressive here, cleaning up in 30 seconds.
 fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4) {
-    // TODO: The last_rdwr can be gotten rid of and we can use the simple
-    // packet_age counter to do the flow-aged determination too
     flow.last_rdwr = Instant::now();
-    flow.packet_age = 0;
     if key.proto == common::TCP {
         flow.cleanup_after = CLEANUP_TCP_IDLE;
     } else {
@@ -1792,25 +1855,25 @@ fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4) {
 // for a few more seconds to be cleaned up by monitor_flows - because even after we close
 // the flow, we might get a few packets and we dont want to try and create new flow for
 // those old packets etc..
-fn flow_close(
-    _key: &FlowV4Key,
-    flow: &mut FlowV4,
-    tx_socket: Option<&mut Box<dyn Transport>>,
-    poll: &mut Poll,
-) -> usize {
+// NOTE: The tx_socket parameter HAS to be non-None if the flow is already associated with
+// a tx socket. ONLY in cases where flow is closed before tx-socket is found can it be
+// passed as None
+fn flow_close(_key: &FlowV4Key, flow: &mut FlowV4, tx_socket: Option<&mut Tun>, poll: &mut Poll) {
     // Tell all parties local and remote that the flow is closed
     if let Some(tx_socket) = tx_socket {
         // There maybe two streams - one going to external via tx socket and one coming
         // from external again via tx socket (forward and return). Close both
-        tx_socket.close(flow.tx_stream).ok();
+        tx_socket.tun.close(flow.tx_stream).ok();
         if let Some(rx_stream) = flow.rx_stream {
-            tx_socket.close(rx_stream).ok();
+            tx_socket.tun.close(rx_stream).ok();
         }
-        if flow.tx_socket != GWTUN_IDX && flow.tx_socket != UNUSED_IDX {
+        if flow.tx_socket != GWTUN_IDX {
             tx_socket
+                .tun
                 .event_register(Token(flow.tx_socket), poll, RegType::Dereg)
                 .ok();
         }
+        tx_socket.pending_rx -= flow.pending_rx.len();
     }
     flow.rx_socket.close(0).ok();
     // Unregister the poller so we dont keep polling till the flow is cleaned
@@ -1820,19 +1883,16 @@ fn flow_close(
         .ok();
 
     // Free all memory occupying stuff
-    let pending = flow.pending_rx.len();
+    flow.rx_socket.idle(true);
     flow.pending_rx.clear();
     flow.pending_tx = None;
     flow.parse_pending = None;
-    flow.pending_tx_qed = false;
     flow.pending_tx = None;
 
     // Now let monitor_flows() clean up all other structures that has references/keys
     // to this flow and release the flow itself from flow table
     flow.dead = true;
     flow.cleanup_after = CLEANUP_NOW;
-
-    return pending;
 }
 
 // Do all the close/cleanups etc.. and release the flow (ie remove from flow table)
@@ -1852,9 +1912,9 @@ fn flow_terminate(
         tx_sock = tuns.get_mut(&f.tx_socket);
     }
     if let Some(tx_socket) = tx_sock {
-        let tx_socket = tx_socket.tun();
+        let mut tx_socket = tx_socket.tun();
         if !f.dead {
-            tx_socket.pending_rx -= flow_close(k, f, Some(&mut tx_socket.tun), poll);
+            flow_close(k, f, Some(&mut tx_socket), poll);
         }
         match tx_socket.flows {
             TunFlow::OneToMany(ref mut sock_flows) => {
@@ -1865,7 +1925,7 @@ fn flow_terminate(
             }
             _ => {}
         }
-        if f.tx_socket != GWTUN_IDX && f.tx_socket != UNUSED_IDX {
+        if f.tx_socket != GWTUN_IDX {
             // Gateway socket is monitored seperately, if the flow is dead, just
             // deregister the tx socket if its a 1:1 (direct flow case) socket
             tuns.remove(&f.tx_socket);
@@ -1900,6 +1960,9 @@ fn monitor_flows(
     let mut udp = 0;
     let mut dns = 0;
     let mut tcp = 0;
+    let mut pending_rx = 0;
+    let mut pending_tx = 0;
+    let mut idle = 0;
 
     let mut keys = Vec::new();
     for (k, f) in flows.iter_mut() {
@@ -1917,19 +1980,38 @@ fn monitor_flows(
             }
             udp += 1;
         }
+        if !f.rx_socket.idle(false) {
+            // It can actually be one or two buffers (rx/tx/both), we dont
+            // have that granular output from the idle() API.
+            idle += 1;
+        }
+        if !f.pending_rx.is_empty() {
+            pending_rx += f.pending_rx.len();
+        }
+        if f.pending_tx.is_some() {
+            pending_tx += 1;
+        }
     }
     for k in keys {
         flows.remove(&k);
     }
     flows.shrink_to_fit();
 
+    let mut gw_pending = 0;
+    if let Some(tun) = tuns.get_mut(&GWTUN_IDX) {
+        gw_pending = tun.tun().pending_rx;
+    }
     error!(
-        "tcp {}, udp {}, dns {}, pkt bufs {}, tcp bufs {}",
+        "tcp {}, udp {}, dns {}, pkt bufs {}, tcp bufs {}, pending rx {} / tx {}, idle {}, gw pending {}",
         tcp,
         udp,
         dns,
         pkt_pool.len(),
         tcp_pool.len(),
+        pending_rx,
+        pending_tx,
+        idle,
+        gw_pending
     );
 }
 
@@ -2011,7 +2093,7 @@ fn proxy_listener(
                 tuns.insert(socket_idx, TunInfo::Tun(tun));
             }
             Err(e) => match e.code {
-                NxtErr::EWOULDBLOCK => {
+                EWOULDBLOCK => {
                     return;
                 }
                 _ => {
@@ -2066,12 +2148,13 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: usize, txmtu: usize, highmem: 
     // Theres not a lot of fancy math here as of today. The 'highmem: 1' platforms are usually
     // laptops and highmem: 0 is a mobile device. So we just use half the memory on a mobile device
     // compared to a laptop thats about it. Note that we might be able to bring these numbers down
-    // even lesser, will bring it down after this software gets more runtime on various devices
-    let npkts = 64 * (highmem + 1);
-    let ntcp = 22 * (highmem + 1);
-
-    agent.pkt_pool = Arc::new(Pool::new(npkts, || Vec::with_capacity(pktbuf_len)));
-    agent.tcp_pool = Arc::new(Pool::new(ntcp, || Vec::with_capacity(MAXPAYLOAD)));
+    // even lesser, will bring it down after this software gets more runtime on various devices.
+    // Note that the npkts usually has to be at least the MAXPAYLOAD/txmtu (ie the number of pkts
+    // to send one full size tcp payload) for better performance
+    agent.npkts = 64 * (highmem + 1);
+    agent.ntcp = 22 * (highmem + 1);
+    agent.pkt_pool = Arc::new(Pool::new(agent.npkts, || Vec::with_capacity(pktbuf_len)));
+    agent.tcp_pool = Arc::new(Pool::new(agent.ntcp, || Vec::with_capacity(MAXPAYLOAD)));
 }
 
 fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize, highmem: usize) {
@@ -2103,7 +2186,6 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
     agent.platform = platform;
     agent_init_pools(&mut agent, rxmtu, txmtu, highmem);
     agent.next_tun_idx = TUN_START;
-    agent.tuns.insert(UNUSED_IDX, TunInfo::Tun(Tun::default()));
 
     let rx_ratio = MAXPAYLOAD / rxmtu;
 
@@ -2215,6 +2297,7 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
                                     &mut agent.vpn_tx,
                                     &mut poll,
                                     &mut agent.check_tuns,
+                                    &mut agent.flows_active,
                                 );
                             }
                             if event.is_writable() {
@@ -2288,6 +2371,7 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
                             &mut agent.vpn_tx,
                             &mut poll,
                             &mut check_tuns,
+                            &mut agent.flows_active,
                         );
                         agent.tuns.insert(idx, tun_info);
                     }
