@@ -30,6 +30,8 @@ struct OnboardInfo {
     domains: Vec<String>,
     services: Vec<String>,
     connectid: String,
+    cluster: String,
+    podname: String,
     cacert: Vec<u8>,
 }
 
@@ -97,6 +99,8 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
     let c_userid = CString::new(onb.userid.clone()).unwrap();
     let c_host = CString::new(onb.gateway.clone()).unwrap();
     let c_connectid = CString::new(onb.connectid.clone()).unwrap();
+    let c_cluster = CString::new(onb.cluster.clone()).unwrap();
+    let c_podname = CString::new(onb.podname.clone()).unwrap();
     let mut c_domains: Vec<CString> = Vec::new();
     let mut c_domains_ptr: Vec<*const c_char> = Vec::new();
     for d in &onb.domains {
@@ -118,6 +122,8 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
         host: c_host.as_ptr(),
         access_token: c_access_token.as_ptr(),
         connect_id: c_connectid.as_ptr(),
+	cluster: c_cluster.as_ptr(),
+	podname: c_podname.as_ptr(),
         domains: c_domains_ptr.as_ptr() as *const *const c_char,
         num_domains: c_domains_ptr.len() as c_int,
         ca_cert: onb.cacert.as_ptr() as *const c_char,

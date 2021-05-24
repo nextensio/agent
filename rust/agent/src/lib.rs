@@ -83,6 +83,8 @@ pub struct RegistrationInfo {
     host: String,
     access_token: String,
     connect_id: String,
+    cluster: String,
+    podname: String,
     domains: Vec<String>,
     ca_cert: Vec<u8>,
     userid: String,
@@ -95,6 +97,8 @@ pub struct CRegistrationInfo {
     pub host: *const c_char,
     pub access_token: *const c_char,
     pub connect_id: *const c_char,
+    pub cluster: *const c_char,
+    pub podname: *const c_char,
     pub domains: *const *const c_char,
     pub num_domains: c_int,
     pub ca_cert: *const c_char,
@@ -125,6 +129,8 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
         reginfo.connect_id = CStr::from_ptr(creg.connect_id)
             .to_string_lossy()
             .into_owned();
+        reginfo.cluster = CStr::from_ptr(creg.cluster).to_string_lossy().into_owned();
+        reginfo.podname = CStr::from_ptr(creg.podname).to_string_lossy().into_owned();
         reginfo.ca_cert = CStr::from_ptr(creg.ca_cert).to_bytes().to_owned();
         reginfo.userid = CStr::from_ptr(creg.userid).to_string_lossy().into_owned();
         reginfo.uuid = CStr::from_ptr(creg.uuid).to_string_lossy().into_owned();
@@ -487,6 +493,8 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
     onb.uuid = reginfo.uuid.clone();
     onb.services = reginfo.services.clone();
     onb.access_token = reginfo.access_token.clone();
+    onb.cluster = reginfo.cluster.clone();
+    onb.podname = reginfo.podname.clone();
 
     let mut hdr = NxtHdr::default();
     hdr.hdr = Some(Hdr::Onboard(onb));
