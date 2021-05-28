@@ -10,8 +10,21 @@ import Cocoa
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
     
+    var statusBarItem: NSStatusItem!
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        let statusBar = NSStatusBar.system
+        statusBarItem = statusBar.statusItem(
+            withLength: 9)
+        statusBarItem.button?.title = "Nextensio"
+
+        let statusBarMenu = NSMenu(title: "Uninstall")
+        statusBarItem.menu = statusBarMenu
+
+        statusBarMenu.addItem(
+            withTitle: "Uninstall Nextensio system extension",
+            action: #selector(SignInViewController.Uninstall),
+            keyEquivalent: "")
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

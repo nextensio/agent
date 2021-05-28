@@ -144,7 +144,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // each time user asks for vpn on - so there is no way to save a 'state' in the object
     // which says we have already started a thread for nextensio data processing, hence having
     // to maintain that state in the thread itself which tells us if its already started or
-    // not. The other option is pbbly we can try to kill the thread if this object gets a
+    // not. The other option is pbbly we can try to kill the thread if this object gets a 
     // tunnel stop request. But that gets more complicated (I think)
 	let started = agent_started()
         // start agent

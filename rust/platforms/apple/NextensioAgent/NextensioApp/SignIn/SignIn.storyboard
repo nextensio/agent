@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="17701" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="18122" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES">
     <device id="retina6_1" orientation="portrait" appearance="light"/>
     <dependencies>
         <deployment identifier="iOS"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="17703"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="18093"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
         <capability name="System colors in document resources" minToolsVersion="11.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
@@ -17,16 +17,16 @@
                         <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Username" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="HDW-U9-dtO">
-                                <rect key="frame" x="60" y="84" width="294" height="40"/>
+                            <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Username" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="HDW-U9-dtO">
+                                <rect key="frame" x="138.5" y="84" width="110.5" height="40"/>
                                 <constraints>
                                     <constraint firstAttribute="height" constant="40" id="UY0-b6-rGf"/>
                                 </constraints>
                                 <fontDescription key="fontDescription" type="system" pointSize="18"/>
                                 <textInputTraits key="textInputTraits"/>
                             </textField>
-                            <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Password" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="HBa-AW-ijs">
-                                <rect key="frame" x="60" y="144" width="294" height="40"/>
+                            <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Password" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="HBa-AW-ijs">
+                                <rect key="frame" x="138.5" y="144" width="105.5" height="40"/>
                                 <constraints>
                                     <constraint firstAttribute="height" constant="40" id="iAR-3p-gnZ"/>
                                 </constraints>
@@ -51,33 +51,22 @@
                                     <action selector="signInTapped" destination="MYZ-aV-kni" eventType="touchUpInside" id="NDx-1G-JTH"/>
                                 </connections>
                             </button>
-                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="a9P-wd-d7k">
-                                <rect key="frame" x="145.5" y="288" width="123" height="30"/>
-                                <state key="normal" title="Forgot password?"/>
-                                <connections>
-                                    <action selector="forgotPasswordTapped" destination="MYZ-aV-kni" eventType="touchUpInside" id="DVc-q9-keE"/>
-                                </connections>
-                            </button>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="Hbp-ZB-hLB"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                         <constraints>
                             <constraint firstItem="knd-58-kzf" firstAttribute="top" secondItem="HBa-AW-ijs" secondAttribute="bottom" constant="40" id="6Cz-hc-C9A"/>
-                            <constraint firstItem="a9P-wd-d7k" firstAttribute="centerX" secondItem="knd-58-kzf" secondAttribute="centerX" id="7X9-UV-2mp"/>
-                            <constraint firstItem="HBa-AW-ijs" firstAttribute="leading" secondItem="Hbp-ZB-hLB" secondAttribute="leading" constant="60" id="9XN-GS-KBR"/>
-                            <constraint firstItem="Hbp-ZB-hLB" firstAttribute="trailing" secondItem="HBa-AW-ijs" secondAttribute="trailing" constant="60" id="MPJ-bD-lts"/>
-                            <constraint firstItem="a9P-wd-d7k" firstAttribute="top" secondItem="knd-58-kzf" secondAttribute="bottom" constant="18" id="OOn-6f-Pkb"/>
+                            <constraint firstItem="HBa-AW-ijs" firstAttribute="leading" secondItem="knd-58-kzf" secondAttribute="leading" constant="10" id="9XN-GS-KBR"/>
                             <constraint firstItem="HBa-AW-ijs" firstAttribute="top" secondItem="HDW-U9-dtO" secondAttribute="bottom" constant="20" id="ORe-Tq-JKw"/>
                             <constraint firstItem="knd-58-kzf" firstAttribute="centerX" secondItem="vgy-6T-yEq" secondAttribute="centerX" id="Paa-53-XQh"/>
-                            <constraint firstItem="HDW-U9-dtO" firstAttribute="leading" secondItem="Hbp-ZB-hLB" secondAttribute="leading" constant="60" id="l2A-7M-6Z1"/>
-                            <constraint firstItem="Hbp-ZB-hLB" firstAttribute="trailing" secondItem="HDW-U9-dtO" secondAttribute="trailing" constant="60" id="nPh-Ca-Tpm"/>
+                            <constraint firstItem="HDW-U9-dtO" firstAttribute="leading" secondItem="knd-58-kzf" secondAttribute="leading" constant="10" id="l2A-7M-6Z1"/>
                             <constraint firstItem="HDW-U9-dtO" firstAttribute="top" secondItem="Hbp-ZB-hLB" secondAttribute="top" constant="40" id="xmY-iZ-SkR"/>
                         </constraints>
                     </view>
                     <navigationItem key="navigationItem" title="Login" id="m7l-cL-VlK" userLabel="Login Navigation"/>
                     <connections>
                         <outlet property="passwordField" destination="HBa-AW-ijs" id="PGR-aT-zxw"/>
-                        <outlet property="signInButton" destination="knd-58-kzf" id="pol-Nl-cCT"/>
+                        <outlet property="signinButton" destination="knd-58-kzf" id="pol-Nl-cCT"/>
                         <outlet property="usernameField" destination="HDW-U9-dtO" id="178-CN-Dta"/>
                     </connections>
                 </viewController>

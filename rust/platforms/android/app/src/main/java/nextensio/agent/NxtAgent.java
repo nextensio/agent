@@ -17,7 +17,6 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.util.Log;
 import android.net.Uri;
-import android.os.Handler;
 import com.okta.oidc.OIDCConfig;
 import com.okta.oidc.Okta;
 import com.okta.oidc.AuthorizationStatus;
@@ -62,7 +61,6 @@ public class NxtAgent extends AppCompatActivity {
     private static final int VPN_REQUEST_CODE = 0x0F;
     private static final String TAG = "NxtUi";
     private NxtAgentService agentService = null;
-    private Handler handler = new Handler();
     private final static String FIRE_FOX = "org.mozilla.firefox";
     private final static String ANDROID_BROWSER = "com.android.browser";
     private WebAuthClient authClient;
@@ -75,28 +73,6 @@ public class NxtAgent extends AppCompatActivity {
     .scopes("openid", "email", "profile", "offline_access")
     .discoveryUri("https://dev-635657.okta.com/oauth2/default")
     .create();
-
-    private Runnable runTask = new Runnable() {
-        @Override
-        public void run() {
-            final TextView textview = (TextView)findViewById(R.id.status);
-            NxtStats stats = new NxtStats();
-            stats.nxtStats();
-            String text = String.format("%s to Nextensio\n" + 
-                                        "%d connection flaps, last flap %d seconds / %d mins ago\n" + 
-                                        "Via Nextensio flows %d, Direct internet flows %d\n" +
-                                        "Heap in-use %d MB, allocated %d MB\n", 
-                                        (stats.gateway_up == 1 ? "Connected" : "Not Connected"),
-                                        stats.gateway_flaps, stats.last_gateway_flap, stats.last_gateway_flap/60,
-                                        stats.gateway_flows, stats.total_flows,
-                                        (Debug.getNativeHeapSize() - Debug.getNativeHeapFreeSize())/(1024*1024),
-                                        Debug.getNativeHeapAllocatedSize()/(1024*1024));
-            textview.setText(text);
-                                        
-            // Repeat every 30 secs
-            handler.postDelayed(this, 30000); 
-        }
-    };
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {
 
@@ -173,20 +149,24 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
+    private void startVPN() {
+        Intent vpnIntent = VpnService.prepare(this);
+        if (vpnIntent != null) {
+            startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
+            Log.i(TAG, "New Vpn Intent");
+        } else {
+            onActivityResult(VPN_REQUEST_CODE, RESULT_OK, null);
+            Log.i(TAG, "Existing Vpn Intent");
+        }
+    }
+
     // This gets called when user clicks the button to start VPN. The prepare()
     // call will throw a popup asking user for permission to allow VPN and the 
     // result of the user action is sent as a result message to callback onActivityResult()
     // If the user has already allowed the VPN, then we just call the callback right away
     private void toggleVPN() {
         if (agentService == null) {
-            Intent vpnIntent = VpnService.prepare(this);
-            if (vpnIntent != null) {
-                startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
-                Log.i(TAG, "New Vpn Intent");
-            } else {
-                onActivityResult(VPN_REQUEST_CODE, RESULT_OK, null);
-                Log.i(TAG, "Existing Vpn Intent");
-            }
+            authClient.signIn(this, null);
         } else {
             agentService.stop();
             doUnbindService();
@@ -194,10 +174,6 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
-    // User is asking for a browser to do the authentication/login
-    private void launchLogin() {
-        authClient.signIn(this, null);
-    }
 
     private void agentOnboard(String accessToken, JSONObject onboard) {
         try {
@@ -211,6 +187,8 @@ public class NxtAgent extends AppCompatActivity {
             String userid = onboard.getString("userid");
             String host = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
+            String cluster = onboard.getString("cluster");
+            String podname = onboard.getString("podname");
             JSONArray cert = onboard.getJSONArray("cacert");
             byte[] cacert = new byte[cert.length()];
             for(int i = 0; i < cert.length(); i++) {
@@ -226,7 +204,8 @@ public class NxtAgent extends AppCompatActivity {
             String[] services = new String[1];
             services[0] = connectid;
 
-            nxtOnboard(accessToken, uuid, userid, host, connectid, cacert, domains, services);
+            nxtOnboard(accessToken, uuid, userid, host, connectid, cluster, podname, cacert, domains, services);
+            startVPN();
 
         } catch (final JSONException e)  {
             // TODO: show the error some place
@@ -347,7 +326,7 @@ public class NxtAgent extends AppCompatActivity {
 
         // Setup the button to turn the vpn on/off
         final Button vpnButton = (Button)findViewById(R.id.vpn);
-        vpnButton.setEnabled(false);
+        vpnButton.setEnabled(true);
         vpnButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -355,23 +334,9 @@ public class NxtAgent extends AppCompatActivity {
             }
         });
 
-        // Setup the button to launch a browser to login/authenticate
-        final Button loginButton = (Button)findViewById(R.id.login);
-        loginButton.setEnabled(true);
-        loginButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                launchLogin();
-            }
-        });
-
         // Register to receive notification from the NxtAgentService class
         LocalBroadcastManager.getInstance(this).registerReceiver(vpnStateReceiver,
                 new IntentFilter(NxtAgentService.BROADCAST_VPN_STATE));
-
-
-        // Schedule a periodic task to collect stats etc.. from the golang world
-        handler.post(runTask);
     }
 
     @Override
@@ -398,6 +363,7 @@ public class NxtAgent extends AppCompatActivity {
     }    
 
     private static native void nxtOnboard(String accessToken, String uuid, String userid, String host,
-                                          String connectid, byte []cacert, String []domains, String []services);
+                                          String connectid, String cluster, String podname, 
+                                          byte []cacert, String []domains, String []services);
 
 }

@@ -22,11 +22,11 @@ use object_pool::{Pool, Reusable};
 use oslog::OsLogger;
 #[cfg(target_os = "linux")]
 use perf::Perf;
-use std::slice;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
 use std::{ffi::CStr, usize};
+use std::{iter::successors, slice};
 use std::{
     os::raw::{c_char, c_int},
     sync::Arc,
@@ -50,6 +50,7 @@ static STATS_NUMFLAPS: AtomicI32 = AtomicI32::new(0);
 static STATS_LASTFLAP: AtomicI32 = AtomicI32::new(0);
 static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
 static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
+static AGENT_STARTED: AtomicUsize = AtomicUsize::new(0);
 
 const NXT_AGENT_PROXY: usize = 8181;
 
@@ -2125,12 +2126,23 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         proxy_client: false,
         pending_rx: 0,
     };
-    agent.proxy_tun.tun.listen().ok();
-    agent
-        .proxy_tun
-        .tun
-        .event_register(WEBPROXY_POLL, poll, RegType::Reg)
-        .ok();
+    let mut success = false;
+    match agent.proxy_tun.tun.listen() {
+        Ok(_) => success = true,
+        Err(e) => match e.code {
+            EWOULDBLOCK => success = true,
+            _ => {}
+        },
+    }
+    if success {
+        agent
+            .proxy_tun
+            .tun
+            .event_register(WEBPROXY_POLL, poll, RegType::Reg)
+            .ok();
+    } else {
+        error!("Cannot register to port {}", NXT_AGENT_PROXY);
+    }
 }
 
 fn agent_init_pools(agent: &mut AgentInfo, rxmtu: usize, txmtu: usize, highmem: usize) {
@@ -2460,7 +2472,13 @@ pub unsafe extern "C" fn agent_init(
     highmem: usize,
 ) {
     assert!(rxmtu >= txmtu);
+    AGENT_STARTED.store(1, Relaxed);
     agent_main_thread(platform, direct, rxmtu, txmtu, highmem);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn agent_started() -> usize {
+    AGENT_STARTED.load(Relaxed)
 }
 
 // We EXPECT the fd provied to us to be already non blocking

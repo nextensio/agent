@@ -6,6 +6,8 @@ struct CRegistrationInfo
     const char *host;
     const char *access_token;
     const char *connect_id;
+    const char *cluster;
+    const char *podname;
     const char **domains;
     int num_domains;
     signed char *ca_cert;
@@ -57,6 +59,7 @@ JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOff(JNIEnv *env, 
 
 JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jclass c, jstring accessToken,
                                                                 jstring uuid, jstring userid, jstring host, jstring connectid,
+                                                                jstring cluster, jstring podname,
                                                                 jbyteArray cacert, jobjectArray domains, jobjectArray services)
 {
     struct CRegistrationInfo creg = {};
@@ -64,6 +67,8 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jcl
     creg.host = (*env)->GetStringUTFChars(env, host, NULL);
     creg.access_token = (*env)->GetStringUTFChars(env, accessToken, NULL);
     creg.connect_id = (*env)->GetStringUTFChars(env, connectid, NULL);
+    creg.cluster = (*env)->GetStringUTFChars(env, cluster, NULL);
+    creg.podname = (*env)->GetStringUTFChars(env, podname, NULL);
     creg.userid = (*env)->GetStringUTFChars(env, userid, NULL);
     creg.uuid = (*env)->GetStringUTFChars(env, uuid, NULL);
 
@@ -93,6 +98,8 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jcl
     (*env)->ReleaseStringUTFChars(env, host, creg.host);
     (*env)->ReleaseStringUTFChars(env, accessToken, creg.access_token);
     (*env)->ReleaseStringUTFChars(env, connectid, creg.connect_id);
+    (*env)->ReleaseStringUTFChars(env, cluster, creg.cluster);
+    (*env)->ReleaseStringUTFChars(env, podname, creg.podname);
     (*env)->ReleaseStringUTFChars(env, userid, creg.userid);
     (*env)->ReleaseStringUTFChars(env, uuid, creg.uuid);
 

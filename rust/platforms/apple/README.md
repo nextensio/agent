@@ -17,19 +17,12 @@
 $ cd rust/platforms/apple
 $ pod install
 ``` 
-- For GO agent:
-``` 
-$ cd go/platforms/apple
-$ pod install
-``` 
- 
 - This installs download OktaAuthSdk, OktaJWT, OktaOidc and create NextensioAgent.xcworkspace file
 
 ## Run XCode
 
 - Open XCode App, open a project of file
 - For RUST agent, pick rust/platforms/apple/NextensioAgent.xcworkspace. 
-- For GO agent, pick go/platforms/apple/NextensioAgent.xcworkspace
 - Don't use NextensioAgent.xcodeproj
 
 ## Apple Developer License
@@ -114,3 +107,74 @@ check its working: $ rustup show
 add: $HOME/.cargo/config: [net]
 git-fetch-with-cli = true
 ```
+
+## Code signing 
+
+There are two ways by which we do code signing - one way for ios and one for macos. For ios, we have 
+set the Signin&Capabilities as we can see to Autosign - apple takes care of signing and certificates
+and all that. And then we distribute the ios software (Project-->Archive) using "AppStore" but not 
+publishing it etc.. (for that we need to be a proper company), we just keep the software in TestFlight
+which is a way to test pre-publish stage software. And in test flight we can invite others to try out
+our test software if others also install test flight app on their ios devices
+
+For macos, we use "Developer ID" + Notarization mechanism - ie we do Project-->Archive and then upload
+the image to apple as "Developer ID" option and also ask apple to Notarize it. The Nextensio.app that
+we get when we archive it can be sent to anyone as a zip file for example (after we get a mail from 
+apple saying that notarization is succesful). People who get that zip file has to unzip it and 
+MOVE the Nextensio.app TO /Applications folder - this step is VERY important, without moving it to
+/Applications it wont work. On macos once we launch the software, it will ask us to go to system 
+preferences --> Security and Allow what is called a "system extension" - this happens one time. For
+the first time we also have to allow VPN service. After these two allows are done, then we can sign in
+and use the app.
+
+The way we have setup the build right now is using individual apple developer accounts. So if another
+developer wants to build it on their laptop, when they sign in as themselves (in signin&capabilities),
+that will also change all the xcode project files with the new "TEAM ID" - team id getting changed is
+all right, but the issue is that the two "bundle ids" representing the app io.nextensio.agent1 and
+io.nextensio.agent1.tunnel are both registered to that developer account. So you wil have to change
+the bundle id to say io.nextensio.agent2 and io.nextensio.agent2.tunnel or something like that and then
+search and replace ALL THE FILES in platforms/apple to replace former by latter. It also needs corresponding
+profiles in the developer's apple account, more about profiles below
+
+## Using the app
+
+The app has just a Sign in and Sigout button. If Sign In is succesful using your nextensio username
+and password, the button changes to "signout". Once Sign in is succesful, we automatically start
+the VPN to send traffic to nextensio. Clicking Signout will terminate the VPN.
+
+## On profiles
+
+Profiles in apple control what capabilities an app has - like whether it can write to the file system,
+whether it can use the camera etc.. There is a profile per app, ie a profile per 'bundle id' - as we
+discussed earlier, each app has a bundle id (two apps in our case - the UI io.nextensio.agent1 and
+the packet tunnel io.nextensio.agent1.tunnel). And the profile starts with inheriting some stuff from
+the properties of the bundle itself, so its important to set the right properties for the bundle when
+you create one
+
+Note that since for ipad we are using the Auto Signing mechanism, ios automatically creates profiles
+for these bundles, so the profiles below are purely applicable to macos. And these profiles are created
+for macos selecting the "developer id" option - ie we want these profiles to be used to create images
+which can be distributed as zip files to anyone
+
+1. There needs to be an "app group" with some name - for example I name it as group.io.nextensio.agent1
+   Both the UI and packet tunnel profiles are put as belonging to the same group. Google on how to 
+   create an app group (and everything else below) in developer.apple.com
+
+2. The UI app io.nextensio.agent1 needs to have the app group item checked with the group above selected,
+   the Network Extension checked and System Extensio checked
+
+3. The Packet tunnel app needs to have the app group item checked with the group above selected, the
+   Network Extension checked - the system extension is NOT checked.
+
+Other than whats mentioned above, nothing else in the profile is checked for either bundles
+
+The next thing which will happen as part of creating a profile is creating a certificate which is needed
+to sign the developer id images we build. I tried creating certificates in developer.apple.com alongside
+creation of profiles, and I tried to download and install that in my mac (mac xcode needs it to sign the
+images it builds), but that certificate just would not install in keychain for some reason. So I had to
+instead create a certificate in Xcode (google for how to) and then ask xcode to upload it to developer.apple.com.
+This way the certificate is already available to xcode without us having to download etc.. And once xcode
+uploads the cert, it will pop up in developer.apple.com - and when you create a profile, select this 
+certificate
+
+

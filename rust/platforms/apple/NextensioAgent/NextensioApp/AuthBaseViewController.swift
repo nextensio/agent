@@ -19,41 +19,25 @@ import OktaAuthSdk
 
 class AuthBaseViewController: UIViewController {
     
-    var tunnelProvider: TunnelProvider?
     var status: OktaAuthStatus?
-    weak var flowCoordinatorDelegate: AuthFlowCoordinatorProtocol?
 
-    public class func instantiate(with status: OktaAuthStatus?,
-                            flowCoordinatorDelegate: AuthFlowCoordinatorProtocol?,
+    public class func instantiate(
                             storyBoardName: String,
                             viewControllerIdentifier: String) -> UIViewController {
         
         print("instantiate AuthBaseViewController storyBoard =", storyBoardName)
-
         let mainStoryboard = UIStoryboard(name: storyBoardName, bundle: nil)
         let viewController = mainStoryboard.instantiateViewController(withIdentifier: viewControllerIdentifier) as! AuthBaseViewController
-        viewController.status = status
-        viewController.flowCoordinatorDelegate = flowCoordinatorDelegate
         
         return viewController
     }
 
     override func viewDidLoad() {
         print("AuthBaseView viewDidLoad()")
-        if let status = status, status.canReturn() {
-            let backButton = UIBarButtonItem(title: "Back",
-                                             style: .plain,
-                                             target: self,
-                                             action: #selector(backButtonTapped))
-            self.navigationItem.setLeftBarButton(backButton, animated: true)
-        } else {
-            self.navigationItem.setHidesBackButton(true, animated: false)
-        }
     }
 
     func terminateAuthView() {
         print("terminate auth view")
-        tunnelProvider?.terminateTunnelProviderManager()
     }
     
     func showError(message: String) {
@@ -64,15 +48,9 @@ class AuthBaseViewController: UIViewController {
 
     func processCancel() {
         status?.cancel()
-        self.flowCoordinatorDelegate?.onCancel()
     }
 
     @objc func backButtonTapped() {
-        status?.returnToPreviousStatus(onStatusChange: { [weak self] status in
-            self?.flowCoordinatorDelegate?.onReturn(prevStatus: status)
-        }, onError: { [weak self] error in
-            self?.showError(message: error.description)
-        })
     }
 }
 
