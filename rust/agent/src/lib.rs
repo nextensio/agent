@@ -150,13 +150,13 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
 
         let tmp_array: &[*const c_char] =
             slice::from_raw_parts(creg.domains, creg.num_domains as usize);
-        let mut rust_array: Vec<_> = tmp_array
+        let rust_array: Vec<_> = tmp_array
             .iter()
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
             .collect();
         reginfo.domains = Vec::new();
         reginfo.network = Vec::new();
-        for s in rust_array.pop() {
+        for s in rust_array {
             let s1 = s.clone();
             let mut network = false;
             // a.b.c.d/mask
