@@ -22,11 +22,12 @@ use object_pool::{Pool, Reusable};
 use oslog::OsLogger;
 #[cfg(target_os = "linux")]
 use perf::Perf;
+use std::net::Ipv4Addr;
+use std::slice;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
 use std::{ffi::CStr, usize};
-use std::{iter::successors, slice};
 use std::{
     os::raw::{c_char, c_int},
     sync::Arc,
@@ -80,6 +81,12 @@ const MAX_PENDING_RX: usize = 4;
 const FLOW_BUFFER_HOG: u64 = 4; // seconds;
 
 #[derive(Default, Debug)]
+struct IpMask {
+    service: String,
+    ip: u32,
+    mask: u32,
+}
+#[derive(Default, Debug)]
 pub struct RegistrationInfo {
     host: String,
     access_token: String,
@@ -91,6 +98,7 @@ pub struct RegistrationInfo {
     userid: String,
     uuid: String,
     services: Vec<String>,
+    network: Vec<IpMask>,
 }
 
 #[repr(C)]
@@ -142,11 +150,42 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
 
         let tmp_array: &[*const c_char] =
             slice::from_raw_parts(creg.domains, creg.num_domains as usize);
-        let rust_array: Vec<_> = tmp_array
+        let mut rust_array: Vec<_> = tmp_array
             .iter()
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
             .collect();
-        reginfo.domains = rust_array;
+        reginfo.domains = Vec::new();
+        reginfo.network = Vec::new();
+        for s in rust_array.pop() {
+            let s1 = s.clone();
+            let mut network = false;
+            // a.b.c.d/mask
+            if let Some(ip) = s.find('/') {
+                if s.len() > ip + 1 {
+                    let n: Result<Ipv4Addr, _> = s[0..ip].parse();
+                    if let Ok(n) = n {
+                        let n = n.octets();
+                        if let Ok(mask) = s[ip + 1..].parse::<u32>() {
+                            let mut ip = (n[0] as u32) << 24
+                                | (n[1] as u32) << 16
+                                | (n[2] as u32) << 8
+                                | n[3] as u32;
+                            let mask = u32::MAX << (32 - mask);
+                            ip = ip & mask;
+                            reginfo.network.push(IpMask {
+                                ip,
+                                mask,
+                                service: s,
+                            });
+                            network = true;
+                        }
+                    }
+                }
+            }
+            if !network {
+                reginfo.domains.push(s1);
+            }
+        }
 
         let tmp_array: &[*const c_char] =
             slice::from_raw_parts(creg.services, creg.num_services as usize);
@@ -740,6 +779,24 @@ fn set_dest_agent(
             has_default = true;
         }
     }
+    // The flow did not match any domains, see if the flow's ip address
+    // matches any configured ip/mask combinations
+    if !found {
+        let ip: Result<Ipv4Addr, _> = key.dip.parse();
+        if let Ok(ip) = ip {
+            let ip = ip.octets();
+            let ip =
+                (ip[0] as u32) << 24 | (ip[1] as u32) << 16 | (ip[2] as u32) << 8 | ip[3] as u32;
+            for im in reginfo.network.iter() {
+                if ip & im.mask == im.ip {
+                    flow.dest_agent = im.service.clone();
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
     if !found {
         if has_default {
             flow.dest_agent = "nextensio-default-internet".to_string();
