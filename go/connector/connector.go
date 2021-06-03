@@ -23,6 +23,8 @@ var unusedAppStreams chan common.NxtStream
 var unique uuid.UUID
 var username *string
 var password *string
+var idp *string
+var clientid *string
 
 func gwToAppClose(tun common.Transport, dest ConnStats) {
 	tun.Close()
@@ -172,12 +174,14 @@ func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
 	username = flag.String("username", "", "connector onboarding userid")
 	password = flag.String("password", "", "connector onboarding password")
+	idp = flag.String("idp", "", "IDP to use to onboard")
+	clientid = flag.String("client", "", "IDP client id")
 	flag.Parse()
 	controller = *c
 }
 
 func authAndOnboard(lg *log.Logger) bool {
-	tokens := authenticate("https://dev-635657.okta.com", *username, *password)
+	tokens := authenticate(*idp, *clientid, *username, *password)
 	if tokens == nil {
 		lg.Println("Unable to authenticate connector with the IDP")
 		return false

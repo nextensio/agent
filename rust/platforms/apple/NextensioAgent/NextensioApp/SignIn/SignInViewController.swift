@@ -12,7 +12,7 @@ import NetworkExtension
 
 class SignInViewController: AuthBaseViewController {
 
-    var urlString = "https://dev-635657.okta.com"
+    var urlString = "https://dev-24743301.okta.com"
 
     
     @IBOutlet private var usernameField: UITextField!

@@ -13,7 +13,7 @@ import SystemExtensions
 import os.log
 
 class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
-    var urlString = "https://dev-635657.okta.com"
+    var urlString = "https://dev-24743301.okta.com"
     
     @IBOutlet weak var usernameField: NSTextField!
     @IBOutlet weak var passwordField: NSSecureTextField!

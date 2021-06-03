@@ -67,7 +67,7 @@ type accessIdTokens struct {
 	IdToken     string `bson:"id_token" json:"id_token"`
 }
 
-func authenticate(IDP string, username string, password string) *accessIdTokens {
+func authenticate(IDP string, clientid string, username string, password string) *accessIdTokens {
 
 	auth := Authenticate{
 		Username: username,
@@ -113,7 +113,7 @@ func authenticate(IDP string, username string, password string) *accessIdTokens 
 	verifier, _ := verifier()
 	challenge := verifier.CodeChallengeS256()
 
-	queries := "client_id=0oaz5lndczD0DSUeh4x6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid&"
+	queries := "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid&"
 	queries = queries + "&state=test&prompt=none&response_mode=query&code_challenge_method=S256"
 	queries = queries + "&code_challenge=" + challenge + "&sessionToken=" + stoken.Token
 	req, err = http.NewRequest("GET", IDP+"/oauth2/default/v1/authorize?"+queries, nil)
@@ -132,7 +132,7 @@ func authenticate(IDP string, username string, password string) *accessIdTokens 
 		fmt.Println("Bad redirect uri")
 		return nil
 	}
-	queries = "client_id=0oaz5lndczD0DSUeh4x6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid"
+	queries = "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid"
 	queries = queries + fmt.Sprintf("&grant_type=authorization_code&code=%s&code_verifier=%s", match[1], verifier.Value)
 	req, err = http.NewRequest("POST", IDP+"/oauth2/default/v1/token?"+queries, nil)
 	if err != nil {

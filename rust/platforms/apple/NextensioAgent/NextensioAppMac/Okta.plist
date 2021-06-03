@@ -7,9 +7,9 @@
 	<key>redirectUri</key>
 	<string>io.nextensio.agent1:/callback</string>
 	<key>clientId</key>
-	<string>0oaz5lndczD0DSUeh4x6</string>
+	<string>0oav0q3hn65I4Zkmr5d6</string>
 	<key>issuer</key>
-	<string>https://dev-635657.okta.com/oauth2/default</string>
+	<string>https://dev-24743301.okta.com/oauth2/default</string>
 	<key>logoutRedirectUri</key>
 	<string></string>
 </dict>

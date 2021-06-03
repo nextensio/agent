@@ -67,11 +67,11 @@ public class NxtAgent extends AppCompatActivity {
     private SessionClient sessionClient;
     
     private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
-    .clientId("0oa2ncngj2cVUdS6b4x7")
+    .clientId("0oav0rc5g0E3irFto5d6")
     .redirectUri("nextensio.agent:/login")
     .endSessionRedirectUri("nextensio.agent:/logout")
     .scopes("openid", "email", "profile", "offline_access")
-    .discoveryUri("https://dev-635657.okta.com/oauth2/default")
+    .discoveryUri("https://dev-24743301.okta.com/oauth2/default")
     .create();
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {
