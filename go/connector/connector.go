@@ -25,6 +25,7 @@ var username *string
 var password *string
 var idp *string
 var clientid *string
+var gateway *string
 
 func gwToAppClose(tun common.Transport, dest ConnStats) {
 	tun.Close()
@@ -138,6 +139,10 @@ func monitorGw(lg *log.Logger) {
 			if gwTun != nil {
 				flaps += 1
 			}
+			// Override gateway if one is suppled on command line
+			if *gateway != "" {
+				regInfo.Host = *gateway
+			}
 			newTun := DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			if newTun != nil {
 				if OnboardTunnel(lg, newTun, false, &regInfo, unique.String()) == nil {
@@ -176,6 +181,7 @@ func args() {
 	password = flag.String("password", "", "connector onboarding password")
 	idp = flag.String("idp", "", "IDP to use to onboard")
 	clientid = flag.String("client", "", "IDP client id")
+	gateway = flag.String("gateway", "", "Gateway name")
 	flag.Parse()
 	controller = *c
 }
