@@ -10,12 +10,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef struct CRegistrationInfo {
+typedef struct CRegistrationInfo
+{
     char *host;
     char *access_token;
     char *connect_id;
     char *cluster;
-    char *podname;
     char **domains;
     int num_domains;
     char *ca_cert;

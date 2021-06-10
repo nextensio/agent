@@ -34,7 +34,6 @@ type RegistrationInfo struct {
 	AccessToken string   `json:"accessToken"`
 	ConnectID   string   `json:"connectid"`
 	Cluster     string   `json:"cluster"`
-	Podname     string   `json:"podname"`
 	Domains     []string `json:"domains"`
 	CACert      []rune   `json:"cacert"`
 	Userid      string   `json:"userid"`
@@ -103,7 +102,7 @@ func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInf
 	p := &nxthdr.NxtOnboard{
 		Agent: isAgent, Userid: regInfo.Userid, Uuid: uuid,
 		AccessToken: regInfo.AccessToken, Services: regInfo.Services,
-		Cluster: regInfo.Cluster, Podname: regInfo.Podname,
+		Cluster: regInfo.Cluster,
 	}
 	hdr := nxthdr.NxtHdr{Hdr: &nxthdr.NxtHdr_Onboard{p}}
 	retry := 0

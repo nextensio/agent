@@ -219,7 +219,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         os_log("CA cert count %d", (json["cacert"] as! NSMutableArray).count)
         os_log("UserId %{public}@", json["userid"] as! String)
         os_log("cluster %{public}@", json["cluster"] as! String)
-        os_log("podname %{public}@", json["podname"] as! String)
         os_log("UUID %{public}@", UUID().uuidString)
 
         var registration = CRegistrationInfo()
@@ -229,7 +228,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         registration.connect_id = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.cluster = UnsafeMutablePointer<Int8>(mutating: (json["cluster"] as! NSString).utf8String)
-        registration.podname = UnsafeMutablePointer<Int8>(mutating: (json["podname"] as! NSString).utf8String)
         registration.uuid = UnsafeMutablePointer<Int8>(mutating: (UUID().uuidString as NSString).utf8String)
         
         let dom = json["domains"] as! NSMutableArray
@@ -300,7 +298,6 @@ extension CRegistrationInfo {
                   access_token: nil,
                   connect_id: nil,
                   cluster: nil,
-                  podname: nil,
                   domains: nil,
                   num_domains: 0,
                   ca_cert: nil,

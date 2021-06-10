@@ -188,7 +188,6 @@ public class NxtAgent extends AppCompatActivity {
             String host = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
             String cluster = onboard.getString("cluster");
-            String podname = onboard.getString("podname");
             JSONArray cert = onboard.getJSONArray("cacert");
             byte[] cacert = new byte[cert.length()];
             for(int i = 0; i < cert.length(); i++) {
@@ -204,7 +203,7 @@ public class NxtAgent extends AppCompatActivity {
             String[] services = new String[1];
             services[0] = connectid;
 
-            nxtOnboard(accessToken, uuid, userid, host, connectid, cluster, podname, cacert, domains, services);
+            nxtOnboard(accessToken, uuid, userid, host, connectid, cluster, cacert, domains, services);
             startVPN();
 
         } catch (final JSONException e)  {
@@ -363,7 +362,7 @@ public class NxtAgent extends AppCompatActivity {
     }    
 
     private static native void nxtOnboard(String accessToken, String uuid, String userid, String host,
-                                          String connectid, String cluster, String podname, 
+                                          String connectid, String cluster, 
                                           byte []cacert, String []domains, String []services);
 
 }
