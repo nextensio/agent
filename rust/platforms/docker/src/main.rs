@@ -9,6 +9,7 @@ use std::thread;
 use std::time::Duration;
 use std::{ffi::CString, usize};
 use uuid::Uuid;
+mod pkce;
 
 const RXMTU: usize = 1500;
 const TXMTU: usize = 1500;
@@ -152,26 +153,14 @@ fn do_onboard(controller: String, username: String, password: String) {
     }
 }
 
-// Gaah.. We need to rewrite this pkce.go in rust.
-// Taking the lazy route at the moment and just using the go version
 fn get_token(username: &str, password: &str) -> Option<String> {
-    let out = Command::new("/rust/files/pkce")
-        .arg("https://dev-635657.okta.com")
-        .arg(username)
-        .arg(password)
-        .output();
-    if let Ok(token) = out {
-        match token.status.code() {
-            Some(code) => {
-                if code == 0 {
-                    return Some(String::from_utf8_lossy(&token.stdout).trim().to_string());
-                }
-            }
-            _ => (),
-        }
+    let out = pkce::authenticate(true, username, password);
+    if let Some(token) = out {
+        return Some(token.access_token);
     }
     return None;
 }
+
 fn okta_onboard(controller: String, username: String, password: String) {
     let token = get_token(&username, &password);
     if token.is_none() {

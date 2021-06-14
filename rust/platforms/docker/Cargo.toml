@@ -9,6 +9,9 @@ log = "0.4.14"
 env_logger = "0.8.3"
 libc = "0.2.86"
 serde = "1.0.124"
+serde_json = "1.0.64"
+regex = "1"
+oauth2 = "3.0"
 reqwest = { version = "0.9.24", features = ["tls"]}
 uuid = { version = "0.8", features = ["v4"] }
 clap = "2.33.3"
