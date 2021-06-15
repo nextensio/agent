@@ -389,8 +389,10 @@ dependencies = [
  "oauth2",
  "regex",
  "reqwest",
+ "rpassword",
  "serde",
  "serde_json",
+ "signal-hook",
  "uuid 0.8.2",
 ]
 
@@ -1592,6 +1594,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpassword"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc936cf8a7ea60c58f030fd36a612a48f440610214dc54bc36431f9ea0c3efb"
+dependencies = [
+ "libc",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1725,6 +1737,25 @@ dependencies = [
 name = "shm"
 version = "0.1.0"
 source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772edd7415714605817c51cdc1d0c"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "signal-hook"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "470c5a6397076fae0094aaf06a08e6ba6f37acb77d3b1b91ea92b4d6c8650c39"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
 dependencies = [
  "libc",
 ]

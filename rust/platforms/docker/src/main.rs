@@ -1,8 +1,11 @@
 use clap::{App, Arg};
 use log::error;
 use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistrationInfo};
+use regex::Regex;
 use serde::Deserialize;
+use signal_hook::{consts::SIGABRT, consts::SIGINT, consts::SIGTERM, iterator::Signals};
 use std::fmt;
+use std::io::Write;
 use std::os::raw::{c_char, c_int};
 use std::process::Command;
 use std::thread;
@@ -50,19 +53,77 @@ impl fmt::Display for OnboardInfo {
     }
 }
 
-fn cmd(cmd: &str) {
+fn cmd(cmd: &str) -> (String, String) {
     let mut shell = Command::new("bash");
-    shell.arg("-c").arg(cmd).output().expect(cmd);
+    let output = shell.arg("-c").arg(cmd).output().expect(cmd);
+    let mut stdout = "".to_string();
+    let mut stderr = "".to_string();
+    if let Ok(s) = String::from_utf8(output.stdout) {
+        stdout = s;
+    }
+    if let Ok(s) = String::from_utf8(output.stderr) {
+        stderr = s;
+    }
+    return (stdout, stderr);
 }
 
-// The files/run.sh will create a route table named nxt and add
-// some rules to mark packets in that table etc.. BEFORe the agent runs
+fn cleanup_iptables() {
+    let (out, _) = cmd("ip rule ls");
+    for o in out.lines() {
+        if o != "" {
+            let re = Regex::new(r"([0-9]+):.*0x3a73.*215").unwrap();
+            match re.captures(&o) {
+                Some(r) => {
+                    let s = r.get(1).map_or("", |m| m.as_str());
+                    let c = format!("ip rule del prio {}", s);
+                    cmd(&c);
+                }
+                None => {}
+            }
+        }
+    }
+
+    let (out, _) = cmd("iptables -t mangle -nvL");
+    for o in out.lines() {
+        if o != "" {
+            let re = Regex::new(r".*MARK.*set.*0x3a73.*").unwrap();
+            if re.is_match(&o) {
+                cmd("iptables -D PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+            }
+        }
+    }
+}
+
+// The numbers 14963, 215 etc.. are chosen to be "random" so that
+// if the user's linux already has other rules, we dont clash with
+// it. Ideally we should probe and find out free numbers to use, this
+// is just a poor man's solution for the time being
+fn add_iptables() {
+    cmd("ip rule add fwmark 14963 table 215");
+    cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+}
+
+fn kill_agent() {
+    cmd("pkill -9 nextensio");
+}
+
+fn has_iptables() -> bool {
+    let (out1, _) = cmd("which iptables");
+    let (out2, _) = cmd("which ip");
+    return out1 != "" && out2 != "";
+}
+
+fn is_root() -> bool {
+    let (_, err) = cmd("iptables -nvL");
+    return !err.contains("denied");
+}
+
 fn config_tun(mtu: usize) {
-    cmd("ifconfig tun0 up");
-    cmd("ifconfig tun0 169.254.2.1 netmask 255.255.255.0");
-    cmd(&format!("ifconfig tun0 mtu {}", mtu));
+    cmd("ifconfig tun215 up");
+    cmd("ifconfig tun215 169.254.2.1 netmask 255.255.255.0");
+    cmd(&format!("ifconfig tun215 mtu {}", mtu));
     cmd(&format!(
-        "ip route add default via 169.254.2.1 dev tun0 mtu {} table nxt",
+        "ip route add default via 169.254.2.1 dev tun215 mtu {} table 215",
         mtu
     ));
 }
@@ -73,8 +134,10 @@ fn create_tun() -> Result<i32, std::io::Error> {
     ifr[0] = 't' as u8;
     ifr[1] = 'u' as u8;
     ifr[2] = 'n' as u8;
-    ifr[3] = '0' as u8;
-    ifr[4] = 0;
+    ifr[3] = '2' as u8;
+    ifr[4] = '1' as u8;
+    ifr[5] = '5' as u8;
+    ifr[6] = 0;
     ifr[libc::IFNAMSIZ] = (flags & 0xFF) as u8;
     ifr[libc::IFNAMSIZ + 1] = ((flags & 0xFF00) >> 8) as u8;
     unsafe {
@@ -136,8 +199,8 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(controller: String, username: String, password: String) {
-    okta_onboard(controller.clone(), username.clone(), password.clone());
+fn do_onboard(test: bool, controller: String, username: String, password: String) {
+    okta_onboard(test, controller.clone(), username.clone(), password.clone());
     let mut stats = AgentStats::default();
     let mut gateway_flaps = 0;
     loop {
@@ -146,23 +209,24 @@ fn do_onboard(controller: String, username: String, password: String) {
         }
         if stats.gateway_flaps - gateway_flaps >= 3 {
             error!("Onboarding again");
-            okta_onboard(controller.clone(), username.clone(), password.clone());
+            cleanup_iptables();
+            okta_onboard(test, controller.clone(), username.clone(), password.clone());
         }
         gateway_flaps = stats.gateway_flaps;
         thread::sleep(Duration::new(10, 0));
     }
 }
 
-fn get_token(username: &str, password: &str) -> Option<String> {
-    let out = pkce::authenticate(true, username, password);
+fn get_token(test: bool, username: &str, password: &str) -> Option<String> {
+    let out = pkce::authenticate(test, username, password);
     if let Some(token) = out {
         return Some(token.access_token);
     }
     return None;
 }
 
-fn okta_onboard(controller: String, username: String, password: String) {
-    let token = get_token(&username, &password);
+fn okta_onboard(test: bool, controller: String, username: String, password: String) {
+    let token = get_token(test, &username, &password);
     if token.is_none() {
         error!("Cannot get access token");
         return;
@@ -189,6 +253,7 @@ fn okta_onboard(controller: String, username: String, password: String) {
                         } else {
                             error!("Onboarded {}", o);
                             agent_onboard(&o, access_token.clone());
+                            add_iptables();
                         }
                     }
                     Err(e) => {
@@ -206,42 +271,78 @@ fn okta_onboard(controller: String, username: String, password: String) {
 }
 
 fn main() {
+    if !has_iptables() {
+        println!("Need iptables and iproute2 packages: sudo apt-install iptables iproute2");
+        return;
+    }
+    if !is_root() {
+        println!("Need to run as sudo: sudo nextensio");
+        return;
+    }
+
     env_logger::init();
     let matches = App::new("NxtAgent")
         .arg(
-            Arg::with_name("controller")
-                .long("controller")
-                .takes_value(true)
-                .help("Controller FQDN/ip address"),
+            Arg::with_name("start")
+                .long("start")
+                .help("Connect to Nextensio"),
         )
         .arg(
-            Arg::with_name("username")
-                .long("username")
-                .takes_value(true)
-                .help("User Id"),
-        )
-        .arg(
-            Arg::with_name("password")
-                .long("password")
-                .takes_value(true)
-                .help("Password"),
+            Arg::with_name("stop")
+                .long("stop")
+                .help("Disconnect from Nextensio"),
         )
         .get_matches();
 
-    let controller = matches
-        .value_of("controller")
-        .unwrap_or("server.nextensio.net:8080")
-        .to_owned();
-    let username = matches.value_of("username").unwrap_or("").to_owned();
-    let password = matches.value_of("password").unwrap_or("").to_owned();
+    if matches.is_present("stop") {
+        kill_agent();
+        cleanup_iptables();
+        return;
+    }
 
-    error!("controller {}", controller);
+    if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
+        thread::spawn(move || {
+            for sig in signals.forever() {
+                println!("Received signal {:?}, terminating nextensio", sig);
+                cleanup_iptables();
+                std::process::exit(0);
+            }
+        });
+    }
+
+    let mut test = true;
+    let mut controller = "server.nextensio.net:8080".to_string();
+    let mut username = "".to_string();
+    let mut password = "".to_string();
+
+    if matches.is_present("start") {
+        test = false;
+        print!("Username: ");
+        std::io::stdout().flush().unwrap();
+        std::io::stdin()
+            .read_line(&mut username)
+            .expect("Please enter a username");
+        username = username.trim().to_string();
+        print!("Password: ");
+        std::io::stdout().flush().unwrap();
+        password = rpassword::read_password().unwrap_or(password);
+    } else {
+        for (key, value) in std::env::vars() {
+            println!("key {} value {}", key, value);
+            if key == "NXT_USERNAME" {
+                username = value;
+            } else if key == "NXT_PWD" {
+                password = value;
+            } else if key == "NXT_CONTROLLER" {
+                controller = value;
+            }
+        }
+    }
 
     let fd = create_tun().unwrap();
-    // linux tun0 does not like mtu of 65536, it can only take 65535
-    config_tun(RXMTU - 1);
+    config_tun(RXMTU);
 
-    thread::spawn(move || do_onboard(controller, username, password));
+    thread::spawn(move || do_onboard(test, controller, username, password));
 
     unsafe {
         agent_on(fd);
