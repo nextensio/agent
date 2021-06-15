@@ -89,6 +89,7 @@ fn cleanup_iptables() {
             let re = Regex::new(r".*MARK.*set.*0x3a73.*").unwrap();
             if re.is_match(&o) {
                 cmd("iptables -D PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+                cmd("iptables -D OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
             }
         }
     }
@@ -98,9 +99,13 @@ fn cleanup_iptables() {
 // if the user's linux already has other rules, we dont clash with
 // it. Ideally we should probe and find out free numbers to use, this
 // is just a poor man's solution for the time being
-fn add_iptables() {
+fn add_iptables(test: bool) {
     cmd("ip rule add fwmark 14963 table 215");
-    cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+    if test {
+        cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+    } else {
+        cmd("iptables -A OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
+    }
 }
 
 fn kill_agent() {
@@ -113,12 +118,16 @@ fn has_iptables() -> bool {
     return out1 != "" && out2 != "";
 }
 
+fn has_addgroup() -> bool {
+    return std::path::Path::new("/usr/sbin/addgroup").exists();
+}
+
 fn is_root() -> bool {
     let (_, err) = cmd("iptables -nvL");
     return !err.contains("denied");
 }
 
-fn config_tun(mtu: usize) {
+fn config_tun(test: bool, mtu: usize) {
     cmd("ifconfig tun215 up");
     cmd("ifconfig tun215 169.254.2.1 netmask 255.255.255.0");
     cmd(&format!("ifconfig tun215 mtu {}", mtu));
@@ -126,6 +135,7 @@ fn config_tun(mtu: usize) {
         "ip route add default via 169.254.2.1 dev tun215 mtu {} table 215",
         mtu
     ));
+    add_iptables(test);
 }
 
 fn create_tun() -> Result<i32, std::io::Error> {
@@ -149,7 +159,6 @@ fn create_tun() -> Result<i32, std::io::Error> {
         libc::fcntl(fd, libc::F_SETFL, old | libc::O_NONBLOCK);
         let rc = libc::ioctl(fd, 1074025674, ifr.as_mut_ptr());
         error!("FD {} RC {}", fd, rc);
-        println!("FD {} RC {}", fd, rc);
         Ok(fd)
     }
 }
@@ -200,17 +209,17 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
 fn do_onboard(test: bool, controller: String, username: String, password: String) {
-    okta_onboard(test, controller.clone(), username.clone(), password.clone());
+    let mut onboarded = okta_onboard(test, controller.clone(), username.clone(), password.clone());
     let mut stats = AgentStats::default();
     let mut gateway_flaps = 0;
     loop {
         unsafe {
             agent_stats(&mut stats);
         }
-        if stats.gateway_flaps - gateway_flaps >= 3 {
+        if !onboarded || stats.gateway_flaps - gateway_flaps >= 3 {
             error!("Onboarding again");
-            cleanup_iptables();
-            okta_onboard(test, controller.clone(), username.clone(), password.clone());
+            println!("Connected flapped, onboarding again");
+            onboarded = okta_onboard(test, controller.clone(), username.clone(), password.clone());
         }
         gateway_flaps = stats.gateway_flaps;
         thread::sleep(Duration::new(10, 0));
@@ -225,11 +234,12 @@ fn get_token(test: bool, username: &str, password: &str) -> Option<String> {
     return None;
 }
 
-fn okta_onboard(test: bool, controller: String, username: String, password: String) {
+fn okta_onboard(test: bool, controller: String, username: String, password: String) -> bool {
     let token = get_token(test, &username, &password);
     if token.is_none() {
         error!("Cannot get access token");
-        return;
+        println!("Login to nextensio failed (cannot get tokens), will try again");
+        return false;
     }
     let access_token = token.unwrap();
     // TODO: Once we start using proper certs for our production clusters, make this
@@ -250,22 +260,34 @@ fn okta_onboard(test: bool, controller: String, username: String, password: Stri
                     Ok(o) => {
                         if o.Result != "ok" {
                             error!("Result from controller not ok {}", o.Result);
+                            println!("Login to nextensio failed ({}), will try again", o.Result);
+                            return false;
                         } else {
                             error!("Onboarded {}", o);
+                            println!("Login to nextensio succesful");
                             agent_onboard(&o, access_token.clone());
-                            add_iptables();
+                            return true;
                         }
                     }
                     Err(e) => {
                         error!("HTTP body failed {:?}", e);
+                        println!("Login to nextensio failed ({}), will try again", e);
+                        return false;
                     }
                 }
             } else {
                 error!("HTTP Get result {}, failed", res.status());
+                println!(
+                    "Login to nextensio failed ({}), will try again",
+                    res.status()
+                );
+                return false;
             }
         }
         Err(e) => {
             error!("HTTP Get failed {:?}", e);
+            println!("Login to nextensio failed ({}), will try again", e);
+            return false;
         }
     }
 }
@@ -275,18 +297,16 @@ fn main() {
         println!("Need iptables and iproute2 packages: sudo apt-install iptables iproute2");
         return;
     }
+    if !has_addgroup() {
+        println!("Need /usr/sbin/addgroup command: sudo apt-install addgroup");
+        return;
+    }
     if !is_root() {
         println!("Need to run as sudo: sudo nextensio");
         return;
     }
 
-    env_logger::init();
     let matches = App::new("NxtAgent")
-        .arg(
-            Arg::with_name("start")
-                .long("start")
-                .help("Connect to Nextensio"),
-        )
         .arg(
             Arg::with_name("stop")
                 .long("stop")
@@ -310,37 +330,62 @@ fn main() {
         });
     }
 
+    // "test" is true if we are running in a docker container in nextensio testbed
+    // Right now this same layer is used for testbed and real agent - not a lot of
+    // difference between them, but at some point we might seperate out both
     let mut test = true;
+    let mut found = 0;
     let mut controller = "server.nextensio.net:8080".to_string();
     let mut username = "".to_string();
     let mut password = "".to_string();
 
-    if matches.is_present("start") {
+    for (key, value) in std::env::vars() {
+        if key == "NXT_USERNAME" {
+            username = value;
+            found += 1;
+        } else if key == "NXT_PWD" {
+            password = value;
+            found += 1;
+        } else if key == "NXT_CONTROLLER" {
+            controller = value;
+            found += 1;
+        }
+    }
+
+    if found != 3 {
+        // Add a group to run this app as, this is all temporary till we
+        // figure out a proper installation process on linux for these agents.
+        // The 14963 is just some groupid we pick, its not related to the set-mark
+        cmd("/usr/sbin/addgroup --gid 14963 nextensioapp");
+        unsafe {
+            let ret = libc::setgid(14963);
+            if ret != 0 {
+                println!(
+                    "Unexpected error: Unable to move nextensio app to group nextensioapp {}",
+                    ret
+                );
+                return;
+            }
+        }
         test = false;
-        print!("Username: ");
+        controller = "server.nextensio.net:8080".to_string();
+        print!("Nextensio Username: ");
         std::io::stdout().flush().unwrap();
         std::io::stdin()
             .read_line(&mut username)
             .expect("Please enter a username");
         username = username.trim().to_string();
-        print!("Password: ");
+        print!("Nextensio Password: ");
         std::io::stdout().flush().unwrap();
         password = rpassword::read_password().unwrap_or(password);
-    } else {
-        for (key, value) in std::env::vars() {
-            println!("key {} value {}", key, value);
-            if key == "NXT_USERNAME" {
-                username = value;
-            } else if key == "NXT_PWD" {
-                password = value;
-            } else if key == "NXT_CONTROLLER" {
-                controller = value;
-            }
-        }
+        println!("Trying to login to nextensio");
     }
 
+    if test {
+        env_logger::init();
+    }
     let fd = create_tun().unwrap();
-    config_tun(RXMTU);
+    config_tun(test, RXMTU);
 
     thread::spawn(move || do_onboard(test, controller, username, password));
 

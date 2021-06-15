@@ -161,10 +161,18 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
                     }
                     Err(e) => {
                         error!("HTTP authn body failed {:?}", e);
+                        println!(
+                            "Authentication failed ({}), please check username/password",
+                            res.status()
+                        )
                     }
                 }
             } else {
                 error!("HTTP authn result {}, failed", res.status());
+                println!(
+                    "Authentication failed ({}), please check username/password",
+                    res.status()
+                )
             }
         }
         Err(e) => {
