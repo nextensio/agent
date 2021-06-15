@@ -1,5 +1,5 @@
 [package]
-name = "docker"
+name = "nextensio"
 version = "0.1.0"
 authors = ["Nextensio <team@nextensio.net>"]
 edition = "2018"

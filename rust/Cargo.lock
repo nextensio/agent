@@ -378,25 +378,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "docker"
-version = "0.1.0"
-dependencies = [
- "agent",
- "clap",
- "env_logger",
- "libc",
- "log",
- "oauth2",
- "regex",
- "reqwest",
- "rpassword",
- "serde",
- "serde_json",
- "signal-hook",
- "uuid 0.8.2",
-]
-
-[[package]]
 name = "dtoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1027,6 +1008,25 @@ dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common)",
  "mio 0.7.11",
  "object-pool",
+]
+
+[[package]]
+name = "nextensio"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "clap",
+ "env_logger",
+ "libc",
+ "log",
+ "oauth2",
+ "regex",
+ "reqwest",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "uuid 0.8.2",
 ]
 
 [[package]]
