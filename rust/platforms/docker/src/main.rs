@@ -264,7 +264,7 @@ fn okta_onboard(test: bool, controller: String, username: String, password: Stri
                             return false;
                         } else {
                             error!("Onboarded {}", o);
-                            println!("Login to nextensio succesful");
+                            println!("Login to nextensio successful");
                             agent_onboard(&o, access_token.clone());
                             return true;
                         }
