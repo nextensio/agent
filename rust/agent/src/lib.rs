@@ -1623,7 +1623,7 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
             STATS_GWUP.store(0, Relaxed);
             STATS_NUMFLAPS.fetch_add(1, Relaxed);
             agent.last_flap = Instant::now();
-            error!("Gateway transport closed, try opening again");
+            error!("GOPA: Gateway transport closed, try opening again");
             agent.gw_onboarded = false;
             gw_tun
                 .tun
