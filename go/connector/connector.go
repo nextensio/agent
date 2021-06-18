@@ -1,17 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	"gitlab.com/nextensio/common/go/transport/netconn"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var controller string
@@ -99,7 +103,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.
 		}
 		rx := src.Rx
 		tx := src.Tx
-		hdr, buf, err := src.Conn.Read()
+		_, buf, err := src.Conn.Read()
 		if err != nil {
 			ignore := false
 			if err.Err != nil {
@@ -119,7 +123,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.
 			}
 		}
 		src.Rx += 1
-		hdr = &nxthdr.NxtHdr{}
+		hdr := &nxthdr.NxtHdr{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 		e := dest.Write(hdr, buf)
 		if e != nil {
@@ -174,15 +178,29 @@ func monitorGw(lg *log.Logger) {
 	}
 }
 
+func credentials() (string, string) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Nextensio Username: ")
+	username, _ := reader.ReadString('\n')
+	fmt.Print("Nextensio Password: ")
+	bytePassword, _ := terminal.ReadPassword(0)
+	password := string(bytePassword)
+	return strings.TrimSpace(username), strings.TrimSpace(password)
+}
+
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
 	username = flag.String("username", "", "connector onboarding userid")
 	password = flag.String("password", "", "connector onboarding password")
-	idp = flag.String("idp", "", "IDP to use to onboard")
-	clientid = flag.String("client", "", "IDP client id")
+	idp = flag.String("idp", "https://dev-24743301.okta.com", "IDP to use to onboard")
+	clientid = flag.String("client", "0oav0q3hn65I4Zkmr5d6", "IDP client id")
 	gateway = flag.String("gateway", "", "Gateway name")
 	flag.Parse()
 	controller = *c
+	if *username == "" || *password == "" {
+		*username, *password = credentials()
+	}
+	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway)
 }
 
 func authAndOnboard(lg *log.Logger) bool {
@@ -202,7 +220,7 @@ func main() {
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
 	unusedAppStreams = make(chan common.NxtStream)
-	lg := log.New(os.Stdout, "CNTR", 0)
+	lg := log.New(os.Stdout, "CNTR\n", 0)
 	args()
 	for {
 		if authAndOnboard(lg) == false {
