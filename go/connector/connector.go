@@ -8,7 +8,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,18 +20,68 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+type flowKey struct {
+	sport uint32
+	dport uint32
+	proto uint32
+	src   string
+	dest  string
+}
+
+type flowTuns struct {
+	app  common.Transport
+	gwRx common.Transport
+}
+
+var flowLock sync.RWMutex
+var flows map[flowKey]*flowTuns
+
 var controller string
 var regInfo RegistrationInfo
 var mainCtx context.Context
 var gwTun common.Transport
 var gwStreams chan common.NxtStream
-var unusedAppStreams chan common.NxtStream
+var appStreams chan common.NxtStream
 var unique uuid.UUID
 var username *string
 var password *string
 var idp *string
 var clientid *string
 var gateway *string
+var ports []int = []int{}
+
+func flowAdd(key *flowKey, app common.Transport) {
+	flowLock.Lock()
+	defer flowLock.Unlock()
+
+	flows[*key] = &flowTuns{app: app, gwRx: nil}
+}
+
+func flowDel(key *flowKey) {
+	flowLock.Lock()
+	defer flowLock.Unlock()
+
+	tun := flows[*key]
+	if tun != nil {
+		delete(flows, *key)
+		if tun.gwRx != nil {
+			tun.gwRx.Close()
+		}
+	}
+
+}
+
+func flowGet(key flowKey, gwRx common.Transport) common.Transport {
+	flowLock.Lock()
+	defer flowLock.Unlock()
+
+	tun := flows[key]
+	if tun != nil {
+		tun.gwRx = gwRx
+		return tun.app
+	}
+	return nil
+}
 
 func gwToAppClose(tun common.Transport, dest ConnStats) {
 	tun.Close()
@@ -38,10 +90,8 @@ func gwToAppClose(tun common.Transport, dest ConnStats) {
 	}
 }
 
-// Stream coming from the gateway, create a new tcp/udp socket
-// and send the data over that socket
-func gwToApp(lg *log.Logger, tun common.Transport) {
-	var dest ConnStats
+// Stream coming from the gateway, send data over tcp/udp socket on the connector
+func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 
 	for {
 		hdr, buf, err := tun.Read()
@@ -51,22 +101,43 @@ func gwToApp(lg *log.Logger, tun common.Transport) {
 		}
 		if dest.Conn == nil {
 			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-			if flow.Proto == common.TCP {
-				dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.DestSvc, flow.Dport)
-			} else {
-				dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.DestSvc, flow.Dport)
+			key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
+			dest.Conn = flowGet(key, tun)
+			if dest.Conn == nil {
+				if flow.Proto == common.TCP {
+					dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.DestSvc, flow.Dport)
+				} else {
+					dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.DestSvc, flow.Dport)
+				}
+				// the appStreams passed here never gets used
+				e := dest.Conn.Dial(appStreams)
+				if e != nil {
+					gwToAppClose(tun, dest)
+					return
+				}
+
+				// This flow is originated for the first time from the gateway
+				// to connector, so lets create a reverse direction here. Otherwise
+				// the flow is originated from the connector to gateway, so reverse already exists
+				newTun := tun.NewStream(nil)
+				if newTun == nil {
+					gwToAppClose(tun, dest)
+					return
+				}
+				// copy the flow
+				newFlow := *flow
+				// Swap source and dest agents
+				s, d := newFlow.SourceAgent, newFlow.DestAgent
+				newFlow.SourceAgent, newFlow.DestAgent = d, s
+				newFlow.ResponseData = true
+				var timeout time.Duration
+				if newFlow.Proto == common.TCP {
+					timeout = TCP_AGER
+				} else {
+					timeout = UDP_AGER
+				}
+				go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
 			}
-			e := dest.Conn.Dial(unusedAppStreams)
-			if e != nil {
-				gwToAppClose(tun, dest)
-				return
-			}
-			newTun := tun.NewStream(nil)
-			if newTun == nil {
-				gwToAppClose(tun, dest)
-				return
-			}
-			go appToGw(lg, &dest, newTun, *flow, tun)
 		}
 		e := dest.Conn.Write(hdr, buf)
 		if e != nil {
@@ -77,33 +148,32 @@ func gwToApp(lg *log.Logger, tun common.Transport) {
 	}
 }
 
-func appToGwClose(src *ConnStats, dest common.Transport, gwRx common.Transport) {
+func appToGwClose(src *ConnStats, dest common.Transport, gwRx common.Transport, key *flowKey) {
 	src.Conn.Close()
 	dest.Close()
-	gwRx.Close()
+	if gwRx != nil {
+		gwRx.Close()
+	}
+	if key != nil {
+		flowDel(key)
+	}
 }
 
 // Data coming back from a tcp/udp socket. Send the data over the gateway
 // stream that initially created the socket
-func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.NxtFlow, gwRx common.Transport) {
+func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time.Duration, flow *nxthdr.NxtFlow, gwRx common.Transport) {
 
-	// Swap source and dest agents
-	s, d := flow.SourceAgent, flow.DestAgent
-	flow.SourceAgent, flow.DestAgent = d, s
-
+	var key *flowKey
+	var destAgent string
 	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
 	// the close is cascaded to the the cluster
 	dest.CloseCascade(src.Conn)
 
 	for {
-		if flow.Proto == common.TCP {
-			src.Conn.SetReadDeadline(time.Now().Add(TCP_AGER))
-		} else {
-			src.Conn.SetReadDeadline(time.Now().Add(UDP_AGER))
-		}
+		src.Conn.SetReadDeadline(time.Now().Add(timeout))
 		rx := src.Rx
 		tx := src.Tx
-		_, buf, err := src.Conn.Read()
+		hdr, buf, err := src.Conn.Read()
 		if err != nil {
 			ignore := false
 			if err.Err != nil {
@@ -111,23 +181,56 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, flow nxthdr.
 					// We have not had any rx/tx for the RFC stipulated flow ageout time period,
 					// so close the session, this will trigger a cascade of closes upto the connector
 					if rx == src.Rx && tx == src.Tx {
-						lg.Println("Flow aged out", flow)
+						lg.Println("Flow aged out", *flow)
 					} else {
 						ignore = true
 					}
 				}
 			}
 			if !ignore {
-				appToGwClose(src, dest, gwRx)
+				appToGwClose(src, dest, gwRx, key)
 				return
 			}
 		}
 		src.Rx += 1
-		hdr := &nxthdr.NxtHdr{}
-		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
+		// if hdr is nil, that means this is a gateway originated flow, if its non-nil then
+		// its a connector originated flow (a "server" NetConn). If hdr is nil, then the
+		// flow details are passed in as a copy of the flow that came in from the gateway.
+		// If hdr is non-nil, that contains details parsed from the packet, so we construct
+		// a flow using those parsed details
+		if hdr == nil {
+			hdr = &nxthdr.NxtHdr{}
+			hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: flow}
+		} else {
+			// We are saving this flow in the hashtable only in the case of a "connector originated flow",
+			// because when the response comes back from the gateway, we need tp find the socket for the
+			// connector origin side of the flow. We could keep this common for connector/gateway originated
+			// and cache the flow all the time, but there is no need as of today and hence why waste memory
+			// since the bulk of the use case will be gateway originated flows
+			flow = hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+			if destAgent == "" {
+				for _, d := range regInfo.Domains {
+					if strings.Contains(flow.DestSvc, d) {
+						destAgent = d
+					}
+				}
+				// No service advertised that matches the one we want
+				if destAgent == "" {
+					appToGwClose(src, dest, gwRx, key)
+					return
+				}
+			}
+			flow.SourceAgent = regInfo.Services[0]
+			flow.DestAgent = destAgent
+			flow.ResponseData = false
+			if key == nil {
+				key = &flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
+				flowAdd(key, src.Conn)
+			}
+		}
 		e := dest.Write(hdr, buf)
 		if e != nil {
-			appToGwClose(src, dest, gwRx)
+			appToGwClose(src, dest, gwRx, key)
 			return
 		}
 	}
@@ -195,12 +298,24 @@ func args() {
 	idp = flag.String("idp", "https://dev-24743301.okta.com", "IDP to use to onboard")
 	clientid = flag.String("client", "0oav0q3hn65I4Zkmr5d6", "IDP client id")
 	gateway = flag.String("gateway", "", "Gateway name")
+	p := flag.String("ports", "", "Ports to listen on, comma seperated")
 	flag.Parse()
+	if *p != "" {
+		plist := strings.Split(*p, ",")
+		for _, l := range plist {
+			p1, e := strconv.Atoi(l)
+			if e != nil {
+				fmt.Println("Ports need to be comma seperated integers: ", *p)
+				os.Exit(1)
+			}
+			ports = append(ports, p1)
+		}
+	}
 	controller = *c
 	if *username == "" || *password == "" {
 		*username, *password = credentials()
 	}
-	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway)
+	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway, ports)
 }
 
 func authAndOnboard(lg *log.Logger) bool {
@@ -214,12 +329,43 @@ func authAndOnboard(lg *log.Logger) bool {
 	return OktaInit(lg, &regInfo, controller)
 }
 
+func svrListen(lg *log.Logger, conn *netconn.NetConn, port int) {
+	for {
+		conn.Listen(appStreams)
+		lg.Fatalf("Listen failed on port ", port)
+	}
+}
+
+func svrAccept(lg *log.Logger) {
+	for {
+		select {
+		case stream := <-appStreams:
+			if gwTun == nil {
+				// We are not ready yet
+				stream.Stream.Close()
+			} else {
+				newTun := gwTun.NewStream(nil)
+				if newTun == nil {
+					lg.Println("Cannot create new gateway stream")
+					stream.Stream.Close()
+				} else {
+					// Right now we support only tcp
+					var dest ConnStats
+					dest.Conn = stream.Stream
+					go appToGw(lg, &dest, newTun, TCP_AGER, nil, nil)
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	common.MAXBUF = (64 * 1024)
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
-	unusedAppStreams = make(chan common.NxtStream)
+	appStreams = make(chan common.NxtStream)
+	flows = make(map[flowKey]*flowTuns)
 	lg := log.New(os.Stdout, "CNTR\n", 0)
 	args()
 	for {
@@ -232,12 +378,20 @@ func main() {
 	}
 	go monitorGw(lg)
 
+	for p := range ports {
+		// Right now we support only tcp
+		conn := netconn.NewClient(mainCtx, lg, "tcp", "", uint32(p))
+		go svrListen(lg, conn, p)
+	}
+	go svrAccept(lg)
+
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction
 	for {
 		select {
 		case stream := <-gwStreams:
-			go gwToApp(lg, stream.Stream)
+			var dest ConnStats
+			go gwToApp(lg, stream.Stream, dest)
 		}
 	}
 }
