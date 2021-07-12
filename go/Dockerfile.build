@@ -1,5 +1,5 @@
 FROM golang:1.15.7-alpine3.12
-RUN apk update && apk add lighttpd && apk add git && apk add openssh
+RUN apk update && apk add lighttpd git openssh curl
 
 # For emulating a private URL webservice
 RUN mkdir /etc/lighttpd/certs
