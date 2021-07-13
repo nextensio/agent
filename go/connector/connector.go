@@ -340,6 +340,7 @@ func svrAccept(lg *log.Logger) {
 	for {
 		select {
 		case stream := <-appStreams:
+			lg.Println("Accept stream")
 			if gwTun == nil {
 				// We are not ready yet
 				stream.Stream.Close()
@@ -378,7 +379,7 @@ func main() {
 	}
 	go monitorGw(lg)
 
-	for p := range ports {
+	for _, p := range ports {
 		// Right now we support only tcp
 		conn := netconn.NewClient(mainCtx, lg, "tcp", "", uint32(p))
 		go svrListen(lg, conn, p)
