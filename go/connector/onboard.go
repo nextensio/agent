@@ -73,7 +73,8 @@ func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool
 func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
 	req := http.Header{}
 	req.Add("x-nextensio-connect", regInfo.ConnectID)
-	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req)
+	// Ask for a keepalive to be sent once in two seconds
+	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req, 2*1000)
 	if err := wsock.Dial(c); err != nil {
 		lg.Println("Cannot dial websocket", err, regInfo.ConnectID)
 		return nil

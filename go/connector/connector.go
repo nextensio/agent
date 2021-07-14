@@ -164,7 +164,7 @@ func appToGwClose(src *ConnStats, dest common.Transport, gwRx common.Transport, 
 func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time.Duration, flow *nxthdr.NxtFlow, gwRx common.Transport) {
 
 	var key *flowKey
-	var destAgent string
+	var destAgent string = ""
 	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
 	// the close is cascaded to the the cluster
 	dest.CloseCascade(src.Conn)
@@ -340,7 +340,6 @@ func svrAccept(lg *log.Logger) {
 	for {
 		select {
 		case stream := <-appStreams:
-			lg.Println("Accept stream")
 			if gwTun == nil {
 				// We are not ready yet
 				stream.Stream.Close()
