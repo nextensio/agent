@@ -1,9 +1,9 @@
-# nxt-windows
+# nxt-windows installation, building and running
 
-MS Power Shell Installation
+<b>MS Power Shell Installation</b>
 1. Open Microsoft Store, search for PowerShell and Install.
 
-MS Visual Studio Installation
+<b>MS Visual Studio Installation</b>
 1. Download Microsoft Visual Studio 2019 Community Edition
    * https://visualstudio.microsoft.com/downloads/
 2. Open Visual Windows Installer
@@ -18,21 +18,21 @@ MS Visual Studio Installation
 9. Select Install
 10. After installation is completed, sign-in to Visual Studio using your MS account.
 
-MS Windows SDK Installation
+<b>MS Windows SDK Installation</b>
 1. Download Windows 10 SDK
    * https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk/
 2. Open winsdksetup.exe
 
-Add signtool.exe path to your system environment variable. Signtool.exe comes with Windows SDK. It is located in C:\Program Files (x86)\Windows Kits\10\App Certification Kit. This link shows how you can add this path as System Path.
-Example: https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/#:~:text=Click%20the%20%E2%80%9CEnvironment%20Variables%E2%80%A6%E2%80%9D%20button.%20Under%20the%20%E2%80%9CSystem,screen%20you%20can%20also%20edit%20or%20reorder%20them.
+<b>Add signtool.exe path to your system environment variable</b> 
+1. Signtool.exe comes with Windows SDK. It is located in C:\Program Files (x86)\Windows Kits\10\App Certification Kit. 2. This link shows how you can add this path as System Path: https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/#:~:text=Click%20the%20%E2%80%9CEnvironment%20Variables%E2%80%A6%E2%80%9D%20button.%20Under%20the%20%E2%80%9CSystem,screen%20you%20can%20also%20edit%20or%20reorder%20them.
 
-Create Self-Signed Certificate
+<b>Create Self-Signed CodeSign Certificate</b>
 1. Open PowerShell as administrator
 2. New-SelfSignedCertificate -DNSName 'nextensio.net' -CertStoreLocation Cert:\CurrentUser\My -Type CodeSigningCert -Subject 'Nextensio Agent Windows Cert'
 3. Copy the thumbprint ID to ./sign.bat
-Example: https://sectigostore.com/page/how-do-i-generate-a-self-signed-code-signing-certificate/
+4. Example: https://sectigostore.com/page/how-do-i-generate-a-self-signed-code-signing-certificate/
 
-MS Window Driver Kit Installation
+<b>MS Window Driver Kit Installation</b>
 1. Download WDK for Windows 10
    * https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk
 2. Downloads -> Other WDK downloads
@@ -40,18 +40,18 @@ MS Window Driver Kit Installation
 4. Open wdksetup.exe and install it to this computer
 5. Select, Install Windows Driver Kit Visual Studio extension and Install to Visual Studio Community 2019 (Visual Studio need to be shutdown for the installation to proceed)
 
-GIT Installation
+<b>GIT Installation</b>
 1. https://git-scm.com/downloads
 
-GoLang Installation
-https://golang.org/
+<b>GoLang Installation</b>
+1. https://golang.org/
 
-Rust Compiler Installation
-https://www.rust-lang.org/tools/install
+<b>Rust Compiler Installation</b>
+1. https://www.rust-lang.org/tools/install
 
-Reboot your computer
+<b>Reboot your computer</b>
 
-Build and run nxt-windows.exe
+<b>Build and run nxt-windows.exe</b>
 1. Launch powershell as administrator
 2. cd agent\rust\platforms\windows
 3. ./build.bat
