@@ -1,4 +1,4 @@
-# nxt-windows installation, building and running
+# nxt-windows installations, building and running
 
 <b>MS Power Shell Installation</b>
 1. Open Microsoft Store, search for PowerShell and Install.
@@ -75,7 +75,8 @@ Network Destination        Netmask          Gateway       Interface  Metric
 3. OKTA IDP integration for access token
 4. Installation to 3rd party computers
 
-```type Adapter struct {
+```
+type Adapter struct {
 	handle uintptr
 }
 
