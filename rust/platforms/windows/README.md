@@ -32,7 +32,7 @@
 3. Copy the thumbprint ID to ./sign.bat
 4. Example: https://sectigostore.com/page/how-do-i-generate-a-self-signed-code-signing-certificate/
 
-<b>MS Window Driver Kit Installation</b>
+<b>MS Windows Driver Kit (WDK) Installation</b>
 1. Download WDK for Windows 10
    * https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk
 2. Downloads -> Other WDK downloads
@@ -74,6 +74,7 @@ Network Destination        Netmask          Gateway       Interface  Metric
 3. OKTA IDP integration for access token
 4. Installation to 3rd party computers
 5. Optimize Makefile, to avoid downloading golang, llvm, etc. Instead use system's installation.
+6. Develop a GUI
 
 ```
 type Adapter struct {
