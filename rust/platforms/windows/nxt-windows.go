@@ -126,7 +126,7 @@ func main() {
 	luid := winipcfg.LUID(nativeTunDevice.LUID())
 
 	logger.Verbosef("TunIf created %s, %d", realInterfaceName, luid)
-	logger.Verbosef("Adaptor %d", t.wt)
+	// logger.Verbosef("Adaptor %d", t.wt)
 
 	err = luid.SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
 	if err != nil {
