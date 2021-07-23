@@ -68,3 +68,26 @@ Network Destination        Netmask          Gateway       Interface  Metric
           0.0.0.0          0.0.0.0      192.168.4.1     192.168.4.88     45
           0.0.0.0          0.0.0.0       10.82.31.4       10.82.31.5      5 <-- nxt-windows IP
 ```
+
+<b> Todo </b>
+1. Integrate with Rust. nxt-api.h implementation. cgo build and Makefile.
+2. Experiment with tun's FD. tun.NativeTunDevice is an interface. We need access to wintun.Adapter.
+3. OKTA IDP integration for access token
+4. Installation to 3rd party computers
+
+```type Adapter struct {
+	handle uintptr
+}
+
+type NativeTun struct {
+	wt        *wintun.Adapter <-- possible FD to pass into rust agent
+	handle    windows.Handle
+	rate      rateJuggler
+	session   wintun.Session
+	readWait  windows.Handle
+	events    chan Event
+	running   sync.WaitGroup
+	closeOnce sync.Once
+	close     int32
+	forcedMTU int
+}```
