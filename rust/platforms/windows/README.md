@@ -56,17 +56,16 @@
 2. cd agent\rust\platforms\windows
 3. ./build.bat
 4. .\amd64\nxt-windows.exe nxt0
-5. nxt0 adapator can be seen here: Control Panel => Network and Internet => Network Connection
+5. nxt0 adaptor can be seen here: Control Panel => Network and Internet => Network Connection
 
 ```$ route print
-; all traffic 0.0.0.0 route to 10.82.31.4, with metric 5 (preference)
 
 IPv4 Route Table
 ===========================================================================
 Active Routes:
 Network Destination        Netmask          Gateway       Interface  Metric
           0.0.0.0          0.0.0.0      192.168.4.1     192.168.4.88     45
-          0.0.0.0          0.0.0.0       10.82.31.4       10.82.31.5      5 <-- nxt-windows IP
+          0.0.0.0          0.0.0.0       10.82.31.4       10.82.31.5      5 <-- nxt-windows IP, lower metric is better
 ```
 
 <b> Todo </b>
@@ -74,6 +73,7 @@ Network Destination        Netmask          Gateway       Interface  Metric
 2. Experiment with tun's FD. tun.NativeTunDevice is an interface. We need access to wintun.Adapter.
 3. OKTA IDP integration for access token
 4. Installation to 3rd party computers
+5. Optimize Makefile, to avoid downloading golang, llvm, etc. Instead use system's installation.
 
 ```
 type Adapter struct {
