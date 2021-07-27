@@ -220,7 +220,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 					return
 				}
 			}
-			flow.SourceAgent = regInfo.Services[0]
+			flow.SourceAgent = regInfo.ConnectID
 			flow.DestAgent = destAgent
 			flow.ResponseData = false
 			if key == nil {
