@@ -531,6 +531,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
     onb.services = reginfo.services.clone();
     onb.access_token = reginfo.access_token.clone();
     onb.cluster = reginfo.cluster.clone();
+    onb.connect_id = reginfo.connect_id.clone();
 
     let mut hdr = NxtHdr::default();
     hdr.hdr = Some(Hdr::Onboard(onb));
@@ -688,6 +689,7 @@ fn external_sock_rx(
                                 tun.tun.close(stream).ok();
                             }
                         }
+                        Hdr::Keepalive(_) => {}
                     }
                 }
             } else {
@@ -1080,7 +1082,7 @@ fn flow_data_to_external(
             hdr.streamop = StreamOp::Noop as i32;
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
-                    f.source_agent = reginfo.services[0].clone();
+                    f.source_agent = reginfo.connect_id.clone();
                     f.dest_agent = flow.dest_agent.clone()
                 }
                 _ => {}

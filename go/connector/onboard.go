@@ -103,7 +103,8 @@ func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInf
 	p := &nxthdr.NxtOnboard{
 		Agent: isAgent, Userid: regInfo.Userid, Uuid: uuid,
 		AccessToken: regInfo.AccessToken, Services: regInfo.Services,
-		Cluster: regInfo.Cluster,
+		Cluster:   regInfo.Cluster,
+		ConnectId: regInfo.ConnectID,
 	}
 	hdr := nxthdr.NxtHdr{Hdr: &nxthdr.NxtHdr_Onboard{p}}
 	retry := 0
