@@ -36,8 +36,12 @@ type flowTuns struct {
 var flowLock sync.RWMutex
 var flows map[flowKey]*flowTuns
 
+var gw_onboarded bool
+var onboarded bool
+var uniqueId string
 var controller string
 var regInfo RegistrationInfo
+var regInfoLock sync.RWMutex
 var mainCtx context.Context
 var gwTun common.Transport
 var gwStreams chan common.NxtStream
@@ -209,9 +213,11 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 			// since the bulk of the use case will be gateway originated flows
 			flow = hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 			if destAgent == "" {
+				// TODO: Do we need the reginfoLock here ? I think not because when we get
+				// onboarding results we are just replacing stuff rather than adding/deleting stuff
 				for _, d := range regInfo.Domains {
-					if strings.Contains(flow.DestSvc, d) {
-						destAgent = d
+					if strings.Contains(flow.DestSvc, d.Name) {
+						destAgent = d.Name
 					}
 				}
 				// No service advertised that matches the one we want
@@ -236,48 +242,65 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 	}
 }
 
+func monitorController(lg *log.Logger) {
+	keepalive := time.Duration(30)
+	force_onboard := false
+	for {
+		// TODO: We need to get refresh tokens instead of getting access tokens
+		// each time
+		tokens := authenticate(*idp, *clientid, *username, *password)
+		if tokens == nil {
+			lg.Println("Unable to authenticate connector with the IDP")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		if !onboarded || force_onboard {
+			if ControllerOnboard(lg, controller, tokens.AccessToken) {
+				onboarded = true
+				force_onboard = false
+				gw_onboarded = false
+				if regInfo.Keepalive == 0 {
+					keepalive = time.Duration(5 * 60)
+				} else {
+					keepalive = time.Duration(regInfo.Keepalive)
+				}
+			}
+		}
+		if onboarded {
+			force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
+		}
+		time.Sleep(keepalive * time.Second)
+	}
+}
+
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
 func monitorGw(lg *log.Logger) {
-	flaps := 0
-	count := 0
 	for {
-		if gwTun == nil || gwTun.IsClosed() {
-			if gwTun != nil {
-				flaps += 1
-			}
-			// Override gateway if one is suppled on command line
-			if *gateway != "" {
-				regInfo.Host = *gateway
-			}
-			newTun := DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
-			if newTun != nil {
-				if OnboardTunnel(lg, newTun, false, &regInfo, unique.String()) == nil {
-					gwTun = newTun
-					// Note that we are not launching an goroutines to read/write out of this
-					// stream (first stream to the gateway), appToGw() always creates a new
-					// stream over this session. Eventually we will support L3 raw ip pkt mode
-					// for our agent and at that time the first stream will be used to tx/rx
-					// all L3 packets
-				} else {
-					newTun.Close()
-					flaps += 1
+		if onboarded {
+			if gwTun == nil || gwTun.IsClosed() {
+				gw_onboarded = false
+				// Override gateway if one is suppled on command line
+				if *gateway != "" {
+					regInfo.Gateway = *gateway
 				}
+				gwTun = DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 			} else {
-				flaps += 1
+				if !gw_onboarded {
+					if OnboardTunnel(lg, gwTun, false, &regInfo, uniqueId) == nil {
+						lg.Println("Onboarded with gateway")
+						gw_onboarded = true
+						// Note that we are not launching an goroutines to read/write out of this
+						// stream (first stream to the gateway), appToGw() always creates a new
+						// stream over this session. Eventually we will support L3 raw ip pkt mode
+						// for our agent and at that time the first stream will be used to tx/rx
+						// all L3 packets
+					} else {
+						gwTun.Close()
+					}
+				}
 			}
 		}
 		time.Sleep(2 * time.Second)
-		count += 1
-		if count >= 5 { /* 10 seconds */
-			if flaps >= 3 {
-				// Too many flaps, try onboarding again, maybe some parameters have been changed
-				// on the controller
-				authAndOnboard(lg)
-				lg.Println("Re onboarding")
-			}
-			count = 0
-			flaps = 0
-		}
 	}
 }
 
@@ -316,17 +339,6 @@ func args() {
 		*username, *password = credentials()
 	}
 	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway, ports)
-}
-
-func authAndOnboard(lg *log.Logger) bool {
-	tokens := authenticate(*idp, *clientid, *username, *password)
-	if tokens == nil {
-		lg.Println("Unable to authenticate connector with the IDP")
-		return false
-	}
-	regInfo = RegistrationInfo{}
-	regInfo.AccessToken = tokens.AccessToken
-	return OktaInit(lg, &regInfo, controller)
 }
 
 func svrListen(lg *log.Logger, conn *netconn.NetConn, port int) {
@@ -368,14 +380,8 @@ func main() {
 	flows = make(map[flowKey]*flowTuns)
 	lg := log.New(os.Stdout, "CNTR\n", 0)
 	args()
-	for {
-		if authAndOnboard(lg) == false {
-			lg.Println("Unable to authenticate connector, retrying in five seconds")
-			time.Sleep(5 * time.Second)
-		} else {
-			break
-		}
-	}
+	uniqueId = unique.String()
+	go monitorController(lg)
 	go monitorGw(lg)
 
 	for _, p := range ports {

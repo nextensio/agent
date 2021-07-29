@@ -4,12 +4,12 @@ use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistr
 use regex::Regex;
 use serde::Deserialize;
 use signal_hook::{consts::SIGABRT, consts::SIGINT, consts::SIGTERM, iterator::Signals};
-use std::fmt;
 use std::io::Write;
 use std::os::raw::{c_char, c_int};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+use std::{collections::HashMap, fmt};
 use std::{ffi::CString, usize};
 use uuid::Uuid;
 mod pkce;
@@ -26,16 +26,31 @@ const TXMTU: usize = 1500;
 // like eight threads when we open listeners on two ports (4 threads  per port ?)
 
 #[derive(Debug, Deserialize)]
+struct Domain {
+    name: String,
+    needdns: bool,
+    dnsip: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct OnboardInfo {
     Result: String,
     userid: String,
     tenant: String,
     gateway: String,
-    domains: Vec<String>,
+    domains: Vec<Domain>,
     services: Vec<String>,
     connectid: String,
     cluster: String,
     cacert: Vec<u8>,
+    version: u64,
+    keepalive: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct KeepaliveResponse {
+    Result: String,
+    version: u64,
 }
 
 impl fmt::Display for OnboardInfo {
@@ -47,7 +62,7 @@ impl fmt::Display for OnboardInfo {
         )
         .ok();
         for d in self.domains.iter() {
-            write!(f, " {}", d).ok();
+            write!(f, " {}:{}:{}", d.name, d.needdns, d.dnsip).ok();
         }
         Ok(())
     }
@@ -163,9 +178,8 @@ fn create_tun() -> Result<i32, std::io::Error> {
     }
 }
 
-fn agent_onboard(onb: &OnboardInfo, access_token: String) {
+fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
     let c_access_token = CString::new(access_token).unwrap();
-    let uuid = Uuid::new_v4();
     let uuid_str = format!("{}", uuid);
     let c_uuid_str = CString::new(uuid_str).unwrap();
     let c_userid = CString::new(onb.userid.clone()).unwrap();
@@ -175,10 +189,28 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
     let mut c_domains: Vec<CString> = Vec::new();
     let mut c_domains_ptr: Vec<*const c_char> = Vec::new();
     for d in &onb.domains {
-        let s = CString::new(d.clone()).unwrap();
+        let s = CString::new(d.name.clone()).unwrap();
         let p = s.as_ptr();
         c_domains.push(s);
         c_domains_ptr.push(p);
+    }
+    let mut c_needdns: Vec<c_int> = Vec::new();
+    for d in &onb.domains {
+        let s;
+        if d.needdns {
+            s = 1;
+        } else {
+            s = 0;
+        }
+        c_needdns.push(s);
+    }
+    let mut c_dnsip: Vec<CString> = Vec::new();
+    let mut c_dnsip_ptr: Vec<*const c_char> = Vec::new();
+    for d in &onb.domains {
+        let s = CString::new(d.dnsip.clone()).unwrap();
+        let p = s.as_ptr();
+        c_dnsip.push(s);
+        c_dnsip_ptr.push(p);
     }
     let mut c_services: Vec<CString> = Vec::new();
     let mut c_services_ptr: Vec<*const c_char> = Vec::new();
@@ -195,6 +227,8 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
         connect_id: c_connectid.as_ptr(),
         cluster: c_cluster.as_ptr(),
         domains: c_domains_ptr.as_ptr() as *const *const c_char,
+        needdns: c_needdns.as_ptr() as *const c_int,
+        dnsip: c_dnsip_ptr.as_ptr() as *const *const c_char,
         num_domains: c_domains_ptr.len() as c_int,
         ca_cert: onb.cacert.as_ptr() as *const c_char,
         num_cacert: onb.cacert.len() as c_int,
@@ -209,20 +243,45 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
 fn do_onboard(test: bool, controller: String, username: String, password: String) {
-    let mut onboarded = okta_onboard(test, controller.clone(), username.clone(), password.clone());
-    let mut stats = AgentStats::default();
-    let mut gateway_flaps = 0;
+    let mut access_token;
+    let mut onboarded = false;
+    let mut version = 0;
+    let mut force_onboard = false;
+    let uuid = Uuid::new_v4();
+    let mut keepalive_interval = 30;
     loop {
-        unsafe {
-            agent_stats(&mut stats);
+        // TODO: We need to get refresh tokens instead of getting access tokens
+        // each time
+        let token = get_token(test, &username, &password);
+        if token.is_none() {
+            error!("Cannot get access token");
+            println!("Login to nextensio failed (cannot get tokens), will try again");
+            thread::sleep(Duration::new(10, 0));
+            continue;
+        } else {
+            access_token = token.unwrap();
         }
-        if !onboarded || stats.gateway_flaps - gateway_flaps >= 3 {
+
+        if !onboarded || force_onboard {
             error!("Onboarding again");
             println!("Connected flapped, onboarding again");
-            onboarded = okta_onboard(test, controller.clone(), username.clone(), password.clone());
+            let (o, onb) = okta_onboard(controller.clone(), access_token.clone(), &uuid);
+            if o {
+                let onb = onb.unwrap();
+                version = onb.version;
+                keepalive_interval = onb.keepalive;
+                if keepalive_interval == 0 {
+                    keepalive_interval = 10 * 60;
+                }
+                onboarded = true;
+                force_onboard = false;
+            }
         }
-        gateway_flaps = stats.gateway_flaps;
-        thread::sleep(Duration::new(10, 0));
+        if onboarded {
+            force_onboard =
+                agent_keepalive(controller.clone(), access_token.clone(), version, &uuid);
+        }
+        thread::sleep(Duration::new(keepalive_interval as u64, 0));
     }
 }
 
@@ -234,14 +293,11 @@ fn get_token(test: bool, username: &str, password: &str) -> Option<String> {
     return None;
 }
 
-fn okta_onboard(test: bool, controller: String, username: String, password: String) -> bool {
-    let token = get_token(test, &username, &password);
-    if token.is_none() {
-        error!("Cannot get access token");
-        println!("Login to nextensio failed (cannot get tokens), will try again");
-        return false;
-    }
-    let access_token = token.unwrap();
+fn okta_onboard(
+    controller: String,
+    access_token: String,
+    uuid: &Uuid,
+) -> (bool, Option<OnboardInfo>) {
     // TODO: Once we start using proper certs for our production clusters, make this
     // accept_invalid_certs true only for test environment. Even test environments ideally
     // should have verifiable certs via a test.nextensio.net domain or something
@@ -261,18 +317,18 @@ fn okta_onboard(test: bool, controller: String, username: String, password: Stri
                         if o.Result != "ok" {
                             error!("Result from controller not ok {}", o.Result);
                             println!("Login to nextensio failed ({}), will try again", o.Result);
-                            return false;
+                            return (false, None);
                         } else {
                             error!("Onboarded {}", o);
                             println!("Login to nextensio successful");
-                            agent_onboard(&o, access_token.clone());
-                            return true;
+                            agent_onboard(&o, access_token.clone(), uuid);
+                            return (true, Some(o));
                         }
                     }
                     Err(e) => {
                         error!("HTTP body failed {:?}", e);
                         println!("Login to nextensio failed ({}), will try again", e);
-                        return false;
+                        return (false, None);
                     }
                 }
             } else {
@@ -281,12 +337,60 @@ fn okta_onboard(test: bool, controller: String, username: String, password: Stri
                     "Login to nextensio failed ({}), will try again",
                     res.status()
                 );
-                return false;
+                return (false, None);
             }
         }
         Err(e) => {
             error!("HTTP Get failed {:?}", e);
             println!("Login to nextensio failed ({}), will try again", e);
+            return (false, None);
+        }
+    }
+}
+
+fn agent_keepalive(controller: String, access_token: String, version: u64, uuid: &Uuid) -> bool {
+    // TODO: Once we start using proper certs for our production clusters, make this
+    // accept_invalid_certs true only for test environment. Even test environments ideally
+    // should have verifiable certs via a test.nextensio.net domain or something
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let get_url = format!(
+        "https://{}/api/v1/global/get/keepalive/{}/{}",
+        controller, version, uuid
+    );
+    let bearer = format!("Bearer {}", access_token);
+    let resp = client.get(&get_url).header("Authorization", bearer).send();
+    match resp {
+        Ok(mut res) => {
+            if res.status().is_success() {
+                let keep_res: Result<KeepaliveResponse, reqwest::Error> = res.json();
+                match keep_res {
+                    Ok(ks) => {
+                        if ks.Result != "ok" {
+                            error!("Keepalive from controller not ok {}", ks.Result);
+                            return false;
+                        } else {
+                            if version != ks.version {
+                                error!("Keepalive version mismatch {}/{}", version, ks.version);
+                                return true;
+                            }
+                            return false;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Keepalive HTTP body failed {:?}", e);
+                        return false;
+                    }
+                }
+            } else {
+                error!("Keepalive HTTP Get result {}, failed", res.status());
+                return false;
+            }
+        }
+        Err(e) => {
+            error!("Keepalive HTTP Get failed {:?}", e);
             return false;
         }
     }

@@ -81,10 +81,10 @@ const MAX_PENDING_RX: usize = 4;
 const FLOW_BUFFER_HOG: u64 = 4; // seconds;
 
 #[derive(Default, Debug)]
-struct IpMask {
-    service: String,
-    ip: u32,
-    mask: u32,
+struct Domain {
+    name: String,
+    needdns: bool,
+    dnsip: u32,
 }
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -92,12 +92,11 @@ pub struct RegistrationInfo {
     access_token: String,
     connect_id: String,
     cluster: String,
-    domains: Vec<String>,
+    domains: Vec<Domain>,
     ca_cert: Vec<u8>,
     userid: String,
     uuid: String,
     services: Vec<String>,
-    network: Vec<IpMask>,
 }
 
 #[repr(C)]
@@ -107,6 +106,8 @@ pub struct CRegistrationInfo {
     pub connect_id: *const c_char,
     pub cluster: *const c_char,
     pub domains: *const *const c_char,
+    pub needdns: *const c_int,
+    pub dnsip: *const *const c_char,
     pub num_domains: c_int,
     pub ca_cert: *const c_char,
     pub num_cacert: c_int,
@@ -147,40 +148,33 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
 
         let tmp_array: &[*const c_char] =
             slice::from_raw_parts(creg.domains, creg.num_domains as usize);
-        let rust_array: Vec<_> = tmp_array
+        let domain_array: Vec<_> = tmp_array
+            .iter()
+            .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
+            .collect();
+        let tmp_array: &[c_int] = slice::from_raw_parts(creg.needdns, creg.num_domains as usize);
+        let needdns_array: Vec<_> = tmp_array.iter().map(|&v| v).collect();
+        let tmp_array: &[*const c_char] =
+            slice::from_raw_parts(creg.dnsip, creg.num_domains as usize);
+        let dnsip_array: Vec<_> = tmp_array
             .iter()
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
             .collect();
         reginfo.domains = Vec::new();
-        reginfo.network = Vec::new();
-        for s in rust_array {
-            let s1 = s.clone();
-            let mut network = false;
-            // a.b.c.d/mask
-            if let Some(ip) = s.find('/') {
-                if s.len() > ip + 1 {
-                    let n: Result<Ipv4Addr, _> = s[0..ip].parse();
-                    if let Ok(n) = n {
-                        let n = n.octets();
-                        if let Ok(mask) = s[ip + 1..].parse::<u32>() {
-                            let mut ip = (n[0] as u32) << 24
-                                | (n[1] as u32) << 16
-                                | (n[2] as u32) << 8
-                                | n[3] as u32;
-                            let mask = u32::MAX << (32 - mask);
-                            ip = ip & mask;
-                            reginfo.network.push(IpMask {
-                                ip,
-                                mask,
-                                service: s,
-                            });
-                            network = true;
-                        }
-                    }
-                }
-            }
-            if !network {
-                reginfo.domains.push(s1);
+        for i in 0..creg.num_domains as usize {
+            let ip: Result<Ipv4Addr, _> = dnsip_array[i].parse();
+            if ip.is_ok() {
+                let ip = ip.unwrap();
+                let dnsip = common::as_u32_be(&ip.octets());
+                let needdns = needdns_array[i] == 1;
+                let d = Domain {
+                    name: domain_array[i].clone(),
+                    needdns,
+                    dnsip,
+                };
+                reginfo.domains.push(d);
+            } else {
+                error!("Skipping bad ip address {}", &dnsip_array[i])
             }
         }
 
@@ -761,26 +755,24 @@ fn set_dest_agent(
     let mut found = false;
     let mut has_default = false;
     for d in reginfo.domains.iter() {
-        if flow.service.contains(d) {
-            flow.dest_agent = d.clone();
+        if flow.service.contains(&d.name) {
+            flow.dest_agent = d.name.clone();
             found = true;
             break;
         }
-        if !has_default && "nextensio-default-internet" == d {
+        if !has_default && "nextensio-default-internet" == d.name {
             has_default = true;
         }
     }
     // The flow did not match any domains, see if the flow's ip address
-    // matches any configured ip/mask combinations
+    // matches any of the domains (reverse lookup)
     if !found {
         let ip: Result<Ipv4Addr, _> = key.dip.parse();
         if let Ok(ip) = ip {
-            let ip = ip.octets();
-            let ip =
-                (ip[0] as u32) << 24 | (ip[1] as u32) << 16 | (ip[2] as u32) << 8 | ip[3] as u32;
-            for im in reginfo.network.iter() {
-                if ip & im.mask == im.ip {
-                    flow.dest_agent = im.service.clone();
+            let ip = common::as_u32_be(&ip.octets());
+            for im in reginfo.domains.iter() {
+                if im.dnsip == ip {
+                    flow.dest_agent = im.name.clone();
                     found = true;
                     break;
                 }
@@ -1601,14 +1593,11 @@ fn monitor_onboard(agent: &mut AgentInfo) {
     if agent.reginfo_changed == cur_reginfo {
         return;
     }
-    // If the onboarding changed, tear down the existing gateway tunnel
-    if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
-        // The gateway monitor will figure out that this is closed
-        gw_tun.tun().tun.close(0).ok();
-    }
     agent.reginfo_changed = cur_reginfo;
     unsafe { agent.reginfo = *REGINFO.take().unwrap() };
     agent.idp_onboarded = true;
+    // Trigger resend of onboard info
+    agent.gw_onboarded = false;
 }
 
 fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
@@ -2421,6 +2410,7 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
         if !agent.gw_onboarded && agent.idp_onboarded {
             if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
                 agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut gw_tun.tun());
+                error!("Sending onboard message")
             }
         }
 

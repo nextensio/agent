@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -29,18 +30,27 @@ type ConnStats struct {
 	Tx   uint64
 }
 
+type Domain struct {
+	Name    string `json:"name" bson:"name"`
+	NeedDns bool   `json:"needdns" bson:"needdns"`
+	DnsIP   string `json:"dnsip" bson:"dnsip"`
+}
+
 type RegistrationInfo struct {
-	Host        string   `json:"gateway"`
+	Gateway     string   `json:"gateway"`
 	AccessToken string   `json:"accessToken"`
 	ConnectID   string   `json:"connectid"`
 	Cluster     string   `json:"cluster"`
-	Domains     []string `json:"domains"`
+	Domains     []Domain `json:"domains"`
 	CACert      []rune   `json:"cacert"`
 	Userid      string   `json:"userid"`
+	Tenant      string   `json:"tenant"`
 	Services    []string `json:"services"`
+	Version     uint64   `json:"version"`
+	Keepalive   uint     `json:"keepalive"`
 }
 
-func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool {
+func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bool {
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
 	// should have verifiable certs via a test.nextensio.net domain or something
@@ -50,13 +60,15 @@ func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+regInfo.AccessToken)
+		req.Header.Add("Authorization", "Bearer "+accessToken)
 		resp, err := client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
 			body, err := ioutil.ReadAll(resp.Body)
 			if err == nil {
-				err = json.Unmarshal(body, regInfo)
+				regInfoLock.Lock()
+				err = json.Unmarshal(body, &regInfo)
+				regInfoLock.Unlock()
 				if err == nil {
 					return true
 				}
@@ -69,12 +81,57 @@ func OktaInit(lg *log.Logger, regInfo *RegistrationInfo, controller string) bool
 	return false
 }
 
+type KeepaliveResponse struct {
+	Result  string `json:"Result"`
+	Version uint64 `json:"version"`
+}
+
+func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, version uint64, uuid string) bool {
+	var ka KeepaliveResponse
+	// TODO: Once we start using proper certs for our production clusters, make this
+	// accept_invalid_certs true only for test environment. Even test environments ideally
+	// should have verifiable certs via a test.nextensio.net domain or something
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	vn := fmt.Sprintf("%d", version)
+	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/keepalive/"+vn+"/"+uuid, nil)
+	if err == nil {
+		req.Header.Add("Authorization", "Bearer "+accessToken)
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err == nil {
+				err = json.Unmarshal(body, &ka)
+				if err == nil {
+					if ka.Result == "ok" {
+						if version != ka.Version {
+							lg.Println("Keepalive mismatch", version, ka.Version)
+							return true
+						}
+					}
+				}
+			}
+		} else {
+			lg.Println("Keepalive request failed", err)
+		}
+	}
+	if ka.Result != "ok" {
+		lg.Println("Keepalive failed", err, ka)
+	}
+	return false
+}
+
 // Create a websocket session to the gateway
 func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
+	regInfoLock.RLock()
 	req := http.Header{}
 	req.Add("x-nextensio-connect", regInfo.ConnectID)
 	// Ask for a keepalive to be sent once in two seconds
-	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Host, regInfo.Host, 443, req, 2*1000)
+	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Gateway, regInfo.Gateway, 443, req, 2*1000)
+	regInfoLock.RUnlock()
 	if err := wsock.Dial(c); err != nil {
 		lg.Println("Cannot dial websocket", err, regInfo.ConnectID)
 		return nil
@@ -100,49 +157,19 @@ func DialGateway(ctx context.Context, lg *log.Logger, encap string, regInfo *Reg
 // read a response with a timeout. We try this a few times and give up if
 // we still cant confirm that our onboard info was received by the gateway
 func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInfo *RegistrationInfo, uuid string) *common.NxtError {
+	regInfoLock.RLock()
 	p := &nxthdr.NxtOnboard{
 		Agent: isAgent, Userid: regInfo.Userid, Uuid: uuid,
 		AccessToken: regInfo.AccessToken, Services: regInfo.Services,
 		Cluster:   regInfo.Cluster,
 		ConnectId: regInfo.ConnectID,
 	}
+	regInfoLock.RUnlock()
+
 	hdr := nxthdr.NxtHdr{Hdr: &nxthdr.NxtHdr_Onboard{p}}
-	retry := 0
-	for {
-		err := tunnel.Write(&hdr, net.Buffers{})
-		if err != nil {
-			return err
-		}
-		// Hope there are no links with RTT latency worse than 200 msecs!
-		// Set the socket back to blocking read from wherever we return from here
-		tunnel.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-		hdr, _, err := tunnel.Read()
-		if err != nil {
-			switch e := err.Err.(type) {
-			case net.Error:
-				if e.Timeout() {
-					retry++
-					lg.Println("Onboard timed out, retry", retry)
-					if retry >= 10 {
-						lg.Println("Unable to read onboard response from gateway tunnel")
-						tunnel.SetReadDeadline(time.Time{})
-						return err
-					}
-				} else {
-					tunnel.SetReadDeadline(time.Time{})
-					return err
-				}
-			default:
-				tunnel.SetReadDeadline(time.Time{})
-				return err
-			}
-		} else {
-			switch hdr.Hdr.(type) {
-			case *nxthdr.NxtHdr_Onboard:
-				lg.Println("Handshaked with gateway")
-				tunnel.SetReadDeadline(time.Time{})
-				return nil
-			}
-		}
+	err := tunnel.Write(&hdr, net.Buffers{})
+	if err != nil {
+		return err
 	}
+	return nil
 }
