@@ -103,52 +103,62 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 			gwToAppClose(tun, dest)
 			return
 		}
-		if dest.Conn == nil {
-			flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-			key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
-			dest.Conn = flowGet(key, tun)
+		switch hdr.Hdr.(type) {
+		case *nxthdr.NxtHdr_Onboard:
+			// Response to onboard message we sent
+			// Well, we wont ever see this message because the onboard response
+			// will come back on stream 0 which is the "gwTun" - and we dont really
+			// do any reads on gwTun, which just write onboard and be done with it
+			lg.Println("Got onboard response")
+		case *nxthdr.NxtHdr_Flow:
+			lg.Println("Got flow")
 			if dest.Conn == nil {
-				if flow.Proto == common.TCP {
-					dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.DestSvc, flow.Dport)
-				} else {
-					dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.DestSvc, flow.Dport)
-				}
-				// the appStreams passed here never gets used
-				e := dest.Conn.Dial(appStreams)
-				if e != nil {
-					gwToAppClose(tun, dest)
-					return
-				}
+				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+				key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
+				dest.Conn = flowGet(key, tun)
+				if dest.Conn == nil {
+					if flow.Proto == common.TCP {
+						dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.DestSvc, flow.Dport)
+					} else {
+						dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.DestSvc, flow.Dport)
+					}
+					// the appStreams passed here never gets used
+					e := dest.Conn.Dial(appStreams)
+					if e != nil {
+						gwToAppClose(tun, dest)
+						return
+					}
 
-				// This flow is originated for the first time from the gateway
-				// to connector, so lets create a reverse direction here. Otherwise
-				// the flow is originated from the connector to gateway, so reverse already exists
-				newTun := tun.NewStream(nil)
-				if newTun == nil {
-					gwToAppClose(tun, dest)
-					return
+					// This flow is originated for the first time from the gateway
+					// to connector, so lets create a reverse direction here. Otherwise
+					// the flow is originated from the connector to gateway, so reverse already exists
+					newTun := tun.NewStream(nil)
+					if newTun == nil {
+						gwToAppClose(tun, dest)
+						return
+					}
+					// copy the flow
+					newFlow := *flow
+					// Swap source and dest agents
+					s, d := newFlow.SourceAgent, newFlow.DestAgent
+					newFlow.SourceAgent, newFlow.DestAgent = d, s
+					newFlow.ResponseData = true
+					var timeout time.Duration
+					if newFlow.Proto == common.TCP {
+						timeout = TCP_AGER
+					} else {
+						timeout = UDP_AGER
+					}
+					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
 				}
-				// copy the flow
-				newFlow := *flow
-				// Swap source and dest agents
-				s, d := newFlow.SourceAgent, newFlow.DestAgent
-				newFlow.SourceAgent, newFlow.DestAgent = d, s
-				newFlow.ResponseData = true
-				var timeout time.Duration
-				if newFlow.Proto == common.TCP {
-					timeout = TCP_AGER
-				} else {
-					timeout = UDP_AGER
-				}
-				go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
 			}
+			e := dest.Conn.Write(hdr, buf)
+			if e != nil {
+				gwToAppClose(tun, dest)
+				return
+			}
+			dest.Tx += 1
 		}
-		e := dest.Conn.Write(hdr, buf)
-		if e != nil {
-			gwToAppClose(tun, dest)
-			return
-		}
-		dest.Tx += 1
 	}
 }
 
