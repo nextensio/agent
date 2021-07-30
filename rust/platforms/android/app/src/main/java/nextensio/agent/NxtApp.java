@@ -30,11 +30,21 @@ public class NxtApp extends Application {
     private Instant last_refresh = Instant.now();
     private static final String TAG = "NxtApp";
     private static final int VPN_REQUEST_CODE = 0x0F;
+    private RequestQueue volleyqueue;
 
     public void SetTokens(String access, String refresh) {
         accessToken = access;
         refreshToken = refresh;
         force_onboard = true;
+    }
+
+    public RequestQueue getRequestQueue() {
+        if (volleyqueue == null) {
+            // getApplicationContext() is key, it keeps you from leaking the
+            // Activity or BroadcastReceiver if someone passes one in.
+            volleyqueue = Volley.newRequestQueue(this);
+        }
+        return volleyqueue;
     }
 
     public NxtApp() {
@@ -57,7 +67,7 @@ public class NxtApp extends Application {
                 while (true) {
                     doOnboard(); 
                     try { 
-                        Thread.sleep(3000);
+                        Thread.sleep(30000);
                     } catch (InterruptedException exception) {
                         Log.i(TAG, "Sleep failed");
                     }                  
@@ -97,7 +107,6 @@ public class NxtApp extends Application {
 
     private void refresh() {
         String url = "https://dev-24743301.okta.com/oauth2/default/v1/token?client_id=0oav0rc5g0E3irFto5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken;
-        RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, null, new Response.Listener<JSONObject>() {
             @Override
             public void onResponse(JSONObject response) {
@@ -127,13 +136,13 @@ public class NxtApp extends Application {
             }
         }; 
         
+        RequestQueue rq = getRequestQueue();
         // Add the request to the RequestQueue.
-        queue.add(jsonObjectRequest);
+        rq.add(jsonObjectRequest);
     }
 
     private void agentKeepalive()  {
         String url = "https://server.nextensio.net:8080/api/v1/global/get/keepalive/" + last_version + "/" + uuid;
-        RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
             @Override
             public void onResponse(JSONObject response) {
@@ -163,8 +172,9 @@ public class NxtApp extends Application {
             }
         }; 
         
+        RequestQueue rq = getRequestQueue();
         // Add the request to the RequestQueue.
-        queue.add(jsonObjectRequest);
+        rq.add(jsonObjectRequest);
     }
 
     private void controllerOnboard() {
@@ -191,8 +201,9 @@ public class NxtApp extends Application {
             }
         }; 
         
+        RequestQueue rq = getRequestQueue();
         // Add the request to the RequestQueue.
-        queue.add(jsonObjectRequest);
+        rq.add(jsonObjectRequest);
     }
 
     private void agentOnboard(JSONObject onboard) {
