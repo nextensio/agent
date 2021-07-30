@@ -26,6 +26,8 @@ const (
 	ExitSetupFailed  = 1
 )
 
+var nxtTokens *accessIdTokens
+
 func runningElevated() bool {
 	var process windows.Token
 	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &process)
@@ -67,7 +69,7 @@ func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, add
 			ip := address.Address.IP()
 			ipnet := net.IPNet{IP: ip, Mask: net.CIDRMask(int(address.OnLinkPrefixLength), 8*len(ip))}
 			if includedInAddresses(ipnet) {
-				fmt.Fprintln(os.Stderr, "Cleaning up stale address %s from interface ‘%s’", ipnet.String(), iface.FriendlyName())
+				fmt.Fprintf(os.Stderr, "Cleaning up stale address %s from interface %s\n", ipnet.String(), iface.FriendlyName())
 				iface.LUID.DeleteIPAddress(ipnet)
 			}
 		}
@@ -93,6 +95,11 @@ var (
 		net.IPv4(8, 8, 4, 4),
 	}
 )
+
+func idpVerify() {
+	nxtTokens = authenticate("https://dev-635657.okta.com/oauth2/default", "0oaz5lndczD0DSUeh4x6",
+		"rudy@nextensio.net", "LetMeIn123")
+}
 
 func main() {
 	if len(os.Args) != 2 {

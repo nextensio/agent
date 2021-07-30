@@ -24,7 +24,8 @@
 2. Open winsdksetup.exe
 
 <b>Add signtool.exe path to your system environment variable</b> 
-1. Signtool.exe comes with Windows SDK. It is located in C:\Program Files (x86)\Windows Kits\10\App Certification Kit. 2. This link shows how you can add this path as System Path: https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/#:~:text=Click%20the%20%E2%80%9CEnvironment%20Variables%E2%80%A6%E2%80%9D%20button.%20Under%20the%20%E2%80%9CSystem,screen%20you%20can%20also%20edit%20or%20reorder%20them.
+1. Signtool.exe comes with Windows SDK. It is located in C:\Program Files (x86)\Windows Kits\10\App Certification Kit. 2. This link shows how you can add this path as System variable Path: https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/#:~:text=Click%20the%20%E2%80%9CEnvironment%20Variables%E2%80%A6%E2%80%9D%20button.%20Under%20the%20%E2%80%9CSystem,screen%20you%20can%20also%20edit%20or%20reorder%20them.
+3. add the path shown in step 1
 
 <b>Create Self-Signed CodeSign Certificate</b>
 1. Open PowerShell as administrator
