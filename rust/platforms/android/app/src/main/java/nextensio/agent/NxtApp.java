@@ -40,8 +40,6 @@ public class NxtApp extends Application {
 
     public RequestQueue getRequestQueue() {
         if (volleyqueue == null) {
-            // getApplicationContext() is key, it keeps you from leaking the
-            // Activity or BroadcastReceiver if someone passes one in.
             volleyqueue = Volley.newRequestQueue(this);
         }
         return volleyqueue;
