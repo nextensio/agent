@@ -65,6 +65,7 @@ type sessionToken struct {
 type accessIdTokens struct {
 	AccessToken string `bson:"access_token" json:"access_token"`
 	IdToken     string `bson:"id_token" json:"id_token"`
+	Refresh     string `bson:"refresh_token" json:"refresh_token"`
 }
 
 func authenticate(IDP string, clientid string, username string, password string) *accessIdTokens {
@@ -113,7 +114,7 @@ func authenticate(IDP string, clientid string, username string, password string)
 	verifier, _ := verifier()
 	challenge := verifier.CodeChallengeS256()
 
-	queries := "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid&"
+	queries := "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access"
 	queries = queries + "&state=test&prompt=none&response_mode=query&code_challenge_method=S256"
 	queries = queries + "&code_challenge=" + challenge + "&sessionToken=" + stoken.Token
 	req, err = http.NewRequest("GET", IDP+"/oauth2/default/v1/authorize?"+queries, nil)
@@ -132,7 +133,7 @@ func authenticate(IDP string, clientid string, username string, password string)
 		fmt.Println("Bad redirect uri")
 		return nil
 	}
-	queries = "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid"
+	queries = "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access"
 	queries = queries + fmt.Sprintf("&grant_type=authorization_code&code=%s&code_verifier=%s", match[1], verifier.Value)
 	req, err = http.NewRequest("POST", IDP+"/oauth2/default/v1/token?"+queries, nil)
 	if err != nil {
@@ -148,6 +149,41 @@ func authenticate(IDP string, clientid string, username string, password string)
 		return nil
 	}
 	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Session token response body read failed", err)
+		return nil
+	}
+	var aidTokens accessIdTokens
+	err = json.Unmarshal(body, &aidTokens)
+	if err != nil {
+		fmt.Println("Access/Id unmarshall failed", err)
+		return nil
+	}
+	return &aidTokens
+}
+
+func refreshTokens(IDP string, clientid string, refresh string) *accessIdTokens {
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	queries := "client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access"
+	queries = queries + fmt.Sprintf("&grant_type=refresh_token&refresh_token=%s", refresh)
+	req, err := http.NewRequest("POST", IDP+"/oauth2/default/v1/token?"+queries, nil)
+	if err != nil {
+		fmt.Println("Session token request failed", err)
+		return nil
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("cache-control", "no-cache")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Session token failed: ", err, resp)
+		return nil
+	}
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Session token response body read failed", err)
 		return nil

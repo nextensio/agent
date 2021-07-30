@@ -177,6 +177,10 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
                 error!("Skipping bad ip address {}", &dnsip_array[i])
             }
         }
+        // Longest name matches first
+        reginfo
+            .domains
+            .sort_by(|a, b| b.name.chars().count().cmp(&a.name.chars().count()));
 
         let tmp_array: &[*const c_char] =
             slice::from_raw_parts(creg.services, creg.num_services as usize);

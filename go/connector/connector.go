@@ -105,13 +105,8 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 		}
 		switch hdr.Hdr.(type) {
 		case *nxthdr.NxtHdr_Onboard:
-			// Response to onboard message we sent
-			// Well, we wont ever see this message because the onboard response
-			// will come back on stream 0 which is the "gwTun" - and we dont really
-			// do any reads on gwTun, which just write onboard and be done with it
 			lg.Println("Got onboard response")
 		case *nxthdr.NxtHdr_Flow:
-			lg.Println("Got flow")
 			if dest.Conn == nil {
 				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 				key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
@@ -253,16 +248,37 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 }
 
 func monitorController(lg *log.Logger) {
-	keepalive := time.Duration(30)
+	var keepalive uint = 30
 	force_onboard := false
+	var tokens *accessIdTokens
 	for {
-		// TODO: We need to get refresh tokens instead of getting access tokens
-		// each time
-		tokens := authenticate(*idp, *clientid, *username, *password)
-		if tokens == nil {
-			lg.Println("Unable to authenticate connector with the IDP")
-			time.Sleep(10 * time.Second)
-			continue
+		tokens = authenticate(*idp, *clientid, *username, *password)
+		if tokens != nil {
+			break
+		}
+		lg.Println("Unable to authenticate connector with the IDP")
+		time.Sleep(10 * time.Second)
+	}
+	refresh := time.Now()
+	last_keepalive := time.Now()
+	for {
+		if onboarded {
+			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
+				force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
+				last_keepalive = time.Now()
+			}
+		}
+		// Okta is configured with one hour as the access token lifetime,
+		// refresh at 45 minutes
+		if time.Since(refresh).Minutes() >= 45 {
+			tokens = refreshTokens(*idp, *clientid, tokens.Refresh)
+			if tokens != nil {
+				refresh = time.Now()
+				// Send the new tokens to the gateway
+				force_onboard = true
+			} else {
+				lg.Println("Token refresh failed, will try again in 30 seconds")
+			}
 		}
 		if !onboarded || force_onboard {
 			if ControllerOnboard(lg, controller, tokens.AccessToken) {
@@ -270,16 +286,13 @@ func monitorController(lg *log.Logger) {
 				force_onboard = false
 				gw_onboarded = false
 				if regInfo.Keepalive == 0 {
-					keepalive = time.Duration(5 * 60)
+					keepalive = 5 * 60
 				} else {
-					keepalive = time.Duration(regInfo.Keepalive)
+					keepalive = regInfo.Keepalive
 				}
 			}
 		}
-		if onboarded {
-			force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
-		}
-		time.Sleep(keepalive * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 
@@ -294,6 +307,11 @@ func monitorGw(lg *log.Logger) {
 					regInfo.Gateway = *gateway
 				}
 				gwTun = DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
+				if gwTun != nil {
+					// The only data this will get is onboard response/control messages,
+					// data does not flow on the first stream (stream 0)
+					go gwToApp(lg, gwTun, ConnStats{})
+				}
 			} else {
 				if !gw_onboarded {
 					if OnboardTunnel(lg, gwTun, false, &regInfo, uniqueId) == nil {

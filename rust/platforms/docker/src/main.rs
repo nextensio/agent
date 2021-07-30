@@ -1,6 +1,7 @@
 use clap::{App, Arg};
 use log::error;
-use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistrationInfo};
+use nextensio::{agent_init, agent_on, onboard, CRegistrationInfo};
+use pkce::refresh;
 use regex::Regex;
 use serde::Deserialize;
 use signal_hook::{consts::SIGABRT, consts::SIGINT, consts::SIGTERM, iterator::Signals};
@@ -9,8 +10,8 @@ use std::os::raw::{c_char, c_int};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
-use std::{collections::HashMap, fmt};
 use std::{ffi::CString, usize};
+use std::{fmt, time::Instant};
 use uuid::Uuid;
 mod pkce;
 
@@ -244,24 +245,51 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 // do onboarding again in case the agent parameters are changed on the controller
 fn do_onboard(test: bool, controller: String, username: String, password: String) {
     let mut access_token;
+    let mut refresh_token;
     let mut onboarded = false;
     let mut version = 0;
     let mut force_onboard = false;
     let uuid = Uuid::new_v4();
-    let mut keepalive_interval = 30;
-    loop {
-        // TODO: We need to get refresh tokens instead of getting access tokens
-        // each time
-        let token = get_token(test, &username, &password);
-        if token.is_none() {
-            error!("Cannot get access token");
-            println!("Login to nextensio failed (cannot get tokens), will try again");
-            thread::sleep(Duration::new(10, 0));
-            continue;
-        } else {
-            access_token = token.unwrap();
-        }
+    let mut keepalive: usize = 30;
+    let mut last_keepalive = Instant::now();
+    let mut refresh = Instant::now();
 
+    loop {
+        let token = pkce::authenticate(test, &username, &password);
+        if let Some(t) = token {
+            access_token = t.access_token;
+            refresh_token = t.refresh_token;
+            break;
+        }
+        error!("Cannot get access token");
+        println!("Login to nextensio failed (cannot get tokens), will try again in 10 seconds");
+        thread::sleep(Duration::new(10, 0));
+    }
+
+    loop {
+        let now = Instant::now();
+        if onboarded {
+            if now > last_keepalive + Duration::from_secs(keepalive as u64) {
+                force_onboard =
+                    agent_keepalive(controller.clone(), access_token.clone(), version, &uuid);
+                last_keepalive = now;
+            }
+        }
+        // Okta is configured with one hour as the access token lifetime,
+        // refresh at 45 minutes
+        if now > refresh + Duration::from_secs(45 * 60) {
+            let token = pkce::refresh(test, &refresh_token);
+            if let Some(t) = token {
+                access_token = t.access_token;
+                refresh_token = t.refresh_token;
+                refresh = now;
+                // Send the new tokens to the gateway
+                force_onboard = true;
+                error!("Force onboard");
+            } else {
+                error!("Refresh token failed, will retry in 30 seconds")
+            }
+        }
         if !onboarded || force_onboard {
             error!("Onboarding again");
             println!("Connected flapped, onboarding again");
@@ -269,28 +297,16 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
             if o {
                 let onb = onb.unwrap();
                 version = onb.version;
-                keepalive_interval = onb.keepalive;
-                if keepalive_interval == 0 {
-                    keepalive_interval = 10 * 60;
+                keepalive = onb.keepalive;
+                if keepalive == 0 {
+                    keepalive = 5 * 60;
                 }
                 onboarded = true;
                 force_onboard = false;
             }
         }
-        if onboarded {
-            force_onboard =
-                agent_keepalive(controller.clone(), access_token.clone(), version, &uuid);
-        }
-        thread::sleep(Duration::new(keepalive_interval as u64, 0));
+        thread::sleep(Duration::from_secs(30));
     }
-}
-
-fn get_token(test: bool, username: &str, password: &str) -> Option<String> {
-    let out = pkce::authenticate(test, username, password);
-    if let Some(token) = out {
-        return Some(token.access_token);
-    }
-    return None;
 }
 
 fn okta_onboard(
