@@ -44,14 +44,14 @@ struct OnboardInfo {
     connectid: String,
     cluster: String,
     cacert: Vec<u8>,
-    version: u64,
+    version: String,
     keepalive: usize,
 }
 
 #[derive(Debug, Deserialize)]
 struct KeepaliveResponse {
     Result: String,
-    version: u64,
+    version: String,
 }
 
 impl fmt::Display for OnboardInfo {
@@ -247,7 +247,7 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
     let mut access_token;
     let mut refresh_token;
     let mut onboarded = false;
-    let mut version = 0;
+    let mut version = "".to_string();
     let mut force_onboard = false;
     let uuid = Uuid::new_v4();
     let mut keepalive: usize = 30;
@@ -271,7 +271,7 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
         if onboarded {
             if now > last_keepalive + Duration::from_secs(keepalive as u64) {
                 force_onboard =
-                    agent_keepalive(controller.clone(), access_token.clone(), version, &uuid);
+                    agent_keepalive(controller.clone(), access_token.clone(), &version, &uuid);
                 last_keepalive = now;
             }
         }
@@ -292,11 +292,11 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
         }
         if !onboarded || force_onboard {
             error!("Onboarding again");
-            println!("Connected flapped, onboarding again");
+            println!("Onboarding with nextensio controller");
             let (o, onb) = okta_onboard(controller.clone(), access_token.clone(), &uuid);
             if o {
                 let onb = onb.unwrap();
-                version = onb.version;
+                version = onb.version.clone();
                 keepalive = onb.keepalive;
                 if keepalive == 0 {
                     keepalive = 5 * 60;
@@ -364,7 +364,7 @@ fn okta_onboard(
     }
 }
 
-fn agent_keepalive(controller: String, access_token: String, version: u64, uuid: &Uuid) -> bool {
+fn agent_keepalive(controller: String, access_token: String, version: &str, uuid: &Uuid) -> bool {
     // TODO: Once we start using proper certs for our production clusters, make this
     // accept_invalid_certs true only for test environment. Even test environments ideally
     // should have verifiable certs via a test.nextensio.net domain or something

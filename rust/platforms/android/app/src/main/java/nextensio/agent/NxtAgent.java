@@ -7,7 +7,6 @@ import android.content.IntentFilter;
 import android.content.ComponentName;
 import android.content.ServiceConnection;
 import android.os.IBinder;
-import android.net.VpnService;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
@@ -30,42 +29,21 @@ import com.okta.oidc.net.params.TokenTypeHint;
 import com.okta.oidc.clients.web.WebAuthClient;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.AuthFailureError;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.toolbox.Volley;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.UUID;
-import org.json.JSONObject;
-import org.json.JSONArray;
-import org.json.JSONException;
-
-class NxtStats {
-    int gateway_up;
-    int gateway_flaps;
-    int last_gateway_flap;
-    int gateway_flows;
-    int total_flows;
-
-    native void nxtStats();
-}
+import android.net.VpnService;
+import android.content.Intent;
 
 // This class is an android 'activity' class, ie this is the one that deals
 // with UI and buttons and stuff. Based on all the UI/button activity it will
 // then launch a 'service' class in NxtAgentService.java
 public class NxtAgent extends AppCompatActivity {
-    private static final int VPN_REQUEST_CODE = 0x0F;
     private static final String TAG = "NxtUi";
     private NxtAgentService agentService = null;
     private final static String FIRE_FOX = "org.mozilla.firefox";
     private final static String ANDROID_BROWSER = "com.android.browser";
     private WebAuthClient authClient;
     private SessionClient sessionClient;
-    
+    private static final int VPN_REQUEST_CODE = 0x0F;
+
     private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
     .clientId("0oav0rc5g0E3irFto5d6")
     .redirectUri("nextensio.agent:/login")
@@ -167,49 +145,11 @@ public class NxtAgent extends AppCompatActivity {
     private void toggleVPN() {
         if (agentService == null) {
             authClient.signIn(this, null);
+            startVPN();
         } else {
             agentService.stop();
             doUnbindService();
             Log.i(TAG, "Stopped VPN");
-        }
-    }
-
-
-    private void agentOnboard(String accessToken, JSONObject onboard) {
-        try {
-            String result = onboard.getString("Result");
-            if (!result.equals("ok")) {
-                // TODO: show the error some place
-                Log.i(TAG, "Onboard result is not ok: " + result);
-                return;
-            }
-            String uuid = UUID.randomUUID().toString();
-            String userid = onboard.getString("userid");
-            String host = onboard.getString("gateway");
-            String connectid = onboard.getString("connectid");
-            String cluster = onboard.getString("cluster");
-            JSONArray cert = onboard.getJSONArray("cacert");
-            byte[] cacert = new byte[cert.length()];
-            for(int i = 0; i < cert.length(); i++) {
-                cacert[i] = (byte)cert.getInt(i);
-            }
-
-            JSONArray dom = onboard.getJSONArray("domains");
-            String[] domains = new String[dom.length()];
-            for(int i = 0; i < dom.length(); i++) {
-                domains[i] = dom.getString(i);
-            }
-
-            String[] services = new String[1];
-            services[0] = connectid;
-
-            nxtOnboard(accessToken, uuid, userid, host, connectid, cluster, cacert, domains, services);
-            startVPN();
-
-        } catch (final JSONException e)  {
-            // TODO: show the error some place
-            Log.i(TAG, "Error parsing json");
-            return;
         }
     }
 
@@ -237,34 +177,6 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
-    private void controllerOnboard(String accessToken) {
-        String url = "https://server.nextensio.net:8080/api/v1/global/get/onboard";
-        RequestQueue queue = Volley.newRequestQueue(this);
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
-                agentOnboard(accessToken, response);
-            }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // TODO: Show the error some place
-                Log.i(TAG, "Error calling " + url);
-            }
-        }) {
-            @Override
-            public Map getHeaders() throws AuthFailureError 
-            { 
-                HashMap headers = new HashMap(); 
-                headers.put("Authorization", "Bearer " + accessToken); 
-                return headers; 
-            }
-        }; 
-        
-        // Add the request to the RequestQueue.
-        queue.add(jsonObjectRequest);
-    }
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -290,9 +202,10 @@ public class NxtAgent extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_nextensio);
 
+        NxtApp app = (NxtApp) this.getApplicationContext();
         authClient = new Okta.WebAuthBuilder()
         .withConfig(mOidcConfig)
-        .withContext(this.getApplicationContext())
+        .withContext(app)
         .supportedBrowsers(ANDROID_BROWSER, FIRE_FOX)
         .setCacheMode(false).create();
 
@@ -304,7 +217,7 @@ public class NxtAgent extends AppCompatActivity {
                     try {
                         //client is authorized.
                         Tokens tokens = sessionClient.getTokens();
-                        controllerOnboard(tokens.getAccessToken());
+                        app.SetTokens(tokens.getAccessToken(), tokens.getRefreshToken());
                     } catch (AuthorizationException exception) {
                         return;
                     }
@@ -360,9 +273,4 @@ public class NxtAgent extends AppCompatActivity {
         super.onDestroy();
         doUnbindService();
     }    
-
-    private static native void nxtOnboard(String accessToken, String uuid, String userid, String host,
-                                          String connectid, String cluster, 
-                                          byte []cacert, String []domains, String []services);
-
 }

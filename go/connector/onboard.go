@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -46,7 +45,7 @@ type RegistrationInfo struct {
 	Userid      string   `json:"userid"`
 	Tenant      string   `json:"tenant"`
 	Services    []string `json:"services"`
-	Version     uint64   `json:"version"`
+	Version     string   `json:"version"`
 	Keepalive   uint     `json:"keepalive"`
 }
 
@@ -83,10 +82,10 @@ func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bo
 
 type KeepaliveResponse struct {
 	Result  string `json:"Result"`
-	Version uint64 `json:"version"`
+	Version string `json:"version"`
 }
 
-func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, version uint64, uuid string) bool {
+func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, version string, uuid string) bool {
 	var ka KeepaliveResponse
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
@@ -95,8 +94,7 @@ func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, 
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-	vn := fmt.Sprintf("%d", version)
-	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/keepalive/"+vn+"/"+uuid, nil)
+	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/keepalive/"+version+"/"+uuid, nil)
 	if err == nil {
 		req.Header.Add("Authorization", "Bearer "+accessToken)
 		resp, err := client.Do(req)
