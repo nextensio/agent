@@ -97,7 +97,7 @@ var (
 )
 
 func idpVerify() {
-	nxtTokens = authenticate("https://dev-635657.okta.com/oauth2/default", "0oaz5lndczD0DSUeh4x6",
+	nxtTokens = authenticate("https://dev-635657.okta.com", "0oaz5lndczD0DSUeh4x6",
 		"rudy@nextensio.net", "LetMeIn123")
 }
 
