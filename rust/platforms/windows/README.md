@@ -15,6 +15,7 @@
 7. Select Individual components tab
    * C++ MFC for latest v142 build tools with Spectre Mitigations (x86 & x64)
    * C++ V14.29 (16.10) MFC for v142 build tools with Spectre Mitigatios (x86 & x64)
+   * C++/CLI support for v142 build tools (Latest)
 9. Select Install
 10. After installation is completed, sign-in to Visual Studio using your MS account.
 
@@ -49,6 +50,12 @@
 
 <b>Rust Compiler Installation</b>
 1. https://www.rust-lang.org/tools/install
+
+<b>MinGW | Minimalist GNU for Windows (gcc compiler)</b>
+1. https://sourceforge.net/projects/mingw/
+2. PS C:\MinGW\bin> ./mingw-get install gcc
+3. PS C:\MinGW\bin> ./mingw-get install g++
+4. add C:\MingGW\bin to your system PATH environment variable
 
 <b>Reboot your computer</b>
 
