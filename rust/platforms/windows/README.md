@@ -51,11 +51,12 @@
 <b>Rust Compiler Installation</b>
 1. https://www.rust-lang.org/tools/install
 
-<b>MinGW | Minimalist GNU for Windows (gcc compiler)</b>
-1. https://sourceforge.net/projects/mingw/
-2. PS C:\MinGW\bin> ./mingw-get install gcc
-3. PS C:\MinGW\bin> ./mingw-get install g++
-4. add C:\MingGW\bin to your system PATH environment variable
+<b>MinGW | Minimalist GNU for Windows x64 (gcc compiler)</b>
+1. https://sourceforge.net/projects/mingw-w64/files/
+2. Click on MinGW-W64 Online Installer, this will download the installer
+3. Run the installer, Pick version 8.1.0 and x86_64
+4. Add this path to your system environment variable: C:\Program Files\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64\bin>
+
 
 <b>Reboot your computer</b>
 
