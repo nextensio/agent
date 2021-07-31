@@ -1,7 +1,11 @@
 package main
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestIDP(t *testing.T) {
-	idpVerify()
+	tokens := idpVerify()
+	fmt.Println("accessToken:", tokens.AccessToken)
 }

@@ -96,9 +96,11 @@ var (
 	}
 )
 
-func idpVerify() {
+func idpVerify() *accessIdTokens {
 	nxtTokens = authenticate("https://dev-635657.okta.com", "0oaz5lndczD0DSUeh4x6",
 		"rudy@nextensio.net", "LetMeIn123")
+
+	return nxtTokens
 }
 
 func main() {

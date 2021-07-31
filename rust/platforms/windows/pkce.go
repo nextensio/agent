@@ -104,7 +104,9 @@ func authenticate(IDP string, clientid string, username string, password string)
 		fmt.Println("Authentication response body read failed", err)
 		return nil
 	}
-	fmt.Println(string(body))
+
+	// fmt.Println("Session: ", string(body))
+
 	var stoken sessionToken
 	err = json.Unmarshal(body, &stoken)
 	if err != nil {
@@ -154,6 +156,9 @@ func authenticate(IDP string, clientid string, username string, password string)
 		fmt.Println("Session token response body read failed", err)
 		return nil
 	}
+
+	// fmt.Println("Access: ", string(body))
+
 	var aidTokens accessIdTokens
 	err = json.Unmarshal(body, &aidTokens)
 	if err != nil {
