@@ -42,21 +42,30 @@
 4. Open wdksetup.exe and install it to this computer
 5. Select, Install Windows Driver Kit Visual Studio extension and Install to Visual Studio Community 2019 (Visual Studio need to be shutdown for the installation to proceed)
 
+<b> Install make using choco package manager for windows</b>
+1. https://chocolatey.org/install
+
 <b>GIT Installation</b>
 1. https://git-scm.com/downloads
+2. or, choco install git
 
 <b>GoLang Installation</b>
 1. https://golang.org/
+2. or, choco install golang
 
 <b>Rust Compiler Installation</b>
 1. https://www.rust-lang.org/tools/install
+2. or, choco install rust
 
-<b>MinGW | Minimalist GNU for Windows x64 (gcc compiler)</b>
-1. https://sourceforge.net/projects/mingw-w64/files/
-2. Click on MinGW-W64 Online Installer, this will download the installer
-3. Run the installer, Pick version 8.1.0 and x86_64
-4. Add this path to your system environment variable: C:\Program Files\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64\bin>
+<b>Make Installation</b>
+1. choco install make
 
+<b>GCC Installation</b>
+1. https://www.msys2.org/
+2. Add this path to your system environment variable: C:\msys64\mingw64\bin
+
+<b> Install WSL/WSL2 (Optional) </b>
+1. https://docs.microsoft.com/en-us/windows/wsl/install-win10
 
 <b>Reboot your computer</b>
 

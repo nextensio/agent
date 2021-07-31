@@ -4,6 +4,10 @@
 
 package main
 
+/*
+#include "nxt-api.h"
+*/
+import "C"
 import (
 	"bytes"
 	"fmt"
