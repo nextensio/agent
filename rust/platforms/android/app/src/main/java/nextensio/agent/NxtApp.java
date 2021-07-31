@@ -7,15 +7,17 @@ import java.util.UUID;
 import org.json.JSONObject;
 import org.json.JSONArray;
 import org.json.JSONException;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.AuthFailureError;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.toolbox.Volley;
 import java.time.Instant;
 import java.time.Duration;
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.Response;
+import com.squareup.okhttp.HttpUrl;
+import java.io.IOException;
+import java.util.concurrent.TimeUnit ;
 
 public class NxtApp extends Application {
 
@@ -30,19 +32,12 @@ public class NxtApp extends Application {
     private Instant last_refresh = Instant.now();
     private static final String TAG = "NxtApp";
     private static final int VPN_REQUEST_CODE = 0x0F;
-    private RequestQueue volleyqueue;
-
+    private OkHttpClient client = new OkHttpClient();
+    
     public void SetTokens(String access, String refresh) {
         accessToken = access;
         refreshToken = refresh;
         force_onboard = true;
-    }
-
-    public RequestQueue getRequestQueue() {
-        if (volleyqueue == null) {
-            volleyqueue = Volley.newRequestQueue(this);
-        }
-        return volleyqueue;
     }
 
     public NxtApp() {
@@ -63,24 +58,33 @@ public class NxtApp extends Application {
             public void run() {
                 Thread.currentThread().setName("nextensio.onboard");
                 while (true) {
-                    doOnboard(); 
+                    int sleep_time = 30000;
+                    if (accessToken.equals("")) {
+                        // We want to onboard as fast as user logs in, so till user
+                        // logs in we sleep for a shorter time frame
+                        sleep_time = 1000;
+                    } else {
+                        doOnboard(); 
+                    }
                     try { 
-                        Thread.sleep(30000);
+                        Thread.sleep(sleep_time);
                     } catch (InterruptedException exception) {
                         Log.i(TAG, "Sleep failed");
                     }                  
                 }
-        }
+            }
         }).start();
 
         Log.i(TAG, "Loaded rust");
     }
 
-    private void doOnboard() {
-        if (accessToken == "") {
-            return;
-        }
+    public void onCreate() {
+        client.setConnectTimeout(15, TimeUnit.SECONDS); // connect timeout
+        client.setReadTimeout(15, TimeUnit.SECONDS);    // socket timeout
+        client.setWriteTimeout(15, TimeUnit.SECONDS);    // socket timeout
+    }
 
+    private void doOnboard() {
         Instant now = Instant.now();
 
         if (onboarded) {
@@ -104,104 +108,74 @@ public class NxtApp extends Application {
     }
 
     private void refresh() {
-        String url = "https://dev-24743301.okta.com/oauth2/default/v1/token?client_id=0oav0rc5g0E3irFto5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken;
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, null, new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
-                try {
-                    accessToken = response.getString("access_token");
-                    refreshToken = response.getString("refresh_token");
-                    force_onboard = true;
-                } catch (final JSONException e)  {
-                    Log.i(TAG, "refresh decode error");
-                }
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://dev-24743301.okta.com/oauth2/default/v1/token?client_id=0oav0rc5g0E3irFto5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
+        String url = urlBuilder.build().toString();
+        RequestBody reqbody = RequestBody.create(null, new byte[0]);  
+        try {
+            Request request = new Request.Builder()
+                                .header("Accept", "application/json")
+                                .header("Content-Type", "application/x-www-form-urlencoded")
+                                .header("cache-control", "no-cache")
+                                .url(url)
+                                .method("POST",reqbody)
+                                .build();
+            Response res = client.newCall(request).execute();
+            try {
+                JSONObject response = new JSONObject(res.body().string());
+                accessToken = response.getString("access_token");
+                refreshToken = response.getString("refresh_token");
+                force_onboard = true;
+                Log.i(TAG, "Refresh success");
+            }  catch (final JSONException e)  {
+                Log.i(TAG, "Refresh json exception: " + e.getMessage());
             }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // TODO: Show the error some place
-                Log.i(TAG, "Error calling " + url + error.getMessage());
-            }
-        })  {
-            @Override
-            public Map getHeaders() throws AuthFailureError 
-            { 
-                HashMap headers = new HashMap(); 
-                headers.put("Accept", "application/json");
-                headers.put("Content-Type", "application/x-www-form-urlencoded");
-                headers.put("cache-control", "no-cache");
-                return headers; 
-            }
-        }; 
-        
-        RequestQueue rq = getRequestQueue();
-        // Add the request to the RequestQueue.
-        rq.add(jsonObjectRequest);
+        } catch (IOException e) {
+            Log.i(TAG, "Refresh fail: " + e.getMessage());
+        }
     }
 
     private void agentKeepalive()  {
-        String url = "https://server.nextensio.net:8080/api/v1/global/get/keepalive/" + last_version + "/" + uuid;
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
-                try {
-                    String version = response.getString("version");
-                    if (!version.equals(last_version)) {
-                        Log.i(TAG, "Version mismatch: " + version + ":" + last_version);
-                        force_onboard = true;
-                    }
-                } catch (final JSONException e)  {
-                    Log.i(TAG, "keepalive failed");
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/global/get/keepalive/" + last_version + "/" + uuid).newBuilder();
+        String url = urlBuilder.build().toString();
+        try {
+            Request request = new Request.Builder()
+                                .header("Authorization", "Bearer " + accessToken)
+                                .url(url)
+                                .build();
+            Response res = client.newCall(request).execute();
+            try {
+                JSONObject response = new JSONObject(res.body().string());
+                String version = response.getString("version");
+                if (!version.equals(last_version)) {
+                    Log.i(TAG, "Version mismatch: " + version + ":" + last_version);
+                    force_onboard = true;
                 }
+            } catch (final JSONException e)  {
+                Log.i(TAG, "Keepalive json exception: " + e.getMessage());
             }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // TODO: Show the error some place
-                Log.i(TAG, "Error calling " + url);
-            }
-        }) {
-            @Override
-            public Map getHeaders() throws AuthFailureError 
-            { 
-                HashMap headers = new HashMap(); 
-                headers.put("Authorization", "Bearer " + accessToken); 
-                return headers; 
-            }
-        }; 
-        
-        RequestQueue rq = getRequestQueue();
-        // Add the request to the RequestQueue.
-        rq.add(jsonObjectRequest);
+        }  catch (IOException e) {
+            Log.i(TAG, "Keepalive fail: " + e.getMessage());
+        }
     }
 
     private void controllerOnboard() {
-        String url = "https://server.nextensio.net:8080/api/v1/global/get/onboard";
-        RequestQueue queue = Volley.newRequestQueue(this);
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/global/get/onboard").newBuilder();
+        String url = urlBuilder.build().toString();
+        try {
+            Request request = new Request.Builder()
+                                .header("Authorization", "Bearer " + accessToken)
+                                .url(url)
+                                .build();
+            Response res = client.newCall(request).execute();
+            try {
+                JSONObject response = new JSONObject(res.body().string());
                 agentOnboard(response);
+            } catch (final JSONException e)  {
+                Log.i(TAG, "Onboard json exception: " + e.getMessage());
             }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // TODO: Show the error some place
-                Log.i(TAG, "Error calling " + url);
-            }
-        }) {
-            @Override
-            public Map getHeaders() throws AuthFailureError 
-            { 
-                HashMap headers = new HashMap(); 
-                headers.put("Authorization", "Bearer " + accessToken); 
-                return headers; 
-            }
-        }; 
-        
-        RequestQueue rq = getRequestQueue();
-        // Add the request to the RequestQueue.
-        rq.add(jsonObjectRequest);
+        }  catch (IOException e) {
+            Log.i(TAG, "Onboard fail " + e.getMessage());
+        }
     }
 
     private void agentOnboard(JSONObject onboard) {
