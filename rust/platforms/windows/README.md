@@ -15,6 +15,7 @@
 7. Select Individual components tab
    * C++ MFC for latest v142 build tools with Spectre Mitigations (x86 & x64)
    * C++ V14.29 (16.10) MFC for v142 build tools with Spectre Mitigatios (x86 & x64)
+   * C++/CLI support for v142 build tools (Latest)
 9. Select Install
 10. After installation is completed, sign-in to Visual Studio using your MS account.
 
@@ -24,7 +25,8 @@
 2. Open winsdksetup.exe
 
 <b>Add signtool.exe path to your system environment variable</b> 
-1. Signtool.exe comes with Windows SDK. It is located in C:\Program Files (x86)\Windows Kits\10\App Certification Kit. 2. This link shows how you can add this path as System Path: https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/#:~:text=Click%20the%20%E2%80%9CEnvironment%20Variables%E2%80%A6%E2%80%9D%20button.%20Under%20the%20%E2%80%9CSystem,screen%20you%20can%20also%20edit%20or%20reorder%20them.
+1. Signtool.exe comes with Windows SDK. It is located in C:\Program Files (x86)\Windows Kits\10\App Certification Kit. 2. This link shows how you can add this path as System variable Path: https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/#:~:text=Click%20the%20%E2%80%9CEnvironment%20Variables%E2%80%A6%E2%80%9D%20button.%20Under%20the%20%E2%80%9CSystem,screen%20you%20can%20also%20edit%20or%20reorder%20them.
+3. add the path shown in step 1
 
 <b>Create Self-Signed CodeSign Certificate</b>
 1. Open PowerShell as administrator
@@ -40,14 +42,30 @@
 4. Open wdksetup.exe and install it to this computer
 5. Select, Install Windows Driver Kit Visual Studio extension and Install to Visual Studio Community 2019 (Visual Studio need to be shutdown for the installation to proceed)
 
+<b> Install make using choco package manager for windows</b>
+1. https://chocolatey.org/install
+
 <b>GIT Installation</b>
 1. https://git-scm.com/downloads
+2. or, choco install git
 
 <b>GoLang Installation</b>
 1. https://golang.org/
+2. or, choco install golang
 
 <b>Rust Compiler Installation</b>
 1. https://www.rust-lang.org/tools/install
+2. or, choco install rust
+
+<b>Make Installation</b>
+1. choco install make
+
+<b>GCC Installation</b>
+1. https://www.msys2.org/
+2. Add this path to your system environment variable: C:\msys64\mingw64\bin
+
+<b> Install WSL/WSL2 (Optional) </b>
+1. https://docs.microsoft.com/en-us/windows/wsl/install-win10
 
 <b>Reboot your computer</b>
 

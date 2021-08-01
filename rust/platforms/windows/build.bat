@@ -56,13 +56,24 @@ if exist .deps\prepared goto :build
 	del %1 || exit /b 1
 	goto :eof
 
+:: Example of integrating rustc api with golang
+:: RUST Compiler: rustc -g -v -O -o libhello.a --crate-type staticlib --print native-static-libs hello.rs
+:: Put the output from native-static-libs into #cgo LDFLAGS (-lws2_32 -ladvapi32 -luserenv)
+:: Go Compiler: go build -x -ldflags "-v -linkmode external -extldflags -static" ./main.go
+:build_rust_plat
+	set CGO_LDFLAGS_ALLOW=".*"
+	set CGO_CFLAGS_ALLOW=".*"
+	set CGO_ENABLED="1"
+	set CC=gcc
+	goto :eof
+
 :build_plat
 	set GOARCH=%~3
 	mkdir %1 >NUL 2>&1
 	echo [+] Assembling resources %1
 	%~2-w64-mingw32-windres -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
 	echo [+] Building program %1
-	go build -tags load_wintun_from_rsrc -v -trimpath -o "%~1\nxt-windows.exe" || exit /b 1
+	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nxt-windows.exe" || exit /b 1
 	goto :eof
 
 :error

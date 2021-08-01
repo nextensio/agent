@@ -1,2 +1,2 @@
-set SigningCertificate=3F6E5A565418A6B461483AD68D9BEEDE2C7BA419
+set SigningCertificate=814665332A4AEDBE220DD51C4EE8213FD46D85D7
 set TimestampServer=http://timestamp.digicert.com
