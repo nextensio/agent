@@ -30,6 +30,11 @@ public enum NextensioGoBridgeLogLevel: Int32 {
 class PacketTunnelProvider: NEPacketTunnelProvider {
     var conf = [String: AnyObject]()
     var pendingStartCompletion: ((NSError?) -> Void)?
+    var onboarded = false
+    var force_onboard = false
+    var keepalive = 30
+    var last_version = ""
+    var uuid = UUID().uuidString
     
     override init() {
         super.init()
@@ -56,13 +61,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     os_log("url error %{public}s", error!.localizedDescription)
                 }
                 self.pendingStartCompletion?(NSError(domain:"onboarding url failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
+                self.pendingStartCompletion = nil
                 return
             }
             guard let data = data else {
                 os_log("data error")
                 self.pendingStartCompletion?(NSError(domain:"onboarding data failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
+                self.pendingStartCompletion = nil
                 return 
             }
             do {
@@ -71,19 +76,19 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.onboardNextensioAgent(accessToken: accessToken, json: onboard)
                     self.turnOnNextensioAgent()
                     self.pendingStartCompletion?(nil)
-		    self.pendingStartCompletion = nil
-		    os_log("Successfully onboarded")
-		    return
+                    self.pendingStartCompletion = nil
+                    os_log("Successfully onboarded")
+                    return
                 }
             } catch _ {
                 os_log("error in json serialization")
                 self.pendingStartCompletion?(NSError(domain:"onboarding json failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
-		return 
+                self.pendingStartCompletion = nil
+                return
             }
         })
         task.resume()
-	return
+        return
     }
     
     private func setupVPN() {
@@ -114,11 +119,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         if (conf["highMem"] as! Bool) == true {
             highmem = 1; 
         }
-        let access = (conf["access"] as! String)
-         
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
-            self.onboardController(accessToken: access)
+            os_log("Network tunnel saved")
         }
     }
 
@@ -131,29 +134,74 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         agent_init(1 /*apple*/, direct == "true" ? 1 : 0, Int32(rxmtu), Int32(txmtu), Int32(highmem))
     }
     
+    private func agentKeepalive() {
+        
+    }
+    
+    private func refresh() {
+        
+    }
+    
+    @objc func doOnboard(sender: Any) {
+        if #available(macOS 11.0, *) {
+            os_log("doOnboard %{public}lu", Thread.current)
+        }
+        var last_keepalive = DispatchTime.now()
+        var last_refresh = DispatchTime.now()
+        while true {
+            if conf["access"] == nil {
+                // Till user logs in we sleep for less time
+                Thread.sleep(forTimeInterval: 1)
+                continue
+            }
+            let now = DispatchTime.now()
+            if onboarded {
+                let nanoTime = now.uptimeNanoseconds - last_keepalive.uptimeNanoseconds
+                let elapsed = Double(nanoTime) / 1_000_000_000
+                if elapsed >= 3 {
+                    agentKeepalive()
+                    last_keepalive = now
+                }
+            }
+            let nanoTime = now.uptimeNanoseconds - last_refresh.uptimeNanoseconds
+            let elapsed = Double(nanoTime) / 1_000_000_000
+            if elapsed >= 3 {
+                refresh()
+                last_refresh = now
+            }
+            let access = (conf["access"] as! String)
+            if !onboarded || force_onboard {
+                self.onboardController(accessToken: access)
+            }
+            Thread.sleep(forTimeInterval:  3)
+        }
+    }
+    
     func startAgent(direct: String) {
         let t = Thread(target: self, selector: #selector(runner(sender:)), object: direct)
         t.start()
+        let t1 = Thread(target: self, selector: #selector(doOnboard(sender:)), object: nil)
+        t1.start()
     }
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         os_log("startTunnel using Network Extension configuration on mac")
         self.conf = (self.protocolConfiguration as! NETunnelProviderProtocol).providerConfiguration! as [String : AnyObject]
 
-    // System extension runs in one single process, and it is given one of these objects
-    // each time user asks for vpn on - so there is no way to save a 'state' in the object
-    // which says we have already started a thread for nextensio data processing, hence having
-    // to maintain that state in the thread itself which tells us if its already started or
-    // not. The other option is pbbly we can try to kill the thread if this object gets a 
-    // tunnel stop request. But that gets more complicated (I think)
-	let started = agent_started()
+        // System extension runs in one single process, and it is given one of these objects
+        // each time user asks for vpn on - so there is no way to save a 'state' in the object
+        // which says we have already started a thread for nextensio data processing, hence having
+        // to maintain that state in the thread itself which tells us if its already started or
+        // not. The other option is pbbly we can try to kill the thread if this object gets a
+        // tunnel stop request. But that gets more complicated (I think)
+        let started = agent_started()
         // start agent
         if started == 0 {
             os_log("Agent starting")
             self.startAgent(direct: "false")
         } else {
             os_log("Agent started previously")
-	}
+        }
 
         self.pendingStartCompletion = completionHandler
         self.setupVPN()
@@ -219,31 +267,43 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         os_log("CA cert count %d", (json["cacert"] as! NSMutableArray).count)
         os_log("UserId %{public}@", json["userid"] as! String)
         os_log("cluster %{public}@", json["cluster"] as! String)
-        os_log("UUID %{public}@", UUID().uuidString)
-
+        os_log("UUID %{public}@", uuid)
+        os_log("Version %{public}@", last_version)
+                
         var registration = CRegistrationInfo()
         
-        registration.host = UnsafeMutablePointer<Int8>(mutating: (json["gateway"] as! NSString).utf8String)
+        registration.gateway = UnsafeMutablePointer<Int8>(mutating: (json["gateway"] as! NSString).utf8String)
         registration.access_token = UnsafeMutablePointer<Int8>(mutating: (accessToken as NSString).utf8String)
         registration.connect_id = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.cluster = UnsafeMutablePointer<Int8>(mutating: (json["cluster"] as! NSString).utf8String)
-        registration.uuid = UnsafeMutablePointer<Int8>(mutating: (UUID().uuidString as NSString).utf8String)
+        registration.uuid = UnsafeMutablePointer<Int8>(mutating: (uuid as NSString).utf8String)
         
         let dom = json["domains"] as! NSMutableArray
         registration.num_domains = Int32(dom.count)
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
+            registration.dnsip = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
+            registration.needdns = UnsafeMutablePointer<Int32>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
-                registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (dom[i] as! NSString).utf8String)
+                let d = dom[i] as! NSDictionary
+                registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (d["name"] as! NSString).utf8String)
+                registration.dnsip[i] = UnsafeMutablePointer<Int8>(mutating: (d["dnsip"] as! NSString).utf8String)
+                let dns = d["needdns"] as! Bool
+                if dns {
+                    registration.needdns[i] = 1
+                } else {
+                    registration.needdns[i] = 0
+                }
+                os_log("GOPA domain %{public}@", d["name"] as! String)
+                os_log("GOPA dnsip %{public}@", d["dnsip"] as! String)
+                os_log("GOPA needdns %{public}d", d["needdns"] as! Bool)
             }
         } else {
             registration.domains = nil
         }
-                
-        registration.num_services = 1
-        registration.services = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
-        registration.services[0] = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
+            		
+        registration.num_services = 0
         
         let cert = (json["cacert"] as! NSMutableArray)
         registration.num_cacert = Int32(cert.count)
@@ -256,18 +316,18 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         onboard(registration)
                 
         // cleanup
-        //registration.host.deallocate()
-        //registration.access_token.deallocate()
-        //registration.connect_id.deallocate()
-        //registration.userid.deallocate()
-        //registration.uuid.deallocate()
         registration.ca_cert.deallocate()
-        //for i in 0..<dom.count {
-            //registration.domains[i]!.deallocate()
-        //}
-        //registration.domains.deallocate()
-        //registration.services[0]!.deallocate()
-        registration.services.deallocate()
+        registration.domains.deallocate()
+        registration.dnsip.deallocate()
+        registration.needdns.deallocate()
+        
+        last_version = json["version"] as! String
+        keepalive = json["keepalive"] as! Int
+        if keepalive == 0 {
+            keepalive = 5*60
+        }
+        onboarded = true
+        force_onboard = false
     }
     
     // turn on NextensioAgent
@@ -294,11 +354,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 // Initialize RegistrationInfo
 extension CRegistrationInfo {
     init() {
-        self.init(host: nil,
+        self.init(gateway: nil,
                   access_token: nil,
                   connect_id: nil,
                   cluster: nil,
                   domains: nil,
+                  needdns: nil,
+                  dnsip: nil,
                   num_domains: 0,
                   ca_cert: nil,
                   num_cacert: 0,

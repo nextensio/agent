@@ -12,11 +12,13 @@
 
 typedef struct CRegistrationInfo
 {
-    char *host;
+    char *gateway;
     char *access_token;
     char *connect_id;
     char *cluster;
     char **domains;
+    int *needdns;
+    char **dnsip;
     int num_domains;
     char *ca_cert;
     int num_cacert;
