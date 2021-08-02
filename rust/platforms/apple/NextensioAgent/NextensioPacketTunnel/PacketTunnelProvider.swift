@@ -405,7 +405,27 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         for i in 0..<cert.count {
             registration.ca_cert[i] = cert[i] as! Int8
         }
+
+        let processInfo:ProcessInfo = ProcessInfo.processInfo
+
+        // Returns the name of the host system
+        let hostName:String = processInfo.hostName
+        // Returns the version number of the operating system
+        let osVerson:OperatingSystemVersion = processInfo.operatingSystemVersion
+        let majorVersion:Int = osVerson.majorVersion
+        let minorVersion:Int = osVerson.minorVersion
+        let patchVersion:Int = osVerson.patchVersion
+        // return the operating system name
+        let osName:String = processInfo.operatingSystemVersionString
         
+        registration.hostname = UnsafeMutablePointer<Int8>(mutating: (hostName as NSString).utf8String)
+        registration.model = UnsafeMutablePointer<Int8>(mutating: (self.conf["modelName"] as! NSString).utf8String)
+        registration.os_type = UnsafeMutablePointer<Int8>(mutating: ("ios" as NSString).utf8String)
+        registration.os_name = UnsafeMutablePointer<Int8>(mutating: (osName as NSString).utf8String)
+        registration.os_patch = Int32(patchVersion)
+        registration.os_major = Int32(majorVersion)
+        registration.os_minor = Int32(minorVersion)
+
         print("onboarding agent on mac")
         onboard(registration)
                 
@@ -462,7 +482,14 @@ extension CRegistrationInfo {
                   userid: nil,
                   uuid: nil,
                   services: nil,
-                  num_services: 0)
+                  num_services: 0,
+                  hostname: nil,
+                  model: nil,
+                  os_type: nil,
+                  os_name: nil,
+                  os_patch: 0,
+                  os_major: 0,
+                  os_minor: 0)
     }
 }
 

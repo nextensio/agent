@@ -26,6 +26,13 @@ typedef struct CRegistrationInfo
     char *uuid;
     char **services;
     int num_services;
+    char *hostname;
+    char *model;
+    char *os_type;
+    char *os_name;
+    int os_patch;
+    int os_major;
+    int os_minor;
 } CRegistrationInfo;
 
 void agent_init(uintptr_t platform, uintptr_t direct, int rxmtu, int txmtu, int highmem);
