@@ -18,6 +18,10 @@ import com.squareup.okhttp.Response;
 import com.squareup.okhttp.HttpUrl;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit ;
+import android.os.Build;
+import java.lang.reflect.Method;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class NxtApp extends Application {
 
@@ -212,11 +216,25 @@ public class NxtApp extends Application {
                 }
             }
             
-            String[] services = new String[1];
-            services[0] = connectid;
-            Log.i(TAG, services[0]);
+            String[] services = new String[0];
 
-            nxtOnboard(accessToken, uuid, userid, gateway, connectid, cluster, cacert, domains, dnsip, needdns, services);
+            String hostname = Build.HOST;
+            String model = Build.BRAND + " " + Build.MANUFACTURER + " " + Build.MODEL;
+            String osname = Build.VERSION.BASE_OS;
+            String regex = "([0-9]+).([0-9]+).([0-9]+)";
+            Pattern pattern = Pattern.compile(regex);
+            Matcher matcher = pattern.matcher(Build.VERSION.RELEASE);
+            int major = 0;
+            int minor = 0;
+            int patch = 0;
+            if (matcher.matches()) {
+                major = Integer.parseInt(matcher.group(1));
+                minor = Integer.parseInt(matcher.group(2));
+                patch = Integer.parseInt(matcher.group(3));
+            }
+
+            nxtOnboard(accessToken, uuid, userid, gateway, connectid, cluster, cacert, domains, dnsip, needdns, services,
+                       hostname, model, "android", osname, major, minor, patch);
 
             last_version = onboard.getString("version");
             keepalive = onboard.getInt("keepalive");
@@ -238,5 +256,7 @@ public class NxtApp extends Application {
 
     private static native void nxtOnboard(String accessToken, String uuid, String userid, String host,
                                           String connectid, String cluster, 
-                                          byte []cacert, String []domains, String[] dnsip, int[] needdns, String []services);
+                                          byte []cacert, String []domains, String[] dnsip, int[] needdns, String []services,
+                                          String hostname, String model, String ostype, String osname,
+                                          int major, int minor, int patch);
 }

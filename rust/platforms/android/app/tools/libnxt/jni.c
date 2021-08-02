@@ -17,6 +17,13 @@ struct CRegistrationInfo
     const char *uuid;
     const char **services;
     int num_services;
+    const char *hostname;
+    const char *model;
+    const char *os_type;
+    const char *os_name;
+    int os_patch;
+    int os_major;
+    int os_minor;
 };
 
 struct AgentStats
@@ -62,7 +69,9 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
                                                               jstring uuid, jstring userid, jstring gateway, jstring connectid,
                                                               jstring cluster,
                                                               jbyteArray cacert, jobjectArray domains, jobjectArray dnsip,
-                                                              jintArray needdns, jobjectArray services)
+                                                              jintArray needdns, jobjectArray services,
+                                                              jstring hostname, jstring model, jstring ostype, jstring osname,
+                                                              jint major, jint minor, jint patch)
 {
     struct CRegistrationInfo creg = {};
 
@@ -97,6 +106,14 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
         jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, services, i));
         creg.services[i] = (*env)->GetStringUTFChars(env, s1, 0);
     }
+
+    creg.hostname = (*env)->GetStringUTFChars(env, hostname, NULL);
+    creg.model = (*env)->GetStringUTFChars(env, model, NULL);
+    creg.os_type = (*env)->GetStringUTFChars(env, ostype, NULL);
+    creg.os_name = (*env)->GetStringUTFChars(env, osname, NULL);
+    creg.os_major = major;
+    creg.os_minor = minor;
+    creg.os_patch = patch;
 
     // Call Rust to onboard
     onboard(creg);
