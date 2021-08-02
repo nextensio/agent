@@ -124,6 +124,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 if let keepalive = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
                     if keepalive["version"] as! String != self.last_version {
                         self.force_onboard = true
+                        os_log("keepalive version mismatch %{public}@, %{public}@", keepalive["version"] as! String, self.last_version)
                     }
                     os_log("keepalive: Successful")
                     return
