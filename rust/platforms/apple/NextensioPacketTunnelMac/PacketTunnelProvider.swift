@@ -35,6 +35,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var keepalive = 30
     var last_version = ""
     var uuid = UUID().uuidString
+    var stopKeepalive = false
     
     override init() {
         super.init()
@@ -240,6 +241,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         var last_keepalive = DispatchTime.now()
         var last_refresh = DispatchTime.now()
         while true {
+            if stopKeepalive {
+                return
+            }
             if conf["access"] == nil {
                 // Till user logs in we sleep for less time
                 Thread.sleep(forTimeInterval: 1)
@@ -271,8 +275,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     func startAgent(direct: String) {
         let t = Thread(target: self, selector: #selector(runner(sender:)), object: direct)
         t.start()
-        let t1 = Thread(target: self, selector: #selector(doOnboard(sender:)), object: nil)
-        t1.start()
     }
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
@@ -293,12 +295,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         } else {
             os_log("Agent started previously")
         }
-
+        let t = Thread(target: self, selector: #selector(doOnboard(sender:)), object: nil)
+        t.start()
         self.pendingStartCompletion = completionHandler
         self.setupVPN()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        self.stopKeepalive = true
         super.stopTunnel(with: reason, completionHandler: completionHandler)
         self.turnOffNextensioAgent()
     }
