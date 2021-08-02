@@ -72,7 +72,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             do {
                 //create json object from data
-                if var onboard = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                if let onboard = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
                     self.onboardNextensioAgent(accessToken: accessToken, json: onboard)
                     self.turnOnNextensioAgent()
                     self.pendingStartCompletion?(nil)
@@ -84,6 +84,52 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 os_log("error in json serialization")
                 self.pendingStartCompletion?(NSError(domain:"onboarding json failed", code:0, userInfo:nil))
                 self.pendingStartCompletion = nil
+                return
+            }
+        })
+        task.resume()
+        return
+    }
+    
+    private func agentKeepalive(accessToken: String) {
+        //create the url with NSURL
+        let keepURL = String(format:"https://server.nextensio.net:8080/api/v1/global/get/keepalive/%@/%@", last_version, uuid)
+        let url = URL(string: keepURL)!
+        //create the session object
+        let session = URLSession.shared
+        session.configuration.httpMaximumConnectionsPerHost = 1;
+        session.configuration.timeoutIntervalForRequest = 60;
+        session.configuration.timeoutIntervalForResource = 60;
+        //now create the URLRequest object using the url object
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField:"Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField:"Authorization")
+        request.timeoutInterval = 60.0
+
+        //create dataTask using the session object to send data to the server
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            guard error == nil else {
+                if #available(macOS 11.0, *) {
+                    os_log("url error %{public}s", error!.localizedDescription)
+                }
+                return
+            }
+            guard let data = data else {
+                os_log("keepalive: data error")
+                return
+            }
+            do {
+                //create json object from data
+                if let keepalive = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                    if keepalive["version"] as! String != self.last_version {
+                        self.force_onboard = true
+                    }
+                    os_log("keepalive: Successful")
+                    return
+                }
+            } catch _ {
+                os_log("keepalive: error in json serialization")
                 return
             }
         })
@@ -134,11 +180,55 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         agent_init(1 /*apple*/, direct == "true" ? 1 : 0, Int32(rxmtu), Int32(txmtu), Int32(highmem))
     }
     
-    private func agentKeepalive() {
+    private func refresh(refreshToken: String) {
+        let rUrl =  "https://dev-24743301.okta.com/oauth2/default/v1/token?client_id=0oav0q3hn65I4Zkmr5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken
+        let url = URL(string: rUrl)!
+        //create the session object
+        let session = URLSession.shared
+        session.configuration.httpMaximumConnectionsPerHost = 1;
+        session.configuration.timeoutIntervalForRequest = 60;
+        session.configuration.timeoutIntervalForResource = 60;
+        //now create the URLRequest object using the url object
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField:"Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField:"Content-Type")
+        request.setValue("no-cache", forHTTPHeaderField:"cache-control")
+        request.timeoutInterval = 60.0
+        let empty = [String: String]()
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: empty, options: []) else {
+            return
+        }
+        request.httpBody = httpBody
         
-    }
-    
-    private func refresh() {
+        //create dataTask using the session object to send data to the server
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            guard error == nil else {
+                if #available(macOS 11.0, *) {
+                    os_log("url error %{public}s", error!.localizedDescription)
+                }
+                return
+            }
+            guard let data = data else {
+                os_log("refresh: data error")
+                return
+            }
+            do {
+                //create json object from data
+                if let tokens = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                    self.conf["access"] = tokens["access_token"] as! NSString
+                    self.conf["refresh"] = tokens["refresh_token"] as! NSString
+                    self.force_onboard = true
+                    os_log("refresh Success")
+                    return
+                }
+            } catch _ {
+                os_log("refresh: error in json serialization")
+                return
+            }
+        })
+        task.resume()
+        return
         
     }
     
@@ -158,20 +248,20 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             if onboarded {
                 let nanoTime = now.uptimeNanoseconds - last_keepalive.uptimeNanoseconds
                 let elapsed = Double(nanoTime) / 1_000_000_000
-                if elapsed >= 3 {
-                    agentKeepalive()
+                if Int(elapsed) >= keepalive {
+                    agentKeepalive(accessToken: (conf["access"] as! String))
                     last_keepalive = now
                 }
             }
             let nanoTime = now.uptimeNanoseconds - last_refresh.uptimeNanoseconds
             let elapsed = Double(nanoTime) / 1_000_000_000
-            if elapsed >= 3 {
-                refresh()
+            // Okta tokens expire in one hour, start refreshing them 15 mins before expiry
+            if elapsed >= 45*60 {
+                refresh(refreshToken: conf["refresh"] as! String)
                 last_refresh = now
             }
-            let access = (conf["access"] as! String)
             if !onboarded || force_onboard {
-                self.onboardController(accessToken: access)
+                self.onboardController(accessToken: (conf["access"] as! String))
             }
             Thread.sleep(forTimeInterval:  3)
         }
@@ -295,9 +385,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 } else {
                     registration.needdns[i] = 0
                 }
-                os_log("GOPA domain %{public}@", d["name"] as! String)
-                os_log("GOPA dnsip %{public}@", d["dnsip"] as! String)
-                os_log("GOPA needdns %{public}d", d["needdns"] as! Bool)
             }
         } else {
             registration.domains = nil
