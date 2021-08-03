@@ -222,6 +222,10 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         c_services_ptr.push(p);
     }
     c_services.push(CString::new("foobar").unwrap());
+    let hostname = CString::new("localhost").unwrap();
+    let model = CString::new("model").unwrap();
+    let os_type = CString::new("linux").unwrap();
+    let os_name = CString::new("linux").unwrap();
     let creg = CRegistrationInfo {
         host: c_host.as_ptr(),
         access_token: c_access_token.as_ptr(),
@@ -237,6 +241,13 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         uuid: c_uuid_str.as_ptr(),
         services: c_services_ptr.as_ptr() as *const *const c_char,
         num_services: c_services_ptr.len() as c_int,
+        hostname: hostname.as_ptr(),
+        model: model.as_ptr(),
+        os_type: os_type.as_ptr(),
+        os_name: os_name.as_ptr(),
+        os_patch: 0,
+        os_major: 0,
+        os_minor: 0,
     };
     unsafe { onboard(creg) };
 }

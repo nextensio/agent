@@ -116,6 +116,13 @@ pub struct CRegistrationInfo {
     pub uuid: *const c_char,
     pub services: *const *const c_char,
     pub num_services: c_int,
+    pub hostname: *const c_char,
+    pub model: *const c_char,
+    pub os_type: *const c_char,
+    pub os_name: *const c_char,
+    pub os_patch: c_int,
+    pub os_major: c_int,
+    pub os_minor: c_int,
 }
 
 #[derive(Default, Debug)]
