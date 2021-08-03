@@ -35,6 +35,7 @@ use std::{
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize};
 use webproxy::WebProxy;
 use websock::WebSession;
+mod dns;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
@@ -81,10 +82,10 @@ const MAX_PENDING_RX: usize = 4;
 const FLOW_BUFFER_HOG: u64 = 4; // seconds;
 
 #[derive(Default, Debug)]
-struct Domain {
-    name: String,
+pub struct Domain {
+    pub name: String,
     needdns: bool,
-    dnsip: u32,
+    pub dnsip: u32,
 }
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -726,6 +727,7 @@ fn external_sock_tx(
     _perf: &mut AgentPerf,
     vpn_rx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
+    pkt_pool: &Arc<Pool<Vec<u8>>>,
 ) {
     tun.tx_ready = true;
 
@@ -734,7 +736,7 @@ fn external_sock_tx(
             flow.pending_tx_qed = false;
             flow.rx_socket.write_ready();
             flow.rx_socket.poll(vpn_rx, vpn_tx);
-            flow_data_to_external(&key, flow, None, tun, reginfo, poll, _perf);
+            flow_data_to_external(&key, flow, None, tun, reginfo, poll, pkt_pool, _perf);
             // If the flow is back to waiting state then we cant send any more
             // on this tunnel, so break out and try next time
             if flow.pending_tx.is_some() {
@@ -872,6 +874,7 @@ fn parse_copy(
             // non-first buffers to have non-zero headroom, so we just copy it if thats
             // the case
             if let Some(mut new) = common::pool_get(pkt_pool.clone()) {
+                // Clear just to set vector data/len to empty
                 new.clear();
                 new.extend_from_slice(&b[tx.headroom + remaining..]);
                 out.push(new);
@@ -994,6 +997,7 @@ fn parse_complete(
         pending = flow.parse_pending.take().unwrap();
     } else {
         if let Some(mut p) = common::pool_get(pkt_pool.clone()) {
+            // Clear to set vector data/length to empty
             p.clear();
             pending = p;
         } else {
@@ -1029,6 +1033,48 @@ fn parse_complete(
     }
 }
 
+fn flow_handle_dns(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    reginfo: &RegistrationInfo,
+    tx: &mut NxtBufs,
+    pkt_pool: &Arc<Pool<Vec<u8>>>,
+) -> bool {
+    if key.dport != 53 || key.proto != common::UDP {
+        return false;
+    }
+    if tx.bufs.len() == 0 {
+        return false;
+    }
+    let mut req = dns::BytePacketBuffer::new(&mut tx.bufs[0][tx.headroom..]);
+    if let Some(mut buf) = common::pool_get(pkt_pool.clone()) {
+        let mut resp = dns::BytePacketBuffer::new(&mut buf[0..]);
+        if dns::handle_nextensio_query(&reginfo.domains, &mut req, &mut resp) {
+            let len = resp.pos();
+            unsafe {
+                buf.set_len(len);
+            }
+            match flow.rx_socket.write(
+                0,
+                NxtBufs {
+                    hdr: None,
+                    bufs: vec![buf],
+                    headroom: 0,
+                },
+            ) {
+                Err((_, e)) => match e.code {
+                    // Dont care, dns will retry again
+                    EWOULDBLOCK => {}
+                    _ => flow_dead(key, flow),
+                },
+                Ok(_) => flow_alive(key, flow),
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 // Now lets see if the smoltcp FSM deems that we have a payload to
 // be read. Before that see if we had any payload pending to be processed
 // and if so process it. The payload might be sent to the gateway or direct.
@@ -1041,6 +1087,7 @@ fn flow_data_to_external(
     tx_socket: &mut Tun,
     reginfo: &RegistrationInfo,
     poll: &mut Poll,
+    pkt_pool: &Arc<Pool<Vec<u8>>>,
     _perf: &mut AgentPerf,
 ) {
     loop {
@@ -1086,19 +1133,26 @@ fn flow_data_to_external(
             tx.hdr = Some(hdr);
         }
 
-        // Now try writing the payload to the destination socket. If the destination
-        // socket says EWOULDBLOCK, then queue up the data as pending and try next time
+        // See if its a dns query for a private domain that we can respond to
         let ret;
-        if !tx_socket.tx_ready {
-            ret = Err((
-                Some(tx),
-                NxtError {
-                    code: EWOULDBLOCK,
-                    detail: "".to_string(),
-                },
-            ))
+        if flow_handle_dns(key, flow, reginfo, &mut tx, pkt_pool) {
+            // flow_rx_tx which called us will call flow_data_from_external and send
+            // the dns response to vpn_tx
+            ret = Ok(());
         } else {
-            ret = tx_socket.tun.write(flow.tx_stream, tx);
+            // Now try writing the payload to the destination socket. If the destination
+            // socket says EWOULDBLOCK, then queue up the data as pending and try next time
+            if !tx_socket.tx_ready {
+                ret = Err((
+                    Some(tx),
+                    NxtError {
+                        code: EWOULDBLOCK,
+                        detail: "".to_string(),
+                    },
+                ))
+            } else {
+                ret = tx_socket.tun.write(flow.tx_stream, tx);
+            }
         }
         match ret {
             Err((data, e)) => match e.code {
@@ -1230,9 +1284,11 @@ fn proxyclient_rx(
                                     &mut tx_sock.tun(),
                                     reginfo,
                                     poll,
+                                    pkt_pool,
                                     _perf,
                                 );
                                 if let Some(mut empty) = common::pool_get(pkt_pool.clone()) {
+                                    // Clear to just set vector data/length to be empty
                                     empty.clear();
                                     // trigger an immediate write back to the client by calling proxyclient_write().
                                     // the dummy data here is just to trigger a write. The immediate write might be
@@ -1273,6 +1329,7 @@ fn proxyclient_rx(
                         &mut tx_sock.tun(),
                         reginfo,
                         poll,
+                        pkt_pool,
                         _perf,
                     );
                 }
@@ -1369,6 +1426,7 @@ fn flow_rx_tx(
     poll: &mut Poll,
     reginfo: &RegistrationInfo,
     check_tuns: &mut HashMap<usize, ()>,
+    pkt_pool: &Arc<Pool<Vec<u8>>>,
     _perf: &mut AgentPerf,
 ) {
     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
@@ -1379,6 +1437,7 @@ fn flow_rx_tx(
             &mut tx_sock.tun(),
             reginfo,
             poll,
+            pkt_pool,
             _perf,
         );
         flow_data_from_external(&key, flow, &mut tx_sock.tun(), check_tuns);
@@ -1437,7 +1496,7 @@ fn vpntun_rx(
                         if let Some(flow) = flows.get_mut(&key) {
                             flow_rx_tx(
                                 &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns,
-                                _perf,
+                                pkt_pool, _perf,
                             );
                         }
                     }
@@ -1504,7 +1563,7 @@ fn vpntun_rx(
                                 if key.proto != common::TCP {
                                     flow_rx_tx(
                                         &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo,
-                                        check_tuns, _perf,
+                                        check_tuns, pkt_pool, _perf,
                                     );
                                 } else {
                                     if !tcp_flows.contains_key(&key) {
@@ -1522,7 +1581,7 @@ fn vpntun_rx(
     for (key, data) in tcp_flows {
         if let Some(flow) = flows.get_mut(&key) {
             flow_rx_tx(
-                &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, _perf,
+                &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, pkt_pool, _perf,
             );
         }
     }
@@ -1778,7 +1837,16 @@ fn monitor_parse_pending(
                         headroom: 0,
                     });
                     if let Some(tx_sock) = tuns.get_mut(&f.tx_socket) {
-                        flow_data_to_external(k, f, data, &mut tx_sock.tun(), reginfo, poll, _perf);
+                        flow_data_to_external(
+                            k,
+                            f,
+                            data,
+                            &mut tx_sock.tun(),
+                            reginfo,
+                            poll,
+                            pkt_pool,
+                            _perf,
+                        );
                     }
                 }
                 keys.push(k.clone());
@@ -2340,6 +2408,7 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
                                     &mut agent.perf,
                                     &mut agent.vpn_rx,
                                     &mut agent.vpn_tx,
+                                    &agent.pkt_pool,
                                 );
                             }
                             agent.tuns.insert(idx.0, tun_info);
