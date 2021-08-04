@@ -89,7 +89,7 @@ pub struct Domain {
 }
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
-    host: String,
+    gateway: String,
     access_token: String,
     connect_id: String,
     cluster: String,
@@ -98,11 +98,18 @@ pub struct RegistrationInfo {
     userid: String,
     uuid: String,
     services: Vec<String>,
+    hostname: String,
+    model: String,
+    os_type: String,
+    os_name: String,
+    os_patch: usize,
+    os_major: usize,
+    os_minor: usize,
 }
 
 #[repr(C)]
 pub struct CRegistrationInfo {
-    pub host: *const c_char,
+    pub gateway: *const c_char,
     pub access_token: *const c_char,
     pub connect_id: *const c_char,
     pub cluster: *const c_char,
@@ -138,7 +145,7 @@ pub struct AgentStats {
 fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
     let mut reginfo = RegistrationInfo::default();
     unsafe {
-        reginfo.host = CStr::from_ptr(creg.host).to_string_lossy().into_owned();
+        reginfo.gateway = CStr::from_ptr(creg.gateway).to_string_lossy().into_owned();
         reginfo.access_token = CStr::from_ptr(creg.access_token)
             .to_string_lossy()
             .into_owned();
@@ -197,6 +204,14 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
             .collect();
         reginfo.services = rust_array;
+
+        reginfo.hostname = CStr::from_ptr(creg.hostname).to_string_lossy().into_owned();
+        reginfo.model = CStr::from_ptr(creg.model).to_string_lossy().into_owned();
+        reginfo.os_type = CStr::from_ptr(creg.os_type).to_string_lossy().into_owned();
+        reginfo.os_name = CStr::from_ptr(creg.os_name).to_string_lossy().into_owned();
+        reginfo.os_patch = creg.os_patch as usize;
+        reginfo.os_major = creg.os_major as usize;
+        reginfo.os_minor = creg.os_minor as usize;
     }
     return reginfo;
 }
@@ -505,7 +520,7 @@ fn dial_gateway(
     );
     let mut websocket = WebSession::new_client(
         reginfo.ca_cert.clone(),
-        &reginfo.host,
+        &reginfo.gateway,
         443,
         headers,
         true,
@@ -518,7 +533,7 @@ fn dial_gateway(
                 return Some(websocket);
             }
             _ => {
-                error!("Dial gateway {} failed: {}", &reginfo.host, e.detail);
+                error!("Dial gateway {} failed: {}", &reginfo.gateway, e.detail);
                 STATS_NUMFLAPS.fetch_add(1, Relaxed);
                 return None;
             }
@@ -538,6 +553,13 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
     onb.access_token = reginfo.access_token.clone();
     onb.cluster = reginfo.cluster.clone();
     onb.connect_id = reginfo.connect_id.clone();
+    onb.hostname = reginfo.hostname.clone();
+    onb.model = reginfo.model.clone();
+    onb.os_type = reginfo.os_type.clone();
+    onb.os_name = reginfo.os_name.clone();
+    onb.os_patch = reginfo.os_patch as u32;
+    onb.os_major = reginfo.os_major as u32;
+    onb.os_minor = reginfo.os_minor as u32;
 
     let mut hdr = NxtHdr::default();
     hdr.hdr = Some(Hdr::Onboard(onb));

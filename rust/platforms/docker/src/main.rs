@@ -184,7 +184,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
     let uuid_str = format!("{}", uuid);
     let c_uuid_str = CString::new(uuid_str).unwrap();
     let c_userid = CString::new(onb.userid.clone()).unwrap();
-    let c_host = CString::new(onb.gateway.clone()).unwrap();
+    let c_gateway = CString::new(onb.gateway.clone()).unwrap();
     let c_connectid = CString::new(onb.connectid.clone()).unwrap();
     let c_cluster = CString::new(onb.cluster.clone()).unwrap();
     let mut c_domains: Vec<CString> = Vec::new();
@@ -221,13 +221,12 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         c_services.push(s);
         c_services_ptr.push(p);
     }
-    c_services.push(CString::new("foobar").unwrap());
     let hostname = CString::new("localhost").unwrap();
     let model = CString::new("model").unwrap();
     let os_type = CString::new("linux").unwrap();
     let os_name = CString::new("linux").unwrap();
     let creg = CRegistrationInfo {
-        host: c_host.as_ptr(),
+        gateway: c_gateway.as_ptr(),
         access_token: c_access_token.as_ptr(),
         connect_id: c_connectid.as_ptr(),
         cluster: c_cluster.as_ptr(),
@@ -245,9 +244,9 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         model: model.as_ptr(),
         os_type: os_type.as_ptr(),
         os_name: os_name.as_ptr(),
-        os_patch: 0,
-        os_major: 0,
-        os_minor: 0,
+        os_patch: 1,
+        os_major: 10,
+        os_minor: 8,
     };
     unsafe { onboard(creg) };
 }
