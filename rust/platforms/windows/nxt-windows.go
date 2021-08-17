@@ -20,6 +20,7 @@ import (
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 
+	winio "github.com/Microsoft/go-winio"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/elevate"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
@@ -107,6 +108,49 @@ func idpVerify() *accessIdTokens {
 	return nxtTokens
 }
 
+func createPipe(name string) net.Listener {
+	l, err := winio.ListenPipe(name, nil)
+	if err != nil {
+		return nil
+	}
+	return l
+}
+
+func pipeReader(l net.Conn) {
+	var buf [2048]byte
+
+	for {
+		r, e := l.Read(buf[:])
+		if e != nil {
+			fmt.Println("Pipe Read error", e)
+			return
+		}
+		fmt.Println("Pipe Read bytes ", r)
+	}
+}
+
+func pipeListener() {
+	p := createPipe(`\\.\pipe\nextensio`)
+
+	for {
+		l, err := p.Accept()
+		if err != nil {
+			fmt.Println("listen error", err)
+		} else {
+			go pipeReader(l)
+		}
+	}
+}
+
+func pipeWriter() net.Conn {
+	p, e := winio.DialPipe(`\\.\pipe\nextensio`, nil)
+	if e != nil {
+		fmt.Println("Pipe write error", e)
+		return nil
+	}
+	return p
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: .\nxt-windows.exec nxt0")
@@ -174,6 +218,25 @@ func main() {
 	signal.Notify(term, os.Kill)
 	signal.Notify(term, syscall.SIGTERM)
 
+	//go pipeListener()
+	//time.Sleep(time.Second)
+	p := pipeWriter()
+	go pipeReader(p)
+
+	var buf [2048]byte
+	for {
+		r, e := t.Read(buf[:], 0)
+		if e != nil {
+			fmt.Println("Tunnel error", e)
+			t.Close()
+			break
+		}
+		fmt.Println("Read wintun bytes", r)
+		n, e := p.Write(buf[:r])
+		if e != nil || n != r {
+			fmt.Println("Pipe write error", e)
+		}
+	}
 	select {
 	case <-term:
 	// case <-errs:
