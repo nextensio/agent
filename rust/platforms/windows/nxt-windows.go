@@ -11,10 +11,12 @@ import "C"
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/conn"
@@ -25,6 +27,8 @@ import (
 	"golang.zx2c4.com/wireguard/windows/elevate"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
+
+var pipe net.Conn
 
 const (
 	ExitSetupSuccess = 0
@@ -129,26 +133,16 @@ func pipeReader(l net.Conn) {
 	}
 }
 
-func pipeListener() {
-	p := createPipe(`\\.\pipe\nextensio`)
-
+func pipeDialler() {
+	var e error
 	for {
-		l, err := p.Accept()
-		if err != nil {
-			fmt.Println("listen error", err)
-		} else {
-			go pipeReader(l)
+		pipe, e = winio.DialPipe(`\\.\pipe\nextensio`, nil)
+		if e == nil {
+			break
 		}
+		time.Sleep(time.Second)
 	}
-}
-
-func pipeWriter() net.Conn {
-	p, e := winio.DialPipe(`\\.\pipe\nextensio`, nil)
-	if e != nil {
-		fmt.Println("Pipe write error", e)
-		return nil
-	}
-	return p
+	pipeReader(pipe)
 }
 
 func main() {
@@ -164,8 +158,14 @@ func main() {
 	)
 	logger.Verbosef("Starting nxt-windows version %s", "1.0.0")
 
+	watcher, err := watchInterface()
+	if err != nil {
+		log.Println("Watcher error ", err)
+		return
+	}
+
 	var t tun.Device
-	err := elevate.DoAsSystem(func() error {
+	err = elevate.DoAsSystem(func() error {
 		var terr error
 		t, terr = tun.CreateTUN(interfaceName, 0)
 		return terr
@@ -183,8 +183,8 @@ func main() {
 	luid := winipcfg.LUID(nativeTunDevice.LUID())
 
 	logger.Verbosef("TunIf created %s, %d", realInterfaceName, luid)
-	// logger.Verbosef("Adaptor %d", t.wt)
 
+	watcher.Configure(luid)
 	err = luid.SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
 	if err != nil {
 		logger.Errorf("Failed to create IP Addr: %v", err)
@@ -209,7 +209,6 @@ func main() {
 	}
 	logger.Verbosef("Device started")
 
-	// errs := make(chan error)
 	term := make(chan os.Signal, 1)
 
 	// wait for program to terminate
@@ -218,10 +217,7 @@ func main() {
 	signal.Notify(term, os.Kill)
 	signal.Notify(term, syscall.SIGTERM)
 
-	//go pipeListener()
-	//time.Sleep(time.Second)
-	p := pipeWriter()
-	go pipeReader(p)
+	go pipeDialler()
 
 	var buf [2048]byte
 	for {
@@ -231,21 +227,20 @@ func main() {
 			t.Close()
 			break
 		}
-		fmt.Println("Read wintun bytes", r)
-		n, e := p.Write(buf[:r])
-		if e != nil || n != r {
-			fmt.Println("Pipe write error", e)
+		if pipe != nil {
+			n, e := pipe.Write(buf[:r])
+			if e != nil || n != r {
+				fmt.Println("Pipe write error", e)
+			}
 		}
 	}
 	select {
 	case <-term:
-	// case <-errs:
 	case <-device.Wait():
 	}
 
 	// clean up
-
-	// uapi.Close()
+	watcher.Destroy()
 	device.Close()
 
 	logger.Verbosef("Shutting down")
