@@ -5,6 +5,8 @@
 package main
 
 /*
+#cgo CFLAGS: -I.
+#cgo LDFLAGS:  -L . -lnextensio -lWs2_32 -ladvapi32 -luserenv -lcrypt32 -lsecurity -lncrypt -lntdll -static
 #include "nxt-api.h"
 */
 import "C"
@@ -145,6 +147,10 @@ func pipeDialler() {
 	pipeReader(pipe)
 }
 
+func agentInit() {
+	C.agent_init(2 /*windows*/, 1, 1500, 1500, 1)
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: .\nxt-windows.exec nxt0")
@@ -217,6 +223,7 @@ func main() {
 	signal.Notify(term, os.Kill)
 	signal.Notify(term, syscall.SIGTERM)
 
+	go agentInit()
 	go pipeDialler()
 
 	var buf [2048]byte

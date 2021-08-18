@@ -10,6 +10,9 @@ android_logger = "0.10"
 [target.'cfg(target_vendor = "apple")'.dependencies]
 oslog = "0.1.0"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+winlog = "*"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}

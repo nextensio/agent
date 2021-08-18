@@ -62,19 +62,33 @@
 
 <b>GCC Installation</b>
 1. https://www.msys2.org/
-2. Add this path to your system environment variable: C:\msys64\mingw64\bin
+2. From the windows start bar, search for "msys2 msys" and launch that to get a shell
+3. from the shell, say 'pacman -S mingw-w64-x86_64-toolchain' - here I just select the install "all" option,
+    we might  not want to install everything, TODO to figure that out later 
+4. Assuming msys2 was installed in C:\msys64, add this system environment Path variable: C:\msys64\mingw64\bin
+   (google for how to add to Path on windows)
+5. The gcc/toolchain used to compile rust and the one used by go to compile cgo (to integrate rust agent with go)
+   has to be the same toolchain or else it will produce linker errors. The cgo compilation/linking just picks stuff
+   up from the Path variable, Rust has to be told where to pick up the tools from or else it will use the tools it
+   installed itself. So add the below to make rust pick up the right toolchains we installed
 
-<b> Install WSL/WSL2 (Optional) </b>
-1. https://docs.microsoft.com/en-us/windows/wsl/install-win10
+   Open C:\Users\gopak\.cargo\config and add the below (gopak is my userid / homedirectory on windows, substitite with yours)
+
+   [target.x86_64-pc-windows-gnu]
+   linker = "C:\\msys64\\mingw64\\bin\\gcc.exe"
+   ar = "C:\\msys64\\mingw64\\bin\\ar.exe"
+
 
 <b>Reboot your computer</b>
 
 <b>Build and run nxt-windows.exe</b>
 1. Launch powershell as administrator
-2. cd agent\rust\platforms\windows
-3. ./build.bat
-4. .\amd64\nxt-windows.exe nxt0
-5. nxt0 adaptor can be seen here: Control Panel => Network and Internet => Network Connection
+2. cd agent\rust\agent
+3. ./build_windows.ps1
+4. cd agent\rust\platforms\windows
+5. ./build.bat
+6. .\amd64\nxt-windows.exe nxt0
+7. nxt0 adaptor can be seen here: Control Panel => Network and Internet => Network Connection
 
 ```$ route print
 
@@ -87,27 +101,9 @@ Network Destination        Netmask          Gateway       Interface  Metric
 ```
 
 <b> Todo </b>
-1. Integrate with Rust. nxt-api.h implementation. cgo build and Makefile.
-2. Experiment with tun's FD. tun.NativeTunDevice is an interface. We need access to wintun.Adapter.
-3. OKTA IDP integration for access token
-4. Installation to 3rd party computers
-5. Optimize Makefile, to avoid downloading golang, llvm, etc. Instead use system's installation.
-6. Develop a GUI
-
-```
-type Adapter struct {
-	handle uintptr
-}
-
-type NativeTun struct {
-	wt        *wintun.Adapter <-- possible FD to pass into rust agent
-	handle    windows.Handle
-	rate      rateJuggler
-	session   wintun.Session
-	readWait  windows.Handle
-	events    chan Event
-	running   sync.WaitGroup
-	closeOnce sync.Once
-	close     int32
-	forcedMTU int
-}```
+1. OKTA IDP integration for access token
+2. Installation to 3rd party computers
+3. Develop a GUI
+4. The native golang installation does not seem to work, I suspect wireguard has some
+   golang patch for some reason, figure that out and if possible remove this special
+   golang and just use the one installed on the system

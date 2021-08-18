@@ -1,4 +1,9 @@
-// Nxt-Windows Rust Interface
+//
+//  nxt-api.h
+//  NextensioApp
+//
+//  Created by Rudy Zulkarnain on 3/20/21.
+//
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -7,11 +12,13 @@
 
 typedef struct CRegistrationInfo
 {
-    char *host;
+    char *gateway;
     char *access_token;
     char *connect_id;
     char *cluster;
     char **domains;
+    int *needdns;
+    char **dnsip;
     int num_domains;
     char *ca_cert;
     int num_cacert;
@@ -19,6 +26,13 @@ typedef struct CRegistrationInfo
     char *uuid;
     char **services;
     int num_services;
+    char *hostname;
+    char *model;
+    char *os_type;
+    char *os_name;
+    int os_patch;
+    int os_major;
+    int os_minor;
 } CRegistrationInfo;
 
 void agent_init(uintptr_t platform, uintptr_t direct, int rxmtu, int txmtu, int highmem);
@@ -26,6 +40,7 @@ void agent_init(uintptr_t platform, uintptr_t direct, int rxmtu, int txmtu, int 
 int agent_started(void);
 
 void agent_on(int32_t fd);
+void agent_on_windows(char *pipe);
 
 void agent_off(void);
 

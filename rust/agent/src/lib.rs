@@ -2300,6 +2300,9 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
         .init()
         .unwrap();
 
+    #[cfg(target_os = "windows")]
+    winlog::init("Nextensio:").unwrap();
+
     error!("Agent init called");
 
     let mut poll = match Poll::new() {
@@ -2592,6 +2595,13 @@ pub unsafe extern "C" fn agent_on(fd: i32) {
     let old_fd = VPNFD.load(Relaxed);
     error!("Agent on, old {}, new {}", old_fd, fd);
     VPNFD.store(fd, Relaxed);
+}
+
+#[cfg(target_os = "windows")]
+pub unsafe extern "C" fn agent_on_windows() {
+    let old_fd = VPNFD.load(Relaxed);
+    error!("Agent on, old {}, new {}", old_fd, old_fd + 1);
+    VPNFD.store(old_fd + 1, Relaxed);
 }
 
 #[no_mangle]

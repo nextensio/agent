@@ -14,11 +14,8 @@ if exist .deps\prepared goto :build
 	cd .deps || goto :error
 	rem Download GOLANG
 	call :download go.zip https://download.wireguard.com/windows-toolchain/distfiles/go1.17beta1-windows_amd64_2021-06-11.zip 09601956a35ee4c2fa199da301c4b210fd365a46d286a7160388a1cdc07b7a6d || goto :error
-	rem Mirror of https://github.com/mstorsjo/llvm-mingw/releases/download/20201020/llvm-mingw-20201020-msvcrt-x86_64.zip
-	call :download llvm-mingw-msvcrt.zip https://download.wireguard.com/windows-toolchain/distfiles/llvm-mingw-20201020-msvcrt-x86_64.zip 2e46593245090df96d15e360e092f0b62b97e93866e0162dca7f93b16722b844 || goto :error
 	rem Mirror of https://sourceforge.net/projects/ezwinports/files/make-4.2.1-without-guile-w32-bin.zip
 	call :download make.zip https://download.wireguard.com/windows-toolchain/distfiles/make-4.2.1-without-guile-w32-bin.zip 30641be9602712be76212b99df7209f4f8f518ba764cf564262bc9d6e4047cc7 "--strip-components 1 bin" || goto :error
-	call :download wireguard-tools.zip https://git.zx2c4.com/wireguard-tools/snapshot/wireguard-tools-1.0.20210223.zip c0cee24d469ecd3f0420dd2cc9747faa67f257a39c17063c10cff99ba62a6fa6 "--exclude wg-quick --strip-components 1" || goto :error
 	call :download wintun.zip https://www.wintun.net/builds/wintun-0.12.zip eba90e26686ed86595ae0a6d4d3f4f022924b1758f5148a32a91c60cc6e604df || goto :error
 	copy /y NUL prepared > NUL || goto :error
 	cd .. || goto :error
@@ -56,22 +53,12 @@ if exist .deps\prepared goto :build
 	del %1 || exit /b 1
 	goto :eof
 
-:: Example of integrating rustc api with golang
-:: RUST Compiler: rustc -g -v -O -o libhello.a --crate-type staticlib --print native-static-libs hello.rs
-:: Put the output from native-static-libs into #cgo LDFLAGS (-lws2_32 -ladvapi32 -luserenv)
-:: Go Compiler: go build -x -ldflags "-v -linkmode external -extldflags -static" ./main.go
-:build_rust_plat
-	set CGO_LDFLAGS_ALLOW=".*"
-	set CGO_CFLAGS_ALLOW=".*"
-	set CGO_ENABLED="1"
-	set CC=gcc
-	goto :eof
 
 :build_plat
 	set GOARCH=%~3
 	mkdir %1 >NUL 2>&1
 	echo [+] Assembling resources %1
-	%~2-w64-mingw32-windres -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
+	windres.exe -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
 	echo [+] Building program %1
 	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nxt-windows.exe" || exit /b 1
 	goto :eof
