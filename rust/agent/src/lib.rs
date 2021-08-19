@@ -2346,7 +2346,9 @@ fn agent_main_thread(platform: u32, direct: u32, rxmtu: u32, txmtu: u32, highmem
         .unwrap();
 
     #[cfg(target_os = "windows")]
-    winlog::init("Nextensio:").unwrap();
+    log::set_boxed_logger(Box::new(winlog::WinLogger::new("Nextensio")))
+        .map(|()| log::set_max_level(LevelFilter::Error))
+        .ok();
 
     error!(
         "Agent init called, platform {}, direct {}, rxmtu {}, txmtu {}, highmem {}",
