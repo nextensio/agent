@@ -11,7 +11,6 @@ package main
 */
 import "C"
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -31,6 +30,7 @@ import (
 )
 
 var pipe net.Conn
+var vpnTun tun.Device
 
 const (
 	ExitSetupSuccess = 0
@@ -39,71 +39,18 @@ const (
 
 var nxtTokens *accessIdTokens
 
-func runningElevated() bool {
-	var process windows.Token
-	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &process)
-	if err != nil {
-		return false
-	}
-	defer process.Close()
-	return process.IsElevated()
-}
-
-func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, addresses []net.IPNet) {
-	if len(addresses) == 0 {
-		return
-	}
-	includedInAddresses := func(a net.IPNet) bool {
-		// TODO: this makes the whole algorithm O(n^2). But we can't stick net.IPNet in a Go hashmap. Bummer!
-		for _, addr := range addresses {
-			ip := addr.IP
-			if ip4 := ip.To4(); ip4 != nil {
-				ip = ip4
-			}
-			mA, _ := addr.Mask.Size()
-			mB, _ := a.Mask.Size()
-			if bytes.Equal(ip, a.IP) && mA == mB {
-				return true
-			}
-		}
-		return false
-	}
-	interfaces, err := winipcfg.GetAdaptersAddresses(family, winipcfg.GAAFlagDefault)
-	if err != nil {
-		return
-	}
-	for _, iface := range interfaces {
-		if iface.OperStatus == winipcfg.IfOperStatusUp {
-			continue
-		}
-		for address := iface.FirstUnicastAddress; address != nil; address = address.Next {
-			ip := address.Address.IP()
-			ipnet := net.IPNet{IP: ip, Mask: net.CIDRMask(int(address.OnLinkPrefixLength), 8*len(ip))}
-			if includedInAddresses(ipnet) {
-				fmt.Fprintf(os.Stderr, "Cleaning up stale address %s from interface %s\n", ipnet.String(), iface.FriendlyName())
-				iface.LUID.DeleteIPAddress(ipnet)
-			}
-		}
-	}
-}
-
-// TODO: Add IPv6 tests.
 var (
 	nxtIPAddresToAdd = net.IPNet{
-		IP:   net.IP{10, 82, 31, 5},
-		Mask: net.IPMask{255, 255, 255, 0},
+		IP:   net.IP{100, 64, 1, 1},
+		Mask: net.IPMask{255, 224, 0, 0},
 	}
 	nxtRouteIPv4ToAdd = winipcfg.RouteData{
 		Destination: net.IPNet{
 			IP:   net.IP{0, 0, 0, 0},
 			Mask: net.IPMask{0, 0, 0, 0},
 		},
-		NextHop: net.IP{10, 82, 31, 4},
+		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
-	}
-	dnsesToSet = []net.IP{
-		net.IPv4(8, 8, 8, 8),
-		net.IPv4(8, 8, 4, 4),
 	}
 )
 
@@ -114,37 +61,45 @@ func idpVerify() *accessIdTokens {
 	return nxtTokens
 }
 
-func createPipe(name string) net.Listener {
-	l, err := winio.ListenPipe(name, nil)
-	if err != nil {
-		return nil
-	}
-	return l
-}
-
-func pipeReader(l net.Conn) {
-	var buf [2048]byte
+func pipeToVpn() {
+	var buf [4096]byte
 
 	for {
-		r, e := l.Read(buf[:])
+		r, e := pipe.Read(buf[:])
 		if e != nil {
-			fmt.Println("Pipe Read error", e)
+			log.Println("Pipe Read error", e)
+			vpnTun.Close()
 			return
 		}
-		fmt.Println("Pipe Read bytes ", r)
+		log.Println("Pipe Read bytes ", r)
+		w, e := vpnTun.Write(buf[0:r], 0)
+		if e != nil || w != r {
+			log.Println("vpn write failed ", e)
+			vpnTun.Close()
+			return
+		}
 	}
 }
 
-func pipeDialler() {
-	var e error
+func vpnToPipe() {
+	var buf [2048]byte
 	for {
-		pipe, e = winio.DialPipe(`\\.\pipe\nextensio`, nil)
-		if e == nil {
+		r, e := vpnTun.Read(buf[:], 0)
+		if e != nil {
+			log.Println("vpn Read error", e)
+			vpnTun.Close()
 			break
 		}
-		time.Sleep(time.Second)
+		log.Println("vpn Read bytes ", r)
+		if pipe != nil {
+			n, e := pipe.Write(buf[:r])
+			if e != nil || n != r {
+				log.Println("Pipe write error", e)
+				vpnTun.Close()
+				break
+			}
+		}
 	}
-	pipeReader(pipe)
 }
 
 func agentInit() {
@@ -153,7 +108,7 @@ func agentInit() {
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: .\nxt-windows.exec nxt0")
+		fmt.Fprintln(os.Stderr, "usage: .\nxt-windows.exe nxt0")
 		os.Exit(ExitSetupFailed)
 	}
 	interfaceName := os.Args[1]
@@ -170,10 +125,9 @@ func main() {
 		return
 	}
 
-	var t tun.Device
 	err = elevate.DoAsSystem(func() error {
 		var terr error
-		t, terr = tun.CreateTUN(interfaceName, 0)
+		vpnTun, terr = tun.CreateTUN(interfaceName, 0)
 		return terr
 	})
 	if err != nil {
@@ -181,16 +135,15 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 
-	realInterfaceName, _ := t.Name()
+	realInterfaceName, _ := vpnTun.Name()
 	interfaceName = realInterfaceName
 
-	defer t.Close()
-	nativeTunDevice := t.(*tun.NativeTun)
+	defer vpnTun.Close()
+	nativeTunDevice := vpnTun.(*tun.NativeTun)
 	luid := winipcfg.LUID(nativeTunDevice.LUID())
 
 	logger.Verbosef("TunIf created %s, %d", realInterfaceName, luid)
 
-	watcher.Configure(luid)
 	err = luid.SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
 	if err != nil {
 		logger.Errorf("Failed to create IP Addr: %v", err)
@@ -201,13 +154,8 @@ func main() {
 		logger.Errorf("Failed to create RouteData: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
-	if err != nil {
-		logger.Errorf("Failed to create DNS: %v", err)
-		os.Exit(ExitSetupFailed)
-	}
 
-	device := device.NewDevice(t, conn.NewDefaultBind(), logger)
+	device := device.NewDevice(vpnTun, conn.NewDefaultBind(), logger)
 	err = device.Up()
 	if err != nil {
 		logger.Errorf("Failed to bring up device: %v", err)
@@ -220,27 +168,39 @@ func main() {
 	// wait for program to terminate
 
 	signal.Notify(term, os.Interrupt)
-	signal.Notify(term, os.Kill)
 	signal.Notify(term, syscall.SIGTERM)
 
+	// This will create the server part of the pipe
 	go agentInit()
-	go pipeDialler()
 
-	var buf [2048]byte
+	// Once pipe server is created, we try to connect to it as client
+	var e error
 	for {
-		r, e := t.Read(buf[:], 0)
-		if e != nil {
-			fmt.Println("Tunnel error", e)
-			t.Close()
+		pipe, e = winio.DialPipe(`\\.\pipe\nextensio`, nil)
+		if e == nil {
 			break
 		}
-		if pipe != nil {
-			n, e := pipe.Write(buf[:r])
-			if e != nil || n != r {
-				fmt.Println("Pipe write error", e)
-			}
-		}
+		time.Sleep(time.Second)
 	}
+	logger.Verbosef("Pipe client created")
+
+	watcher.Configure(luid)
+	go monitorDefaultIP(windows.AF_INET)
+
+	// There is no point sending traffic to agent till we have told it which
+	// interface to send it out of, doing that might even cause a loop. So
+	// wait till we figure out an interface to use
+	for {
+		if defaultIP == 0 {
+			log.Println("Wait for default IP")
+			time.Sleep(time.Second)
+			continue
+		}
+		break
+	}
+	go pipeToVpn()
+	go vpnToPipe()
+
 	select {
 	case <-term:
 	case <-device.Wait():

@@ -1,5 +1,11 @@
 package main
 
+/*
+#cgo CFLAGS: -I.
+#cgo LDFLAGS:  -L . -lnextensio -lWs2_32 -ladvapi32 -luserenv -lcrypt32 -lsecurity -lncrypt -lntdll -static
+#include "nxt-api.h"
+*/
+import "C"
 import (
 	"log"
 	"sync"
@@ -9,6 +15,36 @@ import (
 	"golang.zx2c4.com/wireguard/windows/services"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
+
+var defaultInterface winipcfg.LUID
+var defaultIP uint32
+
+// If ip address changes, then the bind in the agent will fail and sessions
+// will fail till this routine updates it again. We can avoid this if rust
+// libs had an option to bind to an ifindex (like the wireguard windows lib has)
+// but it doesnt, and I dont want to make yet another change in yet another rust lib
+func monitorDefaultIP(family winipcfg.AddressFamily) {
+	for {
+		defaultIP = findAdapterIP(family)
+		C.agent_default_route(C.uint32_t(defaultIP))
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func findAdapterIP(family winipcfg.AddressFamily) uint32 {
+	//flags := winipcfg.GAAFlagSkipAnycast | winipcfg.GAAFlagSkipMulticast | winipcfg.GAAFlagSkipDNSServer | winipcfg.GAAFlagSkipDNSInfo
+	addrs, e := winipcfg.GetAdaptersAddresses(family, 0)
+	if e != nil {
+		return 0
+	}
+	for _, a := range addrs {
+		if a.LUID == defaultInterface {
+			d := a.FirstUnicastAddress.Address.IP()
+			return uint32(uint32(d[0])<<24 | uint32(d[1])<<16 | uint32(d[2])<<8 | uint32(d[3]))
+		}
+	}
+	return 0
+}
 
 func bindSocketRoute(family winipcfg.AddressFamily, ourLUID winipcfg.LUID, lastLUID *winipcfg.LUID, lastIndex *uint32, blackholeWhenLoop bool) error {
 	r, err := winipcfg.GetIPForwardTable2(family)
@@ -45,7 +81,10 @@ func bindSocketRoute(family winipcfg.AddressFamily, ourLUID winipcfg.LUID, lastL
 	*lastIndex = index
 	blackhole := blackholeWhenLoop && index == 0
 	if family == windows.AF_INET {
-		log.Printf("Binding v4 socket to interface %d (blackhole=%v)", index, blackhole)
+		defaultInterface = luid
+		defaultIP = findAdapterIP(family)
+		C.agent_default_route(C.uint32_t(defaultIP))
+		log.Printf("Binding v4 socket to interface %d (blackhole=%v), ip %4x", index, blackhole, defaultIP)
 	} else if family == windows.AF_INET6 {
 		log.Printf("Binding v6 socket to interface %d (blackhole=%v)", index, blackhole)
 	}

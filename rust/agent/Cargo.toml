@@ -24,6 +24,7 @@ mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
 common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 websock = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 fd = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+winpipe = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 l3proxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 dummy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 netconn = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }

@@ -32,9 +32,10 @@ use std::{
     os::raw::{c_char, c_int},
     sync::Arc,
 };
-use std::{sync::atomic::AtomicI32, sync::atomic::AtomicUsize};
+use std::{sync::atomic::AtomicI32, sync::atomic::AtomicU32, sync::atomic::AtomicUsize};
 use webproxy::WebProxy;
 use websock::WebSession;
+use winpipe::Pipe;
 mod dns;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
@@ -43,6 +44,7 @@ mod dns;
 
 // These are atomic because rust will complain loudly about mutable global variables
 static VPNFD: AtomicI32 = AtomicI32::new(0);
+static BINDIP: AtomicU32 = AtomicU32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
 static mut REGINFO: Option<Box<RegistrationInfo>> = None;
 static REGINFO_CHANGED: AtomicUsize = AtomicUsize::new(0);
@@ -400,10 +402,9 @@ fn set_tx_socket(
             key.dip.to_string(),
             key.dport as usize,
             key.proto,
-            true,
-            None,
             pkt_pool.clone(),
             tcp_pool.clone(),
+            BINDIP.load(Relaxed),
         );
         match tun.dial() {
             Err(_) => {
@@ -523,9 +524,9 @@ fn dial_gateway(
         &reginfo.gateway,
         443,
         headers,
-        true,
         pkt_pool.clone(),
         tcp_pool.clone(),
+        BINDIP.load(Relaxed),
     );
     match websocket.dial() {
         Err(e) => match e.code {
@@ -1813,7 +1814,7 @@ fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
         match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
             Err(e) => {
                 error!("App transport register failed {}", format!("{}", e));
-                agent.vpn_tun.tun.close(0).ok();
+                tun.tun.close(0).ok();
                 agent.vpn_fd = 0;
                 return;
             }
@@ -2254,15 +2255,15 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
     }
 }
 
-fn agent_init_pools(agent: &mut AgentInfo, rxmtu: usize, txmtu: usize, highmem: usize) {
+fn agent_init_pools(agent: &mut AgentInfo, rxmtu: u32, txmtu: u32, highmem: u32) {
     // The mtu of the interface is set to the same as the buffer size, so we can READ packets as
     // large as the buffer size. But some platforms (like android) seems to perform poor when we
     // try to send packets closer to the interface mtu (mostly when mtu is large like 64K) and
     // hence we want to keep the txmtu  size different from the rxmtu. We control the size of the
     // tcp packets we receive to be rxmtu by doing mss-adjust when the tcp session is created
     assert!(rxmtu >= txmtu);
-    agent.rx_mtu = rxmtu;
-    agent.tx_mtu = txmtu;
+    agent.rx_mtu = rxmtu as usize;
+    agent.tx_mtu = txmtu as usize;
 
     // This will change over time - there can really be no "common max payload/buffer", the buffer
     // sizes will depend on each driver/transport. For now its a "common" parameter
@@ -2270,7 +2271,7 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: usize, txmtu: usize, highmem: 
 
     // The 2*rxmtu is used to make sure smoltcp can fit in a full mtu sized udp packet into this
     // buffer. See README.md in l3proxy/ in common repo
-    let pktbuf_len = std::cmp::min(MINPKTBUF, (2 * rxmtu).next_power_of_two());
+    let pktbuf_len = std::cmp::min(MINPKTBUF, (2 * rxmtu as usize).next_power_of_two());
     // We want the parse buffer to fit in just one packet to keep it simple
     assert!(PARSE_MAX <= pktbuf_len);
 
@@ -2280,13 +2281,57 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: usize, txmtu: usize, highmem: 
     // even lesser, will bring it down after this software gets more runtime on various devices.
     // Note that the npkts usually has to be at least the MAXPAYLOAD/txmtu (ie the number of pkts
     // to send one full size tcp payload) for better performance
-    agent.npkts = 64 * (highmem + 1);
-    agent.ntcp = 22 * (highmem + 1);
+    agent.npkts = 64 * (highmem as usize + 1);
+    agent.ntcp = 22 * (highmem as usize + 1);
     agent.pkt_pool = Arc::new(Pool::new(agent.npkts, || Vec::with_capacity(pktbuf_len)));
     agent.tcp_pool = Arc::new(Pool::new(agent.ntcp, || Vec::with_capacity(MAXPAYLOAD)));
 }
 
-fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize, highmem: usize) {
+#[cfg(target_os = "windows")]
+fn agent_platform_init(agent: &mut AgentInfo, poll: &mut Poll) {
+    let mut vpn_tun;
+    if let Some(p) = Pipe::new_client(
+        r"\\.\pipe\nextensio".to_string(),
+        true,
+        agent.pkt_pool.clone(),
+    ) {
+        vpn_tun = p;
+    } else {
+        panic!("Cannot open pipe");
+    }
+    match vpn_tun.dial() {
+        Err(e) => match e.code {
+            EWOULDBLOCK => (),
+            _ => panic!("app dial failed {}", e.detail),
+        },
+        _ => (),
+    }
+    let vpn_tun = Box::new(vpn_tun);
+    let mut tun = Tun {
+        tun: vpn_tun,
+        pending_tx: VecDeque::with_capacity(1),
+        tx_ready: true,
+        flows: TunFlow::NoFlow,
+        proxy_client: false,
+        pending_rx: 0,
+    };
+    match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
+        Err(e) => {
+            tun.tun.close(0).ok();
+            panic!("App transport register failed {}", format!("{}", e));
+        }
+        _ => {
+            agent.vpn_tun = tun;
+            error!("App Transport Registered");
+            ()
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn agent_platform_init(agent: &mut AgentInfo, _: &mut Poll) {}
+
+fn agent_main_thread(platform: u32, direct: u32, rxmtu: u32, txmtu: u32, highmem: u32) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -2303,23 +2348,29 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
     #[cfg(target_os = "windows")]
     winlog::init("Nextensio:").unwrap();
 
-    error!("Agent init called");
+    error!(
+        "Agent init called, platform {}, direct {}, rxmtu {}, txmtu {}, highmem {}",
+        platform, direct, rxmtu, txmtu, highmem
+    );
 
     let mut poll = match Poll::new() {
         Err(e) => panic!("Cannot create a poller {:?}", e),
         Ok(p) => p,
     };
+
     let mut events = Events::with_capacity(2048);
 
     let mut agent = AgentInfo::default();
     if direct == 1 {
         DIRECT.store(1, Relaxed);
     }
-    agent.platform = platform;
+    agent.platform = platform as usize;
     agent_init_pools(&mut agent, rxmtu, txmtu, highmem);
     agent.next_tun_idx = TUN_START;
 
-    let rx_ratio = MAXPAYLOAD / rxmtu;
+    agent_platform_init(&mut agent, &mut poll);
+
+    let rx_ratio = MAXPAYLOAD / rxmtu as usize;
 
     proxy_init(&mut agent, &mut poll);
 
@@ -2573,11 +2624,11 @@ fn agent_main_thread(platform: usize, direct: usize, rxmtu: usize, txmtu: usize,
 // platform so it can choose the right priority etc..
 #[no_mangle]
 pub unsafe extern "C" fn agent_init(
-    platform: usize,
-    direct: usize,
-    rxmtu: usize,
-    txmtu: usize,
-    highmem: usize,
+    platform: u32,
+    direct: u32,
+    rxmtu: u32,
+    txmtu: u32,
+    highmem: u32,
 ) {
     assert!(rxmtu >= txmtu);
     AGENT_STARTED.store(1, Relaxed);
@@ -2597,11 +2648,9 @@ pub unsafe extern "C" fn agent_on(fd: i32) {
     VPNFD.store(fd, Relaxed);
 }
 
-#[cfg(target_os = "windows")]
-pub unsafe extern "C" fn agent_on_windows() {
-    let old_fd = VPNFD.load(Relaxed);
-    error!("Agent on, old {}, new {}", old_fd, old_fd + 1);
-    VPNFD.store(old_fd + 1, Relaxed);
+#[no_mangle]
+pub unsafe extern "C" fn agent_default_route(bindip: u32) {
+    BINDIP.store(bindip, Relaxed);
 }
 
 #[no_mangle]

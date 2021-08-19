@@ -55,6 +55,7 @@ if exist .deps\prepared goto :build
 
 
 :build_plat
+	rm .\amd64\nxt-windows.exe
 	set GOARCH=%~3
 	mkdir %1 >NUL 2>&1
 	echo [+] Assembling resources %1
