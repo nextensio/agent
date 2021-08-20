@@ -15,8 +15,8 @@ use std::{fmt, time::Instant};
 use uuid::Uuid;
 mod pkce;
 
-const RXMTU: usize = 1500;
-const TXMTU: usize = 1500;
+const RXMTU: u32 = 1500;
+const TXMTU: u32 = 1500;
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -143,7 +143,7 @@ fn is_root() -> bool {
     return !err.contains("denied");
 }
 
-fn config_tun(test: bool, mtu: usize) {
+fn config_tun(test: bool, mtu: u32) {
     cmd("ifconfig tun215 up");
     cmd("ifconfig tun215 169.254.2.1 netmask 255.255.255.0");
     cmd(&format!("ifconfig tun215 mtu {}", mtu));
@@ -521,6 +521,6 @@ fn main() {
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, 1);
+        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, 1, 0);
     }
 }
