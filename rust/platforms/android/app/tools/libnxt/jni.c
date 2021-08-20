@@ -35,7 +35,7 @@ struct AgentStats
     int total_flows;
 };
 
-extern void agent_init(uint32_t platform, uint32_t direct, uint32_t rxmtu, uint32_t txmtu, uint32_t highmem);
+extern void agent_init(uint32_t platform, uint32_t direct, uint32_t rxmtu, uint32_t txmtu, uint32_t highmem, uint32_t udp_port);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);

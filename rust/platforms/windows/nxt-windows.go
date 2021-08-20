@@ -12,7 +12,6 @@ package main
 import "C"
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -23,14 +22,16 @@ import (
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 
-	winio "github.com/Microsoft/go-winio"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/elevate"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
-var pipe net.Conn
+var fromAgent net.PacketConn
+var toAgent net.Addr
 var vpnTun tun.Device
+var agentHandshake bool
+var logger *device.Logger
 
 const (
 	ExitSetupSuccess = 0
@@ -39,6 +40,7 @@ const (
 
 var nxtTokens *accessIdTokens
 
+// Use a CGNAT address that doesnt clash with anything else
 var (
 	nxtIPAddresToAdd = net.IPNet{
 		IP:   net.IP{100, 64, 1, 1},
@@ -61,40 +63,45 @@ func idpVerify() *accessIdTokens {
 	return nxtTokens
 }
 
-func pipeToVpn() {
+func agentToVpn() {
 	var buf [4096]byte
 
 	for {
-		r, e := pipe.Read(buf[:])
+		r, a, e := fromAgent.ReadFrom(buf[:])
 		if e != nil {
-			log.Println("Pipe Read error", e)
+			logger.Verbosef("Pipe Read error %s", e)
 			vpnTun.Close()
 			return
 		}
-		log.Println("Pipe Read bytes ", r)
+		// Agent sends a dummy handshake message as the first packet
+		if !agentHandshake {
+			logger.Verbosef("Got handshake size %d, from %s, message %s", r, a, string(buf[:r]))
+			toAgent = a
+			agentHandshake = true
+			continue
+		}
 		w, e := vpnTun.Write(buf[0:r], 0)
 		if e != nil || w != r {
-			log.Println("vpn write failed ", e)
+			logger.Verbosef("vpn write failed error %s, w %d, r %d", e, w, r)
 			vpnTun.Close()
 			return
 		}
 	}
 }
 
-func vpnToPipe() {
+func vpnToAgent() {
 	var buf [2048]byte
 	for {
 		r, e := vpnTun.Read(buf[:], 0)
 		if e != nil {
-			log.Println("vpn Read error", e)
+			logger.Verbosef("vpn Read error %s", e)
 			vpnTun.Close()
 			break
 		}
-		log.Println("vpn Read bytes ", r)
-		if pipe != nil {
-			n, e := pipe.Write(buf[:r])
+		if agentHandshake {
+			n, e := fromAgent.WriteTo(buf[:r], toAgent)
 			if e != nil || n != r {
-				log.Println("Pipe write error", e)
+				logger.Verbosef("Pipe write error %s, n %d, r %d", e, n, r)
 				vpnTun.Close()
 				break
 			}
@@ -102,8 +109,8 @@ func vpnToPipe() {
 	}
 }
 
-func agentInit() {
-	C.agent_init(2 /*windows*/, 1, 1500, 1500, 1)
+func agentInit(port int) {
+	C.agent_init(2 /*windows*/, 1, 1500, 1500, 1, C.uint32_t(port))
 }
 
 func main() {
@@ -113,7 +120,7 @@ func main() {
 	}
 	interfaceName := os.Args[1]
 
-	logger := device.NewLogger(
+	logger = device.NewLogger(
 		device.LogLevelVerbose,
 		fmt.Sprintf("(%s) ", interfaceName),
 	)
@@ -121,7 +128,7 @@ func main() {
 
 	watcher, err := watchInterface()
 	if err != nil {
-		log.Println("Watcher error ", err)
+		logger.Verbosef("Watcher error %s", err)
 		return
 	}
 
@@ -164,25 +171,18 @@ func main() {
 	logger.Verbosef("Device started")
 
 	term := make(chan os.Signal, 1)
-
-	// wait for program to terminate
-
 	signal.Notify(term, os.Interrupt)
 	signal.Notify(term, syscall.SIGTERM)
 
-	// This will create the server part of the pipe
-	go agentInit()
-
-	// Once pipe server is created, we try to connect to it as client
-	var e error
-	for {
-		pipe, e = winio.DialPipe(`\\.\pipe\nextensio`, nil)
-		if e == nil {
-			break
-		}
-		time.Sleep(time.Second)
+	fromAgent, err = net.ListenPacket("udp", ":0")
+	if err != nil {
+		panic(err)
 	}
-	logger.Verbosef("Pipe client created")
+	udpServer := fromAgent.LocalAddr().(*net.UDPAddr).Port
+
+	logger.Verbosef("UDP server at %u", udpServer)
+	// This will create the server part of the pipe
+	go agentInit(udpServer)
 
 	watcher.Configure(luid)
 	go monitorDefaultIP(windows.AF_INET)
@@ -192,14 +192,14 @@ func main() {
 	// wait till we figure out an interface to use
 	for {
 		if defaultIP == 0 {
-			log.Println("Wait for default IP")
+			logger.Verbosef("Wait for default IP")
 			time.Sleep(time.Second)
 			continue
 		}
 		break
 	}
-	go pipeToVpn()
-	go vpnToPipe()
+	go agentToVpn()
+	go vpnToAgent()
 
 	select {
 	case <-term:

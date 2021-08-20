@@ -3,7 +3,7 @@ use android_logger::Config;
 use common::{
     decode_ipv4, hdr_to_key, key_to_hdr,
     nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
-    parse_host,
+    parse_host, pool_get,
     tls::parse_sni,
     FlowV4Key, NxtBufs,
     NxtErr::EWOULDBLOCK,
@@ -35,7 +35,6 @@ use std::{
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicU32, sync::atomic::AtomicUsize};
 use webproxy::WebProxy;
 use websock::WebSession;
-use winpipe::Pipe;
 mod dns;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
@@ -2287,25 +2286,25 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: u32, txmtu: u32, highmem: u32)
     agent.tcp_pool = Arc::new(Pool::new(agent.ntcp, || Vec::with_capacity(MAXPAYLOAD)));
 }
 
-#[cfg(target_os = "windows")]
-fn agent_platform_init(agent: &mut AgentInfo, poll: &mut Poll) {
-    let mut vpn_tun;
-    if let Some(p) = Pipe::new_client(
-        r"\\.\pipe\nextensio".to_string(),
-        true,
+// Instead of getting vpn packets from an OS file descriptor interface,
+// we are being given packets over a UDP socket
+fn udp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll, port: u32) {
+    let mut vpn_tun = NetConn::new_client(
+        "127.0.0.1".to_string(),
+        port as usize,
+        common::UDP,
         agent.pkt_pool.clone(),
-    ) {
-        vpn_tun = p;
-    } else {
-        panic!("Cannot open pipe");
-    }
+        agent.tcp_pool.clone(),
+        0,
+    );
     match vpn_tun.dial() {
         Err(e) => match e.code {
             EWOULDBLOCK => (),
-            _ => panic!("app dial failed {}", e.detail),
+            _ => panic!("UDP app dial failed {}", e.detail),
         },
         _ => (),
     }
+
     let vpn_tun = Box::new(vpn_tun);
     let mut tun = Tun {
         tun: vpn_tun,
@@ -2318,20 +2317,34 @@ fn agent_platform_init(agent: &mut AgentInfo, poll: &mut Poll) {
     match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
         Err(e) => {
             tun.tun.close(0).ok();
-            panic!("App transport register failed {}", format!("{}", e));
+            panic!("UDP App transport register failed {}", format!("{}", e));
         }
         _ => {
             agent.vpn_tun = tun;
-            error!("App Transport Registered");
+            error!("UDP App Transport Registered");
             ()
         }
     }
+    // Send one dummy handshake packet
+    let mut pkt = common::pool_get(agent.pkt_pool.clone()).unwrap();
+    pkt.clear();
+    pkt.extend_from_slice(br"Hello world");
+    let data = NxtBufs {
+        bufs: vec![pkt],
+        headroom: 0,
+        hdr: None,
+    };
+    agent.vpn_tun.tun.write(0, data).ok();
 }
 
-#[cfg(not(target_os = "windows"))]
-fn agent_platform_init(agent: &mut AgentInfo, _: &mut Poll) {}
-
-fn agent_main_thread(platform: u32, direct: u32, rxmtu: u32, txmtu: u32, highmem: u32) {
+fn agent_main_thread(
+    platform: u32,
+    direct: u32,
+    rxmtu: u32,
+    txmtu: u32,
+    highmem: u32,
+    udp_vpn: u32,
+) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -2370,7 +2383,9 @@ fn agent_main_thread(platform: u32, direct: u32, rxmtu: u32, txmtu: u32, highmem
     agent_init_pools(&mut agent, rxmtu, txmtu, highmem);
     agent.next_tun_idx = TUN_START;
 
-    agent_platform_init(&mut agent, &mut poll);
+    if udp_vpn != 0 {
+        udp_vpn_init(&mut agent, &mut poll, udp_vpn);
+    }
 
     let rx_ratio = MAXPAYLOAD / rxmtu as usize;
 
@@ -2631,10 +2646,11 @@ pub unsafe extern "C" fn agent_init(
     rxmtu: u32,
     txmtu: u32,
     highmem: u32,
+    udp_vpn: u32,
 ) {
     assert!(rxmtu >= txmtu);
     AGENT_STARTED.store(1, Relaxed);
-    agent_main_thread(platform, direct, rxmtu, txmtu, highmem);
+    agent_main_thread(platform, direct, rxmtu, txmtu, highmem, udp_vpn);
 }
 
 #[no_mangle]
