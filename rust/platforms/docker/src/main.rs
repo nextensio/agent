@@ -264,6 +264,21 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
     let mut last_keepalive = Instant::now();
     let mut refresh = Instant::now();
 
+    // TODO: Once we start using proper certs for our production clusters, make this
+    // accept_invalid_certs true only for test environment. Even test environments ideally
+    // should have verifiable certs via a test.nextensio.net domain or something
+    let mut ka_client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    // TODO: Once we start using proper certs for our production clusters, make this
+    // accept_invalid_certs true only for test environment. Even test environments ideally
+    // should have verifiable certs via a test.nextensio.net domain or something
+    let mut onb_client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
     loop {
         let token = pkce::authenticate(test, &username, &password);
         if let Some(t) = token {
@@ -280,8 +295,13 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
         let now = Instant::now();
         if onboarded {
             if now > last_keepalive + Duration::from_secs(keepalive as u64) {
-                force_onboard =
-                    agent_keepalive(controller.clone(), access_token.clone(), &version, &uuid);
+                force_onboard = agent_keepalive(
+                    controller.clone(),
+                    access_token.clone(),
+                    &version,
+                    &uuid,
+                    &mut ka_client,
+                );
                 last_keepalive = now;
             }
         }
@@ -303,7 +323,12 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
         if !onboarded || force_onboard {
             error!("Onboarding again");
             println!("Onboarding with nextensio controller");
-            let (o, onb) = okta_onboard(controller.clone(), access_token.clone(), &uuid);
+            let (o, onb) = okta_onboard(
+                controller.clone(),
+                access_token.clone(),
+                &uuid,
+                &mut onb_client,
+            );
             if o {
                 let onb = onb.unwrap();
                 version = onb.version.clone();
@@ -323,14 +348,8 @@ fn okta_onboard(
     controller: String,
     access_token: String,
     uuid: &Uuid,
+    client: &mut reqwest::Client,
 ) -> (bool, Option<OnboardInfo>) {
-    // TODO: Once we start using proper certs for our production clusters, make this
-    // accept_invalid_certs true only for test environment. Even test environments ideally
-    // should have verifiable certs via a test.nextensio.net domain or something
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
     let get_url = format!("https://{}/api/v1/global/get/onboard", controller);
     let bearer = format!("Bearer {}", access_token);
     let resp = client.get(&get_url).header("Authorization", bearer).send();
@@ -374,14 +393,13 @@ fn okta_onboard(
     }
 }
 
-fn agent_keepalive(controller: String, access_token: String, version: &str, uuid: &Uuid) -> bool {
-    // TODO: Once we start using proper certs for our production clusters, make this
-    // accept_invalid_certs true only for test environment. Even test environments ideally
-    // should have verifiable certs via a test.nextensio.net domain or something
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
+fn agent_keepalive(
+    controller: String,
+    access_token: String,
+    version: &str,
+    uuid: &Uuid,
+    client: &mut reqwest::Client,
+) -> bool {
     let get_url = format!(
         "https://{}/api/v1/global/get/keepalive/{}/{}",
         controller, version, uuid
