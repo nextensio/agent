@@ -25,6 +25,7 @@ dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
  "counters",
  "dummy",
+ "env_logger 0.9.0",
  "fd",
  "l3proxy",
  "log",
@@ -61,7 +62,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9ed09b18365ed295d722d0b5ed59c01b79a826ff2d2a8f73d5ecca8e6fb2f66"
 dependencies = [
  "android_log-sys",
- "env_logger",
+ "env_logger 0.8.3",
  "lazy_static",
  "log",
 ]
@@ -415,6 +416,19 @@ name = "env_logger"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17392a012ea30ef05a610aa97dfb49496e71c9f676b27879922ea5bdf60d9d3f"
+dependencies = [
+ "atty",
+ "humantime",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
 dependencies = [
  "atty",
  "humantime",
@@ -1020,7 +1034,7 @@ version = "0.1.0"
 dependencies = [
  "agent",
  "clap",
- "env_logger",
+ "env_logger 0.8.3",
  "libc",
  "log",
  "oauth2",

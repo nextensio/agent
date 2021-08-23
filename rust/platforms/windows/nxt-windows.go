@@ -24,6 +24,7 @@ import (
 
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/elevate"
+	"golang.zx2c4.com/wireguard/windows/tunnel/firewall"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
@@ -32,6 +33,9 @@ var toAgent net.Addr
 var vpnTun tun.Device
 var agentHandshake bool
 var logger *device.Logger
+
+const RXMTU = 1500
+const TXMTU = 1500
 
 const (
 	ExitSetupSuccess = 0
@@ -54,6 +58,10 @@ var (
 		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
 	}
+	dnsesToSet = []net.IP{
+		net.IPv4(8, 8, 8, 8),
+		net.IPv4(8, 8, 4, 4),
+	}
 )
 
 func idpVerify() *accessIdTokens {
@@ -64,7 +72,7 @@ func idpVerify() *accessIdTokens {
 }
 
 func agentToVpn() {
-	var buf [4096]byte
+	var buf [TXMTU]byte
 
 	for {
 		r, a, e := fromAgent.ReadFrom(buf[:])
@@ -90,7 +98,7 @@ func agentToVpn() {
 }
 
 func vpnToAgent() {
-	var buf [2048]byte
+	var buf [RXMTU]byte
 	for {
 		r, e := vpnTun.Read(buf[:], 0)
 		if e != nil {
@@ -110,7 +118,7 @@ func vpnToAgent() {
 }
 
 func agentInit(port int) {
-	C.agent_init(2 /*windows*/, 1, 1500, 1500, 1, C.uint32_t(port))
+	C.agent_init(2 /*windows*/, 1, RXMTU, TXMTU, 1, C.uint32_t(port))
 }
 
 func main() {
@@ -134,7 +142,7 @@ func main() {
 
 	err = elevate.DoAsSystem(func() error {
 		var terr error
-		vpnTun, terr = tun.CreateTUN(interfaceName, 0)
+		vpnTun, terr = tun.CreateTUN(interfaceName, TXMTU)
 		return terr
 	})
 	if err != nil {
@@ -161,6 +169,11 @@ func main() {
 		logger.Errorf("Failed to create RouteData: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
+	err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
+	if err != nil {
+		logger.Errorf("Failed to create DNS: %v", err)
+		os.Exit(ExitSetupFailed)
+	}
 
 	device := device.NewDevice(vpnTun, conn.NewDefaultBind(), logger)
 	err = device.Up()
@@ -169,6 +182,8 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 	logger.Verbosef("Device started")
+
+	firewall.EnableFirewall(uint64(luid), true, nil)
 
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt)

@@ -1,5 +1,6 @@
 // The code here is from https://github.com/EmilHernvall/dnsguide sample5.rs
 
+use log::error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 type Error = Box<dyn std::error::Error>;
@@ -676,6 +677,49 @@ impl DnsPacket {
     }
 }
 
+pub fn print_responses(req_buffer: &mut BytePacketBuffer) {
+    let mut request;
+    if let Ok(r) = DnsPacket::from_buffer(req_buffer) {
+        request = r;
+    } else {
+        return;
+    }
+    loop {
+        if let Some(ans) = request.answers.pop() {
+            match ans {
+                DnsRecord::A { domain, addr, ttl } => {
+                    error!("DNS answer A {} {} {}", domain, addr, ttl);
+                }
+                DnsRecord::AAAA { domain, addr, ttl } => {
+                    error!("DNS answer AAAA {} {} {}", domain, addr, ttl);
+                }
+                DnsRecord::NS { domain, host, ttl } => {
+                    error!("DNS answer NS {} {} {}", domain, host, ttl);
+                }
+                DnsRecord::CNAME { domain, host, ttl } => {
+                    error!("DNS answer CNAME {} {} {}", domain, host, ttl);
+                }
+                DnsRecord::MX {
+                    domain,
+                    priority,
+                    host,
+                    ttl,
+                } => {
+                    error!("DNS answer MX {} {} {} {}", domain, priority, host, ttl);
+                }
+                DnsRecord::UNKNOWN {
+                    domain,
+                    qtype,
+                    data_len,
+                    ttl,
+                } => error!("Unknown response {} {} {} {}", domain, qtype, data_len, ttl),
+            }
+        } else {
+            return;
+        }
+    }
+}
+
 pub fn handle_nextensio_query(
     domains: &[super::Domain],
     req_buffer: &mut BytePacketBuffer,
@@ -712,7 +756,7 @@ pub fn handle_nextensio_query(
                 (domains[idx].dnsip & 0xFF) as u8,
             );
             let ans = DnsRecord::A {
-                domain: domains[idx].name.clone(),
+                domain: question.name.clone(),
                 addr,
                 ttl: 300,
             };

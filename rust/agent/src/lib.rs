@@ -36,6 +36,7 @@ use std::{sync::atomic::AtomicI32, sync::atomic::AtomicU32, sync::atomic::Atomic
 use webproxy::WebProxy;
 use websock::WebSession;
 mod dns;
+use env_logger::Env;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
@@ -902,7 +903,7 @@ fn parse_copy(
             // the first buffer in the chain is the pending buffer, and we dont allow
             // non-first buffers to have non-zero headroom, so we just copy it if thats
             // the case
-            if let Some(mut new) = common::pool_get(pkt_pool.clone()) {
+            if let Some(mut new) = pool_get(pkt_pool.clone()) {
                 // Clear just to set vector data/len to empty
                 new.clear();
                 new.extend_from_slice(&b[tx.headroom + remaining..]);
@@ -1025,7 +1026,7 @@ fn parse_complete(
     if flow.parse_pending.is_some() {
         pending = flow.parse_pending.take().unwrap();
     } else {
-        if let Some(mut p) = common::pool_get(pkt_pool.clone()) {
+        if let Some(mut p) = pool_get(pkt_pool.clone()) {
             // Clear to set vector data/length to empty
             p.clear();
             pending = p;
@@ -1076,7 +1077,7 @@ fn flow_handle_dns(
         return false;
     }
     let mut req = dns::BytePacketBuffer::new(&mut tx.bufs[0][tx.headroom..]);
-    if let Some(mut buf) = common::pool_get(pkt_pool.clone()) {
+    if let Some(mut buf) = pool_get(pkt_pool.clone()) {
         let mut resp = dns::BytePacketBuffer::new(&mut buf[0..]);
         if dns::handle_nextensio_query(&reginfo.domains, &mut req, &mut resp) {
             let len = resp.pos();
@@ -1316,7 +1317,7 @@ fn proxyclient_rx(
                                     pkt_pool,
                                     _perf,
                                 );
-                                if let Some(mut empty) = common::pool_get(pkt_pool.clone()) {
+                                if let Some(mut empty) = pool_get(pkt_pool.clone()) {
                                     // Clear to just set vector data/length to be empty
                                     empty.clear();
                                     // trigger an immediate write back to the client by calling proxyclient_write().
@@ -2326,7 +2327,7 @@ fn udp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll, port: u32) {
         }
     }
     // Send one dummy handshake packet
-    let mut pkt = common::pool_get(agent.pkt_pool.clone()).unwrap();
+    let mut pkt = pool_get(agent.pkt_pool.clone()).unwrap();
     pkt.clear();
     pkt.extend_from_slice(br"Hello world");
     let data = NxtBufs {
@@ -2359,9 +2360,10 @@ fn agent_main_thread(
         .unwrap();
 
     #[cfg(target_os = "windows")]
-    log::set_boxed_logger(Box::new(winlog::WinLogger::new("Nextensio")))
-        .map(|()| log::set_max_level(LevelFilter::Error))
-        .ok();
+    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
+    /*log::set_boxed_logger(Box::new(winlog::WinLogger::new("Nextensio")))
+    .map(|()| log::set_max_level(LevelFilter::Error))
+    .ok();*/
 
     error!(
         "Agent init called, platform {}, direct {}, rxmtu {}, txmtu {}, highmem {}",
