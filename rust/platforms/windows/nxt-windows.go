@@ -181,9 +181,20 @@ func main() {
 		logger.Errorf("Failed to bring up device: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	logger.Verbosef("Device started")
+	iface, err := luid.IPInterface(windows.AF_INET)
+	if err != nil {
+		logger.Errorf("Failed to get iface for mtu: %v", err)
+		os.Exit(ExitSetupFailed)
+	}
+	iface.NLMTU = TXMTU
+	err = iface.Set()
+	if err != nil {
+		logger.Errorf("Failed to set iface for mtu: %v", err)
+		os.Exit(ExitSetupFailed)
+	}
 
 	firewall.EnableFirewall(uint64(luid), true, nil)
+	logger.Verbosef("Device started")
 
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt)

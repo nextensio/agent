@@ -2241,7 +2241,9 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         Ok(_) => success = true,
         Err(e) => match e.code {
             EWOULDBLOCK => success = true,
-            _ => {}
+            _ => {
+                error!("Cannot bind {}", e);
+            }
         },
     }
     if success {
@@ -2251,7 +2253,7 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
             .event_register(WEBPROXY_POLL, poll, RegType::Reg)
             .ok();
     } else {
-        error!("Cannot register to port {}", NXT_AGENT_PROXY);
+        error!("Cannot listen to port {}", NXT_AGENT_PROXY);
     }
 }
 
