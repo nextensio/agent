@@ -36,6 +36,7 @@ use std::{sync::atomic::AtomicI32, sync::atomic::AtomicU32, sync::atomic::Atomic
 use webproxy::WebProxy;
 use websock::WebSession;
 mod dns;
+#[cfg(target_os = "windows")]
 use env_logger::Env;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
