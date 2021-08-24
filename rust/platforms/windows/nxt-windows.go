@@ -11,7 +11,9 @@ package main
 */
 import "C"
 import (
+	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -22,6 +24,9 @@ import (
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 
+	common "gitlab.com/nextensio/common/go"
+	"gitlab.com/nextensio/common/go/messages/nxthdr"
+	websock "gitlab.com/nextensio/common/go/transport/websocket"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/elevate"
 	"golang.zx2c4.com/wireguard/windows/tunnel/firewall"
@@ -36,6 +41,7 @@ var logger *device.Logger
 
 const RXMTU = 1500
 const TXMTU = 1500
+const PKTTCPPORT = 8282
 
 const (
 	ExitSetupSuccess = 0
@@ -52,8 +58,8 @@ var (
 	}
 	nxtRouteIPv4ToAdd = winipcfg.RouteData{
 		Destination: net.IPNet{
-			IP:   net.IP{0, 0, 0, 0},
-			Mask: net.IPMask{0, 0, 0, 0},
+			IP:   net.IP{13, 0, 0, 0},
+			Mask: net.IPMask{255, 0, 0, 0},
 		},
 		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
@@ -71,34 +77,34 @@ func idpVerify() *accessIdTokens {
 	return nxtTokens
 }
 
-func agentToVpn() {
-	var buf [TXMTU]byte
-
+func agentToVpn(tcpTun *common.Transport) {
+	handshaked := false
 	for {
-		r, a, e := fromAgent.ReadFrom(buf[:])
+		_, bufs, e := (*tcpTun).Read()
 		if e != nil {
 			logger.Verbosef("Pipe Read error %s", e)
 			vpnTun.Close()
 			return
 		}
-		// Agent sends a dummy handshake message as the first packet
-		if !agentHandshake {
-			logger.Verbosef("Got handshake size %d, from %s, message %s", r, a, string(buf[:r]))
-			toAgent = a
-			agentHandshake = true
-			continue
-		}
-		w, e := vpnTun.Write(buf[0:r], 0)
-		if e != nil || w != r {
-			logger.Verbosef("vpn write failed error %s, w %d, r %d", e, w, r)
-			vpnTun.Close()
-			return
+		if !handshaked {
+			logger.Verbosef("Got handshake %s", string(bufs[0]))
+			handshaked = true
+		} else {
+			w, err := vpnTun.Write(bufs[0], 0)
+			if err != nil || w != len(bufs[0]) {
+				logger.Verbosef("vpn write failed error %s, w %d, r %d", e, w, len(bufs[0]))
+				vpnTun.Close()
+				return
+			}
 		}
 	}
 }
 
-func vpnToAgent() {
+func vpnToAgent(tcpTun *common.Transport) {
 	var buf [RXMTU]byte
+	hdr := &nxthdr.NxtHdr{}
+	flow := nxthdr.NxtFlow{}
+	hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 	for {
 		r, e := vpnTun.Read(buf[:], 0)
 		if e != nil {
@@ -106,19 +112,28 @@ func vpnToAgent() {
 			vpnTun.Close()
 			break
 		}
-		if agentHandshake {
-			n, e := fromAgent.WriteTo(buf[:r], toAgent)
-			if e != nil || n != r {
-				logger.Verbosef("Pipe write error %s, n %d, r %d", e, n, r)
-				vpnTun.Close()
-				break
-			}
+		err := (*tcpTun).Write(hdr, net.Buffers{buf[:r]})
+		if err != nil {
+			logger.Verbosef("Pipe write error %s,  r %d", e, r)
+			vpnTun.Close()
+			break
 		}
 	}
 }
 
 func agentInit(port int) {
 	C.agent_init(2 /*windows*/, 1, RXMTU, TXMTU, 1, C.uint32_t(port))
+}
+
+func agentConnection(tchan chan common.NxtStream) {
+	for {
+		select {
+		case client := <-tchan:
+			logger.Verbosef("Got connection from agent")
+			go agentToVpn(&client.Stream)
+			go vpnToAgent(&client.Stream)
+		}
+	}
 }
 
 func main() {
@@ -169,11 +184,11 @@ func main() {
 		logger.Errorf("Failed to create RouteData: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
+	/*err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
 	if err != nil {
 		logger.Errorf("Failed to create DNS: %v", err)
 		os.Exit(ExitSetupFailed)
-	}
+	}*/
 
 	device := device.NewDevice(vpnTun, conn.NewDefaultBind(), logger)
 	err = device.Up()
@@ -193,6 +208,18 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 
+	ipif, err := luid.IPInterface(windows.AF_INET)
+	if err != nil {
+		logger.Errorf("Failed to get iface for metric: %v", err)
+		os.Exit(ExitSetupFailed)
+	}
+	ipif.UseAutomaticMetric = false
+	ipif.Metric = 0
+	err = ipif.Set()
+	if err != nil {
+		logger.Errorf("Failed to set iface for metric: %v", err)
+		os.Exit(ExitSetupFailed)
+	}
 	firewall.EnableFirewall(uint64(luid), true, nil)
 	logger.Verbosef("Device started")
 
@@ -200,15 +227,11 @@ func main() {
 	signal.Notify(term, os.Interrupt)
 	signal.Notify(term, syscall.SIGTERM)
 
-	fromAgent, err = net.ListenPacket("udp", ":0")
-	if err != nil {
-		panic(err)
-	}
-	udpServer := fromAgent.LocalAddr().(*net.UDPAddr).Port
-
-	logger.Verbosef("UDP server at %u", udpServer)
-	// This will create the server part of the pipe
-	go agentInit(udpServer)
+	lg := log.New(os.Stdout, "Nextensio: ", log.LstdFlags)
+	pktserver := websock.NewListener(context.TODO(), lg, nil, nil, PKTTCPPORT, 0, 0)
+	tchan := make(chan common.NxtStream)
+	go pktserver.Listen(tchan)
+	go agentConnection(tchan)
 
 	watcher.Configure(luid)
 	go monitorDefaultIP(windows.AF_INET)
@@ -224,8 +247,8 @@ func main() {
 		}
 		break
 	}
-	go agentToVpn()
-	go vpnToAgent()
+
+	go agentInit(PKTTCPPORT)
 
 	select {
 	case <-term:

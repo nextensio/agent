@@ -7,6 +7,7 @@ set PATH=%BUILDDIR%.deps\llvm-mingw\bin;%BUILDDIR%.deps\go\bin;%BUILDDIR%.deps;%
 set PATHEXT=.exe
 cd /d %BUILDDIR% || exit /b 1
 
+
 if exist .deps\prepared goto :build
 :installdeps
 	rmdir /s /q .deps 2> NUL
@@ -18,6 +19,12 @@ if exist .deps\prepared goto :build
 	call :download make.zip https://download.wireguard.com/windows-toolchain/distfiles/make-4.2.1-without-guile-w32-bin.zip 30641be9602712be76212b99df7209f4f8f518ba764cf564262bc9d6e4047cc7 "--strip-components 1 bin" || goto :error
 	call :download wintun.zip https://www.wintun.net/builds/wintun-0.12.zip eba90e26686ed86595ae0a6d4d3f4f022924b1758f5148a32a91c60cc6e604df || goto :error
 	copy /y NUL prepared > NUL || goto :error
+	set GOPATH=%BUILDDIR%.deps\gopath
+	set GOROOT=%BUILDDIR%.deps\go
+	set GOPRIVATE="gitlab.com"
+	set GO111MODULE="on"
+	go get gitlab.com/nextensio/common/go
+
 	cd .. || goto :error
 
 :build
@@ -53,9 +60,10 @@ if exist .deps\prepared goto :build
 	del %1 || exit /b 1
 	goto :eof
 
+:nextensio:
 
 :build_plat
-	rm .\amd64\nxt-windows.exe
+	del .\amd64\nxt-windows.exe
 	set GOARCH=%~3
 	mkdir %1 >NUL 2>&1
 	echo [+] Assembling resources %1

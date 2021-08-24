@@ -2,7 +2,7 @@
 use android_logger::Config;
 use common::{
     decode_ipv4, hdr_to_key, key_to_hdr,
-    nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtHdr, NxtOnboard},
+    nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtFlow, NxtHdr, NxtOnboard},
     parse_host, pool_get,
     tls::parse_sni,
     FlowV4Key, NxtBufs,
@@ -340,6 +340,8 @@ struct AgentInfo {
     pkt_pool: Arc<Pool<Vec<u8>>>,
     tcp_pool: Arc<Pool<Vec<u8>>>,
     perf: AgentPerf,
+    tcp_vpn: u32,
+    tcp_vpn_handshake: Option<NxtBufs>,
 }
 
 impl Default for AgentInfo {
@@ -369,6 +371,8 @@ impl Default for AgentInfo {
             pkt_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
             tcp_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
             perf: alloc_perf(),
+            tcp_vpn: 0,
+            tcp_vpn_handshake: None,
         }
     }
 }
@@ -1530,10 +1534,13 @@ fn vpntun_rx(
                             );
                         }
                     }
+                    tun.tun
+                        .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
+                        .ok();
                     return;
                 }
                 _ => {
-                    // This will trigger monitor_vpnfd() to close and cleanup etc..
+                    // This will trigger monitor_fd_vpn() to close and cleanup etc..
                     error!("VPN Tun Rx closed {}", x);
                     tun.tun.close(0).ok();
                     return;
@@ -1621,13 +1628,17 @@ fn vpntun_rx(
         .ok();
 }
 
-fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>) {
+fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, poll: &mut Poll) {
     while let Some((headroom, tx)) = vpn_tx.pop_front() {
         let length = tx.len();
+        // The vpn tun can be of type tcp also, in which case we need just a default header,
+        // to have proper framing over tcp
+        let mut hdr = NxtHdr::default();
+        hdr.hdr = Some(Hdr::Flow(NxtFlow::default()));
         match tun.tun.write(
             0,
             NxtBufs {
-                hdr: None,
+                hdr: Some(hdr),
                 bufs: vec![tx],
                 headroom,
             },
@@ -1635,13 +1646,18 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>) {
             Err((data, e)) => match e.code {
                 EWOULDBLOCK => {
                     tun.tx_ready = false;
-                    // Return the data to the head again
-                    let mut data = data.unwrap();
-                    vpn_tx.push_front((data.headroom, data.bufs.pop().unwrap()));
+                    if data.is_some() {
+                        // Return the data to the head again
+                        let mut data = data.unwrap();
+                        vpn_tx.push_front((data.headroom, data.bufs.pop().unwrap()));
+                    }
+                    tun.tun
+                        .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
+                        .ok();
                     return;
                 }
                 _ => {
-                    // This will trigger monitor_vpnfd() to close and cleanup etc..
+                    // This will trigger monitor_fd_vpn() to close and cleanup etc..
                     error!("VPN TUN Tx closed {}, len {}", e, length);
                     tun.tun.close(0).ok();
                     return;
@@ -1761,7 +1777,42 @@ fn app_transport(
     Box::new(vpn_tun)
 }
 
-fn monitor_vpnfd(agent: &mut AgentInfo, poll: &mut Poll) {
+// Send one dummy handshake packet to trigger a new stream to the server,
+// the server is not going to initiate anything to us. This will send the
+// handshake in an async fashion till the data is fully sent. And till we
+// initiate a stream (because of this handshake) to the server, the server
+// is not gonna send us back anything
+fn monitor_tcp_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
+    if agent.tcp_vpn == 0 || agent.tcp_vpn_handshake.is_none() {
+        return;
+    }
+
+    match agent
+        .vpn_tun
+        .tun
+        .write(0, agent.tcp_vpn_handshake.take().unwrap())
+    {
+        Err((d, e)) => match e.code {
+            EWOULDBLOCK => {
+                error!(
+                    "Wrote handshake to tcp pkt server, error {}, {}",
+                    e,
+                    d.is_none()
+                );
+                agent.tcp_vpn_handshake = d;
+                agent
+                    .vpn_tun
+                    .tun
+                    .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
+                    .ok();
+            }
+            _ => panic!("Cannot handshake with  tcp vpn server"),
+        },
+        Ok(_) => error!("Wrote handshake to tcp vpn server succesfully"),
+    }
+}
+
+fn monitor_fd_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
     let fd = VPNFD.load(Relaxed);
     if agent.vpn_fd != 0 && (agent.vpn_fd != fd || agent.vpn_tun.tun.is_closed(0)) {
         error!(
@@ -2290,22 +2341,32 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: u32, txmtu: u32, highmem: u32)
 }
 
 // Instead of getting vpn packets from an OS file descriptor interface,
-// we are being given packets over a UDP socket
-fn udp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll, port: u32) {
-    let mut vpn_tun = NetConn::new_client(
-        "127.0.0.1".to_string(),
-        port as usize,
-        common::UDP,
+// we are being given packets over a TCP socket
+fn tcp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll) {
+    let headers = HashMap::new();
+    let mut vpn_tun = WebSession::new_client(
+        vec![],
+        "127.0.0.1",
+        agent.tcp_vpn as usize,
+        headers,
         agent.pkt_pool.clone(),
         agent.tcp_pool.clone(),
         0,
     );
-    match vpn_tun.dial() {
-        Err(e) => match e.code {
-            EWOULDBLOCK => (),
-            _ => panic!("UDP app dial failed {}", e.detail),
-        },
-        _ => (),
+    loop {
+        match vpn_tun.dial() {
+            Err(e) => match e.code {
+                EWOULDBLOCK => {
+                    error!("Dialled tcp vpn server, ewouldblock");
+                    break;
+                }
+                _ => error!("Dial tcp vpn server  failed: {}", e.detail),
+            },
+            Ok(_) => {
+                error!("Dialled tcp vpn server, Ok");
+                break;
+            }
+        }
     }
 
     let vpn_tun = Box::new(vpn_tun);
@@ -2320,24 +2381,26 @@ fn udp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll, port: u32) {
     match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
         Err(e) => {
             tun.tun.close(0).ok();
-            panic!("UDP App transport register failed {}", format!("{}", e));
+            panic!("TCP App transport register failed {}", format!("{}", e));
         }
         _ => {
             agent.vpn_tun = tun;
-            error!("UDP App Transport Registered");
+            error!("TCP App Transport Registered");
             ()
         }
     }
-    // Send one dummy handshake packet
+
+    let mut hdr = NxtHdr::default();
+    hdr.hdr = Some(Hdr::Flow(NxtFlow::default()));
+    // We better get at least one packet here, we havent used any yet!
     let mut pkt = pool_get(agent.pkt_pool.clone()).unwrap();
     pkt.clear();
-    pkt.extend_from_slice(br"Hello world");
-    let data = NxtBufs {
+    pkt.extend_from_slice(br"Hello World");
+    agent.tcp_vpn_handshake = Some(NxtBufs {
         bufs: vec![pkt],
         headroom: 0,
-        hdr: None,
-    };
-    agent.vpn_tun.tun.write(0, data).ok();
+        hdr: Some(hdr),
+    });
 }
 
 fn agent_main_thread(
@@ -2346,7 +2409,7 @@ fn agent_main_thread(
     rxmtu: u32,
     txmtu: u32,
     highmem: u32,
-    udp_vpn: u32,
+    tcp_vpn: u32,
 ) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
@@ -2386,9 +2449,10 @@ fn agent_main_thread(
     agent.platform = platform as usize;
     agent_init_pools(&mut agent, rxmtu, txmtu, highmem);
     agent.next_tun_idx = TUN_START;
+    agent.tcp_vpn = tcp_vpn;
 
-    if udp_vpn != 0 {
-        udp_vpn_init(&mut agent, &mut poll, udp_vpn);
+    if agent.tcp_vpn != 0 {
+        tcp_vpn_init(&mut agent, &mut poll);
     }
 
     let rx_ratio = MAXPAYLOAD / rxmtu as usize;
@@ -2525,7 +2589,7 @@ fn agent_main_thread(
             // till we get an will-block return value on attempting some write. So as long as things
             // are write-ready, see if we have any pending data to Tx to the app tunnel or the gateway
             if agent.vpn_tun.tx_ready {
-                vpntun_tx(&mut agent.vpn_tun, &mut agent.vpn_tx);
+                vpntun_tx(&mut agent.vpn_tun, &mut agent.vpn_tx, &mut poll);
             }
         }
 
@@ -2596,7 +2660,8 @@ fn agent_main_thread(
         if Instant::now() > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
             monitor_onboard(&mut agent);
             monitor_gw(&mut agent, &mut poll);
-            monitor_vpnfd(&mut agent, &mut poll);
+            monitor_fd_vpn(&mut agent, &mut poll);
+            monitor_tcp_vpn(&mut agent, &mut poll);
             monitor_ager = Instant::now();
         }
         if Instant::now() > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
