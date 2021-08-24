@@ -5,9 +5,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +21,17 @@ import (
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	"gitlab.com/nextensio/common/go/transport/netconn"
 	"golang.org/x/crypto/ssh/terminal"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+	jaegerlog "github.com/uber/jaeger-client-go/log"
+	"github.com/uber/jaeger-lib/metrics/prometheus"
 )
+
+type nxtSpan struct {
+	span   opentracing.Span
+	active bool
+}
 
 type flowKey struct {
 	sport uint32
@@ -96,6 +109,7 @@ func gwToAppClose(tun common.Transport, dest ConnStats) {
 
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
+	var spaninfo nxtSpan
 
 	for {
 		hdr, buf, err := tun.Read()
@@ -132,6 +146,30 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 						gwToAppClose(tun, dest)
 						return
 					}
+					// Do tracing only if TraceCtx is set
+					if flow.TraceCtx != "" {
+						// Fake "uber-trace-id" http header to create tracer spanCtx
+						httpHdr := make(http.Header)
+						httpHdr.Add("Uber-Trace-Id", flow.TraceCtx)
+						tracer := opentracing.GlobalTracer()
+						spanCtx, serr := tracer.Extract(opentracing.HTTPHeaders,
+							opentracing.HTTPHeadersCarrier(httpHdr))
+						if (serr == nil) && (spanCtx != nil) {
+							a := regexp.MustCompile(`-`)
+							cluster := a.Split(flow.ConnectorPod, 2)[0]
+							span := tracer.StartSpan(cluster + "-" + regInfo.Userid,
+								ext.RPCServerOption(spanCtx))
+							spaninfo.active = true
+							spaninfo.span = span
+							span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
+							span.SetTag("nxt-trace-destagent", flow.DestAgent)
+							span.SetTag("nxt-trace-requestid", flow.TraceRequestId)
+							span.SetTag("nxt-trace-userid", flow.Userid)
+						} else {
+							lg.Println("Error extracting spanCtx from " + flow.TraceCtx)
+						}
+					}
+
 					// copy the flow
 					newFlow := *flow
 					// Swap source and dest agents
@@ -148,6 +186,10 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 				}
 			}
 			e := dest.Conn.Write(hdr, buf)
+			if spaninfo.active {
+				spaninfo.span.Finish()
+				spaninfo.active = false
+			}
 			if e != nil {
 				gwToAppClose(tun, dest)
 				return
@@ -251,6 +293,8 @@ func monitorController(lg *log.Logger) {
 	var keepalive uint = 30
 	force_onboard := false
 	var tokens *accessIdTokens
+	var closer io.Closer
+
 	for {
 		tokens = authenticate(*idp, *clientid, *username, *password)
 		if tokens != nil {
@@ -289,6 +333,12 @@ func monitorController(lg *log.Logger) {
 					keepalive = 5 * 60
 				} else {
 					keepalive = regInfo.Keepalive
+				}
+				if closer == nil {
+					closer = initJaegerTrace("nxt-"+regInfo.Tenant+"-trace", lg)
+					if closer != nil {
+						defer closer.Close()
+					}
 				}
 			}
 		}
@@ -397,6 +447,39 @@ func svrAccept(lg *log.Logger) {
 			}
 		}
 	}
+}
+
+func initJaegerTrace(service string, lg *log.Logger) io.Closer {
+	collector_url := os.Getenv("COLLECTOR_URL")
+	if collector_url == "" {
+		collector_url = "http://nxt-nextensio.nxt-kc1.do-sf.nextensio.net/tracing14268"
+	}
+	cfg := &jaegercfg.Configuration{
+		ServiceName: service,
+		Sampler: &jaegercfg.SamplerConfig{
+			Type:  "const",
+			Param: 1,
+		},
+		Reporter: &jaegercfg.ReporterConfig{
+			LogSpans:          true,
+			CollectorEndpoint: collector_url,
+		},
+	}
+	jLogger := jaegerlog.StdLogger
+	debugLogger := jaegerlog.DebugLogAdapter(jLogger)
+	jMetricsFactory := prometheus.New()
+	tracer, closer, err := cfg.NewTracer(
+		jaegercfg.Logger(debugLogger),
+		jaegercfg.Metrics(jMetricsFactory),
+	)
+	if err != nil {
+		lg.Println("JaegerTraceInit Failed - %v", err)
+		cfg.Disabled = true
+		tracer, closer, err = cfg.NewTracer()
+	}
+	opentracing.SetGlobalTracer(tracer)
+	lg.Println("JaegerTrace Initialized. Collector Endpoint:", collector_url)
+	return closer
 }
 
 func main() {
