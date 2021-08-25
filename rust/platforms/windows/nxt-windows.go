@@ -248,7 +248,8 @@ func main() {
 		break
 	}
 
-	go agentInit(PKTTCPPORT)
+	agentInit(PKTTCPPORT)
+	logger.Verbosef("Agent started")
 
 	select {
 	case <-term:

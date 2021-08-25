@@ -25,6 +25,7 @@ use perf::Perf;
 use std::net::Ipv4Addr;
 use std::slice;
 use std::sync::atomic::Ordering::Relaxed;
+use std::thread;
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
 use std::{ffi::CStr, usize};
@@ -2700,10 +2701,17 @@ pub unsafe extern "C" fn agent_init(
     direct: u32,
     mtu: u32,
     highmem: u32,
-    udp_vpn: u32,
+    tcp_vpn: u32,
 ) {
     AGENT_STARTED.store(1, Relaxed);
-    agent_main_thread(platform, direct, mtu, highmem, udp_vpn);
+    if tcp_vpn == 0 {
+        agent_main_thread(platform, direct, mtu, highmem, tcp_vpn);
+    } else {
+        // Right now only golang windows calls with tcp_vpn non-zero. I am not sure if
+        // running this from a goroutine will work "properly" (blocking/thread all that)
+        // or not, and hence spawning a thread of our own
+        thread::spawn(move || agent_main_thread(platform, direct, mtu, highmem, tcp_vpn));
+    }
 }
 
 #[no_mangle]
