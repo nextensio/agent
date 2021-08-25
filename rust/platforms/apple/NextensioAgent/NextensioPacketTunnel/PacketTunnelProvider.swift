@@ -8,8 +8,7 @@
 import NetworkExtension
 import os.log
 
-let rxmtu = 1500;
-let txmtu = 1500;
+let mtu = 1500;
 var highmem = 0;
 
 enum IPVersion: UInt8 {
@@ -154,7 +153,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         ipv4Settings.excludedRoutes = [
         ]
         networkSettings.ipv4Settings = ipv4Settings
-        networkSettings.mtu = rxmtu as NSNumber?
+        networkSettings.mtu = mtu as NSNumber?
 
         // This overrides system DNS settings. We dont really need
         // a dns server and it doesnt get used either because we are
@@ -181,7 +180,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             os_log("agent_init %{public}lu", Thread.current)
         }
         Thread.setThreadPriority(1);
-        agent_init(1 /*apple*/, direct == "true" ? 1 : 0, Int32(rxmtu), Int32(txmtu), Int32(highmem))
+        agent_init(1 /*apple*/, direct == "true" ? 1 : 0,  UInt32(mtu), UInt32(highmem), 0)
     }
 
     private func refresh(refreshToken: String) {

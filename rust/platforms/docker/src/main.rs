@@ -15,8 +15,7 @@ use std::{fmt, time::Instant};
 use uuid::Uuid;
 mod pkce;
 
-const RXMTU: u32 = 1500;
-const TXMTU: u32 = 1500;
+const MTU: u32 = 1500;
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -533,12 +532,12 @@ fn main() {
         env_logger::init();
     }
     let fd = create_tun().unwrap();
-    config_tun(test, RXMTU);
+    config_tun(test, MTU);
 
     thread::spawn(move || do_onboard(test, controller, username, password));
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, 1, 0);
+        agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0);
     }
 }

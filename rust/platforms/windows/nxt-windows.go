@@ -39,8 +39,7 @@ var vpnTun tun.Device
 var agentHandshake bool
 var logger *device.Logger
 
-const RXMTU = 1500
-const TXMTU = 1500
+const MTU = 1500
 const PKTTCPPORT = 8282
 
 const (
@@ -101,10 +100,8 @@ func agentToVpn(tcpTun *common.Transport) {
 }
 
 func vpnToAgent(tcpTun *common.Transport) {
-	var buf [RXMTU]byte
-	hdr := &nxthdr.NxtHdr{}
-	flow := nxthdr.NxtFlow{}
-	hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
+	var buf [MTU]byte
+
 	for {
 		r, e := vpnTun.Read(buf[:], 0)
 		if e != nil {
@@ -112,6 +109,9 @@ func vpnToAgent(tcpTun *common.Transport) {
 			vpnTun.Close()
 			break
 		}
+		hdr := &nxthdr.NxtHdr{}
+		flow := nxthdr.NxtFlow{}
+		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 		err := (*tcpTun).Write(hdr, net.Buffers{buf[:r]})
 		if err != nil {
 			logger.Verbosef("Pipe write error %s,  r %d", e, r)
@@ -122,7 +122,7 @@ func vpnToAgent(tcpTun *common.Transport) {
 }
 
 func agentInit(port int) {
-	C.agent_init(2 /*windows*/, 1, RXMTU, TXMTU, 1, C.uint32_t(port))
+	C.agent_init(2 /*windows*/, 1, MTU, 1, C.uint32_t(port))
 }
 
 func agentConnection(tchan chan common.NxtStream) {
@@ -157,7 +157,7 @@ func main() {
 
 	err = elevate.DoAsSystem(func() error {
 		var terr error
-		vpnTun, terr = tun.CreateTUN(interfaceName, TXMTU)
+		vpnTun, terr = tun.CreateTUN(interfaceName, MTU)
 		return terr
 	})
 	if err != nil {
@@ -201,7 +201,7 @@ func main() {
 		logger.Errorf("Failed to get iface for mtu: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	iface.NLMTU = TXMTU
+	iface.NLMTU = MTU
 	err = iface.Set()
 	if err != nil {
 		logger.Errorf("Failed to set iface for mtu: %v", err)
@@ -214,7 +214,7 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 	ipif.UseAutomaticMetric = false
-	ipif.Metric = 0
+	ipif.Metric = 1000
 	err = ipif.Set()
 	if err != nil {
 		logger.Errorf("Failed to set iface for metric: %v", err)

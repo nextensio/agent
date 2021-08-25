@@ -332,8 +332,7 @@ struct AgentInfo {
     proxy_tun: Tun,
     reginfo_changed: usize,
     last_flap: Instant,
-    rx_mtu: usize,
-    tx_mtu: usize,
+    mtu: usize,
     flows_active: HashMap<FlowV4Key, ()>,
     check_tuns: HashMap<usize, ()>,
     npkts: usize,
@@ -363,8 +362,7 @@ impl Default for AgentInfo {
             proxy_tun: Tun::default(),
             reginfo_changed: 0,
             last_flap: Instant::now(),
-            rx_mtu: 0,
-            tx_mtu: 0,
+            mtu: 0,
             flows_active: HashMap::new(),
             check_tuns: HashMap::new(),
             npkts: 0,
@@ -1513,8 +1511,7 @@ fn vpntun_rx(
     poll: &mut Poll,
     gw_onboarded: bool,
     reginfo: &RegistrationInfo,
-    rx_mtu: usize,
-    tx_mtu: usize,
+    mtu: usize,
     flows_active: &mut HashMap<FlowV4Key, ()>,
     check_tuns: &mut HashMap<usize, ()>,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
@@ -1552,13 +1549,9 @@ fn vpntun_rx(
                     if let Some(key) = decode_ipv4(&b[data.headroom..]) {
                         let mut f = flows.get_mut(&key);
                         if f.is_none() {
-                            if let Some(rx_socket) = Socket::new_client(
-                                &key,
-                                rx_mtu,
-                                tx_mtu,
-                                pkt_pool.clone(),
-                                tcp_pool.clone(),
-                            ) {
+                            if let Some(rx_socket) =
+                                Socket::new_client(&key, mtu, pkt_pool.clone(), tcp_pool.clone())
+                            {
                                 flow_new(
                                     &key,
                                     true,
@@ -1631,11 +1624,12 @@ fn vpntun_rx(
 
 fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, poll: &mut Poll) {
     while let Some((headroom, tx)) = vpn_tx.pop_front() {
-        let length = tx.len();
+        let length = tx.len() - headroom;
         // The vpn tun can be of type tcp also, in which case we need just a default header,
         // to have proper framing over tcp
         let mut hdr = NxtHdr::default();
-        hdr.hdr = Some(Hdr::Flow(NxtFlow::default()));
+        let flow = NxtFlow::default();
+        hdr.hdr = Some(Hdr::Flow(flow));
         match tun.tun.write(
             0,
             NxtBufs {
@@ -1765,10 +1759,10 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
 fn app_transport(
     fd: i32,
     platform: usize,
-    rx_mtu: usize,
+    mtu: usize,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
 ) -> Box<dyn Transport> {
-    let mut vpn_tun = Fd::new_client(fd, platform, rx_mtu, pkt_pool.clone());
+    let mut vpn_tun = Fd::new_client(fd, platform, mtu, pkt_pool.clone());
     match vpn_tun.dial() {
         Err(e) => {
             error!("app dial failed {}", e.detail);
@@ -1854,7 +1848,7 @@ fn monitor_fd_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
         );
     }
     if agent.vpn_fd != fd {
-        let vpn_tun = app_transport(fd, agent.platform, agent.rx_mtu, &agent.pkt_pool);
+        let vpn_tun = app_transport(fd, agent.platform, agent.mtu, &agent.pkt_pool);
         let mut tun = Tun {
             tun: vpn_tun,
             pending_tx: VecDeque::with_capacity(1),
@@ -2309,23 +2303,21 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
     }
 }
 
-fn agent_init_pools(agent: &mut AgentInfo, rxmtu: u32, txmtu: u32, highmem: u32) {
+fn agent_init_pools(agent: &mut AgentInfo, mtu: u32, highmem: u32) {
     // The mtu of the interface is set to the same as the buffer size, so we can READ packets as
     // large as the buffer size. But some platforms (like android) seems to perform poor when we
     // try to send packets closer to the interface mtu (mostly when mtu is large like 64K) and
-    // hence we want to keep the txmtu  size different from the rxmtu. We control the size of the
-    // tcp packets we receive to be rxmtu by doing mss-adjust when the tcp session is created
-    assert!(rxmtu >= txmtu);
-    agent.rx_mtu = rxmtu as usize;
-    agent.tx_mtu = txmtu as usize;
+    // hence we want to keep the mtu  size different from the mtu. We control the size of the
+    // tcp packets we receive to be mtu by doing mss-adjust when the tcp session is created
+    agent.mtu = mtu as usize;
 
     // This will change over time - there can really be no "common max payload/buffer", the buffer
     // sizes will depend on each driver/transport. For now its a "common" parameter
     common::set_maxbuf(MAXPAYLOAD);
 
-    // The 2*rxmtu is used to make sure smoltcp can fit in a full mtu sized udp packet into this
+    // The 2*mtu is used to make sure smoltcp can fit in a full mtu sized udp packet into this
     // buffer. See README.md in l3proxy/ in common repo
-    let pktbuf_len = std::cmp::min(MINPKTBUF, (2 * rxmtu as usize).next_power_of_two());
+    let pktbuf_len = std::cmp::min(MINPKTBUF, (2 * mtu as usize).next_power_of_two());
     // We want the parse buffer to fit in just one packet to keep it simple
     assert!(PARSE_MAX <= pktbuf_len);
 
@@ -2333,7 +2325,7 @@ fn agent_init_pools(agent: &mut AgentInfo, rxmtu: u32, txmtu: u32, highmem: u32)
     // laptops and highmem: 0 is a mobile device. So we just use half the memory on a mobile device
     // compared to a laptop thats about it. Note that we might be able to bring these numbers down
     // even lesser, will bring it down after this software gets more runtime on various devices.
-    // Note that the npkts usually has to be at least the MAXPAYLOAD/txmtu (ie the number of pkts
+    // Note that the npkts usually has to be at least the MAXPAYLOAD/mtu (ie the number of pkts
     // to send one full size tcp payload) for better performance
     agent.npkts = 64 * (highmem as usize + 1);
     agent.ntcp = 22 * (highmem as usize + 1);
@@ -2392,7 +2384,8 @@ fn tcp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll) {
     }
 
     let mut hdr = NxtHdr::default();
-    hdr.hdr = Some(Hdr::Flow(NxtFlow::default()));
+    let f = NxtFlow::default();
+    hdr.hdr = Some(Hdr::Flow(f));
     // We better get at least one packet here, we havent used any yet!
     let mut pkt = pool_get(agent.pkt_pool.clone()).unwrap();
     pkt.clear();
@@ -2404,14 +2397,7 @@ fn tcp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll) {
     });
 }
 
-fn agent_main_thread(
-    platform: u32,
-    direct: u32,
-    rxmtu: u32,
-    txmtu: u32,
-    highmem: u32,
-    tcp_vpn: u32,
-) {
+fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn: u32) {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
@@ -2432,8 +2418,8 @@ fn agent_main_thread(
     .ok();*/
 
     error!(
-        "Agent init called, platform {}, direct {}, rxmtu {}, txmtu {}, highmem {}",
-        platform, direct, rxmtu, txmtu, highmem
+        "Agent init called, platform {}, direct {},mtu {}, highmem {}",
+        platform, direct, mtu, highmem
     );
 
     let mut poll = match Poll::new() {
@@ -2448,7 +2434,7 @@ fn agent_main_thread(
         DIRECT.store(1, Relaxed);
     }
     agent.platform = platform as usize;
-    agent_init_pools(&mut agent, rxmtu, txmtu, highmem);
+    agent_init_pools(&mut agent, mtu, highmem);
     agent.next_tun_idx = TUN_START;
     agent.tcp_vpn = tcp_vpn;
 
@@ -2456,7 +2442,7 @@ fn agent_main_thread(
         tcp_vpn_init(&mut agent, &mut poll);
     }
 
-    let rx_ratio = MAXPAYLOAD / rxmtu as usize;
+    let ratio = MAXPAYLOAD / mtu as usize;
 
     proxy_init(&mut agent, &mut poll);
 
@@ -2477,7 +2463,7 @@ fn agent_main_thread(
                 VPNTUN_POLL => {
                     if event.is_readable() {
                         vpntun_rx(
-                            rx_ratio,
+                            ratio,
                             &mut agent.vpn_tun,
                             &mut agent.flows,
                             &mut agent.parse_pending,
@@ -2488,8 +2474,7 @@ fn agent_main_thread(
                             &mut poll,
                             agent.gw_onboarded,
                             &agent.reginfo,
-                            agent.rx_mtu,
-                            agent.tx_mtu,
+                            agent.mtu,
                             &mut agent.flows_active,
                             &mut agent.check_tuns,
                             &agent.pkt_pool,
@@ -2713,14 +2698,12 @@ fn agent_main_thread(
 pub unsafe extern "C" fn agent_init(
     platform: u32,
     direct: u32,
-    rxmtu: u32,
-    txmtu: u32,
+    mtu: u32,
     highmem: u32,
     udp_vpn: u32,
 ) {
-    assert!(rxmtu >= txmtu);
     AGENT_STARTED.store(1, Relaxed);
-    agent_main_thread(platform, direct, rxmtu, txmtu, highmem, udp_vpn);
+    agent_main_thread(platform, direct, mtu, highmem, udp_vpn);
 }
 
 #[no_mangle]

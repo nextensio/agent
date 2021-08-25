@@ -35,21 +35,17 @@ struct AgentStats
     int total_flows;
 };
 
-extern void agent_init(uint32_t platform, uint32_t direct, uint32_t rxmtu, uint32_t txmtu, uint32_t highmem, uint32_t udp_port);
+extern void agent_init(uint32_t platform, uint32_t direct,  uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
 extern void agent_stats(struct AgentStats *stats);
 
-// We set the rxmtu size to 64*1024, with txmtu on the tun interface being 32*1024,
-// and with 24 max buffers queued up at any time. Android does not perform well when
-// we send too many packets close to the interface mtu size
-#define RXMTU 1500
-#define TXMTU 1500
+#define MTU 1500
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    agent_init(0 /*android*/, 0 /*direct*/, RXMTU, TXMTU, 0 /* low memory device */);
+    agent_init(0 /*android*/, 0 /*direct*/, MTU, 0 /* low memory device */, /* no tcp port */);
     return 0;
 }
 
