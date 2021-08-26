@@ -3,7 +3,7 @@ rem Nextensio Agent Windows
 
 setlocal enabledelayedexpansion
 set BUILDDIR=%~dp0
-set PATH=%BUILDDIR%.deps\llvm-mingw\bin;%BUILDDIR%.deps\go\bin;%BUILDDIR%.deps;%PATH%
+set PATH=%BUILDDIR%.deps;%PATH%
 set PATHEXT=.exe
 cd /d %BUILDDIR% || exit /b 1
 
@@ -14,15 +14,10 @@ if exist .deps\prepared goto :build
 	mkdir .deps || goto :error
 	cd .deps || goto :error
 	rem Download GOLANG
-	call :download go.zip https://download.wireguard.com/windows-toolchain/distfiles/go1.17beta1-windows_amd64_2021-06-11.zip 09601956a35ee4c2fa199da301c4b210fd365a46d286a7160388a1cdc07b7a6d || goto :error
-	rem Mirror of https://sourceforge.net/projects/ezwinports/files/make-4.2.1-without-guile-w32-bin.zip
-	call :download make.zip https://download.wireguard.com/windows-toolchain/distfiles/make-4.2.1-without-guile-w32-bin.zip 30641be9602712be76212b99df7209f4f8f518ba764cf564262bc9d6e4047cc7 "--strip-components 1 bin" || goto :error
 	call :download wintun.zip https://www.wintun.net/builds/wintun-0.12.zip eba90e26686ed86595ae0a6d4d3f4f022924b1758f5148a32a91c60cc6e604df || goto :error
 	copy /y NUL prepared > NUL || goto :error
-	set GOPATH=%BUILDDIR%.deps\gopath
-	set GOROOT=%BUILDDIR%.deps\go
-	set GOPRIVATE="gitlab.com"
-	set GO111MODULE="on"
+	set GOPRIVATE=gitlab.com
+	set GO111MODULE=on
 	go get gitlab.com/nextensio/common/go
 
 	cd .. || goto :error
@@ -30,13 +25,11 @@ if exist .deps\prepared goto :build
 :build
 	set GOOS=windows
 	set GOARM=7
-	set GOPATH=%BUILDDIR%.deps\gopath
-	set GOROOT=%BUILDDIR%.deps\go
 	if "%GoGenerate%"=="yes" (
 		echo [+] Regenerating files
 		go generate ./... || exit /b 1
 	)
-	call :build_plat amd64 x86_64 || goto :error
+	call :build_plat amd64 x86_64 amd64 || goto :error
 
 :sign
 	if exist .\sign.bat call .\sign.bat
@@ -60,10 +53,8 @@ if exist .deps\prepared goto :build
 	del %1 || exit /b 1
 	goto :eof
 
-:nextensio:
-
 :build_plat
-	del .\amd64\nxt-windows.exe
+	del %~1\nxt-windows.exe
 	set GOARCH=%~3
 	mkdir %1 >NUL 2>&1
 	echo [+] Assembling resources %1

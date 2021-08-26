@@ -1,5 +1,9 @@
 .deps/
 amd64/
-resources_.syso
+x86/
+arm/
+arm64/
+*.syso
+*.swp
 .vscode
 libnextensio.a

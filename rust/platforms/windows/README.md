@@ -51,7 +51,7 @@
 
 <b>GoLang Installation</b>
 1. https://golang.org/
-2. or, choco install golang
+2. or, choco install golang 
 
 <b>Rust Compiler Installation</b>
 1. https://www.rust-lang.org/tools/install
@@ -101,9 +101,5 @@ Network Destination        Netmask          Gateway       Interface  Metric
 ```
 
 <b> Todo </b>
-1. OKTA IDP integration for access token
-2. Installation to 3rd party computers
-3. Develop a GUI
-4. The native golang installation does not seem to work, I suspect wireguard has some
-   golang patch for some reason, figure that out and if possible remove this special
-   golang and just use the one installed on the system
+1. Installation to 3rd party computers
+2. Develop a GUI

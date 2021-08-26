@@ -1645,7 +1645,9 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, p
                     if data.is_some() {
                         // Return the data to the head again
                         let mut data = data.unwrap();
-                        vpn_tx.push_front((data.headroom, data.bufs.pop().unwrap()));
+                        if data.bufs.len() != 0 {
+                            vpn_tx.push_front((data.headroom, data.bufs.pop().unwrap()));
+                        }
                     }
                     tun.tun
                         .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
@@ -2689,12 +2691,17 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
 // NOTE1: PLEASE ENSURE THAT THIS API IS CALLED ONLY ONCE BY THE PLATFORM
 //
 // NOTE2: This is a for-ever loop inside, so call this from a seperate thread in
-// the platform (android/ios/linux/windows). We can launch a thread right in here
+// the platform (android/ios/linux). We can launch a thread right in here
 // and that works, but at least on android there is this problem of that thread
 // mysteriously vanishing after a few hours, maybe its becuase the thread created
 // here might not be the right priority etc.. ? The thread created from android
 // itself seems to work fine and hence we are leaving the thread creation to the
 // platform so it can choose the right priority etc..
+//
+// NOTE3: windows as of today calls rust from golang - I am not sure if a goroutine
+// plays well if we block it from rust (agent_main_thread blocks for ever).
+// Creating a new thread just for that reason. And golang doesnt have any way of
+// spawning an OS thread, hence doing it here
 #[no_mangle]
 pub unsafe extern "C" fn agent_init(
     platform: u32,
@@ -2704,13 +2711,10 @@ pub unsafe extern "C" fn agent_init(
     tcp_vpn: u32,
 ) {
     AGENT_STARTED.store(1, Relaxed);
-    if tcp_vpn == 0 {
-        agent_main_thread(platform, direct, mtu, highmem, tcp_vpn);
-    } else {
-        // Right now only golang windows calls with tcp_vpn non-zero. I am not sure if
-        // running this from a goroutine will work "properly" (blocking/thread all that)
-        // or not, and hence spawning a thread of our own
+    if platform == 2 {
         thread::spawn(move || agent_main_thread(platform, direct, mtu, highmem, tcp_vpn));
+    } else {
+        agent_main_thread(platform, direct, mtu, highmem, tcp_vpn);
     }
 }
 
