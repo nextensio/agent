@@ -16,6 +16,7 @@ winlog = "*"
 [target.'cfg(target_os = "linux")'.dependencies]
 counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
+env_logger = "0.8.4"
 
 [dependencies]
 log = "0.4.14"
