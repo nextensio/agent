@@ -35,7 +35,7 @@ typedef struct CRegistrationInfo
     int os_minor;
 } CRegistrationInfo;
 
-void agent_init(uint32_t platform, uint32_t direct, uint32_t rxmtu, uint32_t txmtu, uint32_t highmem, uint32_t udp_port);
+void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
 
 int agent_started(void);
 

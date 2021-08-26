@@ -17,13 +17,15 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
-	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	websock "gitlab.com/nextensio/common/go/transport/websocket"
@@ -35,12 +37,17 @@ import (
 
 var fromAgent net.PacketConn
 var toAgent net.Addr
-var vpnTun tun.Device
+var vpnTun *tun.Device
 var agentHandshake bool
 var logger *device.Logger
+var writeLock sync.Mutex
 
-const RXMTU = 1500
-const TXMTU = 1500
+const MTU = 1500
+
+// TODO: This can be a problem if someone else is using this port already,
+// we should ideally be able to use "any" port, ie start the websocket server
+// on a port of choice of the OS (we should be able to give a 127.0.0.0:0 as the address)
+// and then figure out what port OS allocated, and pass that to agent_init()
 const PKTTCPPORT = 8282
 
 const (
@@ -58,8 +65,8 @@ var (
 	}
 	nxtRouteIPv4ToAdd = winipcfg.RouteData{
 		Destination: net.IPNet{
-			IP:   net.IP{13, 0, 0, 0},
-			Mask: net.IPMask{255, 0, 0, 0},
+			IP:   net.IP{0, 0, 0, 0},
+			Mask: net.IPMask{0, 0, 0, 0},
 		},
 		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
@@ -83,46 +90,97 @@ func agentToVpn(tcpTun *common.Transport) {
 		_, bufs, e := (*tcpTun).Read()
 		if e != nil {
 			logger.Verbosef("Pipe Read error %s", e)
-			vpnTun.Close()
+			(*vpnTun).Close()
 			return
 		}
 		if !handshaked {
 			logger.Verbosef("Got handshake %s", string(bufs[0]))
 			handshaked = true
 		} else {
-			w, err := vpnTun.Write(bufs[0], 0)
+			writeLock.Lock()
+			w, err := (*vpnTun).Write(bufs[0], 0)
+			writeLock.Unlock()
 			if err != nil || w != len(bufs[0]) {
 				logger.Verbosef("vpn write failed error %s, w %d, r %d", e, w, len(bufs[0]))
-				vpnTun.Close()
+				(*vpnTun).Close()
 				return
 			}
 		}
 	}
 }
 
+// Respond to icmp requests to ourselves, a quick and easy test
+// to see if the wintun layer is working fine
+func handleICMP(buf []byte) bool {
+	packet := gopacket.NewPacket(buf[0:], layers.LayerTypeIPv4, gopacket.Default)
+	if packet == nil {
+		return false
+	}
+	iplayer := packet.Layer(layers.LayerTypeIPv4)
+	if iplayer == nil {
+		return false
+	}
+	ip, _ := iplayer.(*layers.IPv4)
+	self := ip.DstIP.To4()
+	if self[0] != 100 || self[1] != 64 || self[2] != 1 || self[3] != 2 {
+		return false
+	}
+	// swap src, dst
+	src := ip.SrcIP
+	dst := ip.DstIP
+	ip.SrcIP = dst
+	ip.DstIP = src
+	icmpLayer := packet.Layer(layers.LayerTypeICMPv4)
+	if icmpLayer == nil {
+		return false
+	}
+	icmp, _ := icmpLayer.(*layers.ICMPv4)
+	icmp.TypeCode = layers.ICMPv4TypeEchoReply
+
+	// now send response
+	options := gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
+	}
+	newBuffer := gopacket.NewSerializeBuffer()
+	err := gopacket.SerializePacket(newBuffer, options, packet)
+	if err != nil {
+		return false
+	}
+
+	writeLock.Lock()
+	(*vpnTun).Write(newBuffer.Bytes(), 0)
+	writeLock.Unlock()
+
+	return true
+}
+
 func vpnToAgent(tcpTun *common.Transport) {
-	var buf [RXMTU]byte
-	hdr := &nxthdr.NxtHdr{}
-	flow := nxthdr.NxtFlow{}
-	hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 	for {
-		r, e := vpnTun.Read(buf[:], 0)
+		buf := make([]byte, MTU)
+		r, e := (*vpnTun).Read(buf[0:MTU], 0)
 		if e != nil {
 			logger.Verbosef("vpn Read error %s", e)
-			vpnTun.Close()
-			break
+			(*vpnTun).Close()
+			return
 		}
-		err := (*tcpTun).Write(hdr, net.Buffers{buf[:r]})
+		if handleICMP(buf[0:r]) {
+			continue
+		}
+		hdr := &nxthdr.NxtHdr{}
+		flow := nxthdr.NxtFlow{}
+		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
+		err := (*tcpTun).Write(hdr, net.Buffers{buf[0:r]})
 		if err != nil {
 			logger.Verbosef("Pipe write error %s,  r %d", e, r)
-			vpnTun.Close()
-			break
+			(*vpnTun).Close()
+			return
 		}
 	}
 }
 
 func agentInit(port int) {
-	C.agent_init(2 /*windows*/, 1, RXMTU, TXMTU, 1, C.uint32_t(port))
+	C.agent_init(2 /*windows*/, 1, MTU, 1, C.uint32_t(port))
 }
 
 func agentConnection(tchan chan common.NxtStream) {
@@ -155,9 +213,10 @@ func main() {
 		return
 	}
 
+	logger.Verbosef("Starting tunnel", tun.WintunPool)
 	err = elevate.DoAsSystem(func() error {
-		var terr error
-		vpnTun, terr = tun.CreateTUN(interfaceName, TXMTU)
+		t, terr := tun.CreateTUN(interfaceName, MTU)
+		vpnTun = &t
 		return terr
 	})
 	if err != nil {
@@ -165,11 +224,11 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 
-	realInterfaceName, _ := vpnTun.Name()
+	realInterfaceName, _ := (*vpnTun).Name()
 	interfaceName = realInterfaceName
 
-	defer vpnTun.Close()
-	nativeTunDevice := vpnTun.(*tun.NativeTun)
+	defer (*vpnTun).Close()
+	nativeTunDevice := (*vpnTun).(*tun.NativeTun)
 	luid := winipcfg.LUID(nativeTunDevice.LUID())
 
 	logger.Verbosef("TunIf created %s, %d", realInterfaceName, luid)
@@ -184,24 +243,29 @@ func main() {
 		logger.Errorf("Failed to create RouteData: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	/*err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
+	/* Windows has a "smart dns" resolver, if you google for it there is plenty
+	 * of details. Basically windows will send a dns request out of every interface
+	 * that advertises a dns server - it will send it out "directly" on that interface
+	 * bypassing all vpns (by binding to that interface). And whichever interface will
+	 * respond first will be the dns answer taken. So we dont really need to advertise
+	 * any public dns servers, that will be resolved via the ethernet/wi-fi interface.
+	 * But if someone turns OFF smart dns, then we are in trouble because then windows
+	 * will try to resolve dns servers of the interface with the lowest metric - now
+	 * what if the lowest metric interface doesnt advertise dns (like us), will windows
+	 * fall back to the next higher metric interface ? I hope so, not sure.
+	err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
 	if err != nil {
 		logger.Errorf("Failed to create DNS: %v", err)
 		os.Exit(ExitSetupFailed)
-	}*/
-
-	device := device.NewDevice(vpnTun, conn.NewDefaultBind(), logger)
-	err = device.Up()
-	if err != nil {
-		logger.Errorf("Failed to bring up device: %v", err)
-		os.Exit(ExitSetupFailed)
 	}
+	*/
+
 	iface, err := luid.IPInterface(windows.AF_INET)
 	if err != nil {
 		logger.Errorf("Failed to get iface for mtu: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	iface.NLMTU = TXMTU
+	iface.NLMTU = MTU
 	err = iface.Set()
 	if err != nil {
 		logger.Errorf("Failed to set iface for mtu: %v", err)
@@ -248,16 +312,15 @@ func main() {
 		break
 	}
 
-	go agentInit(PKTTCPPORT)
+	agentInit(PKTTCPPORT)
+	logger.Verbosef("Agent started")
 
 	select {
 	case <-term:
-	case <-device.Wait():
 	}
 
 	// clean up
 	watcher.Destroy()
-	device.Close()
 
 	logger.Verbosef("Shutting down")
 }
