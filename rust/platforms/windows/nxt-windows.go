@@ -11,21 +11,26 @@ package main
 */
 import "C"
 import (
+	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/device"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/google/uuid"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	websock "gitlab.com/nextensio/common/go/transport/websocket"
@@ -41,6 +46,17 @@ var vpnTun *tun.Device
 var agentHandshake bool
 var logger *device.Logger
 var writeLock sync.Mutex
+var lg *log.Logger
+var onboarded bool
+var uniqueId string
+var controller string
+var regInfo RegistrationInfo
+var regInfoLock sync.RWMutex
+var unique uuid.UUID
+var username string
+var password string
+var idp string
+var clientid string
 
 const MTU = 1500
 
@@ -54,8 +70,6 @@ const (
 	ExitSetupSuccess = 0
 	ExitSetupFailed  = 1
 )
-
-var nxtTokens *accessIdTokens
 
 // Use a CGNAT address that doesnt clash with anything else
 var (
@@ -76,13 +90,6 @@ var (
 		net.IPv4(8, 8, 4, 4),
 	}
 )
-
-func idpVerify() *accessIdTokens {
-	nxtTokens = authenticate("https://dev-635657.okta.com", "0oaz5lndczD0DSUeh4x6",
-		"rudy@nextensio.net", "LetMeIn123")
-
-	return nxtTokens
-}
 
 func agentToVpn(tcpTun *common.Transport) {
 	handshaked := false
@@ -194,12 +201,89 @@ func agentConnection(tchan chan common.NxtStream) {
 	}
 }
 
+func credentials() (string, string) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Nextensio Username: ")
+	username, _ := reader.ReadString('\n')
+	fmt.Print("Nextensio Password: ")
+	bytePassword, _ := terminal.ReadPassword(0)
+	password := string(bytePassword)
+	return strings.TrimSpace(username), strings.TrimSpace(password)
+}
+
+func monitorController(lg *log.Logger) {
+	var keepalive uint = 30
+	force_onboard := false
+	var tokens *accessIdTokens
+
+	for {
+		tokens = authenticate(idp, clientid, username, password)
+		if tokens != nil {
+			break
+		}
+		lg.Println("Unable to authenticate connector with the IDP")
+		time.Sleep(10 * time.Second)
+	}
+	refresh := time.Now()
+	last_keepalive := time.Now()
+	for {
+		if onboarded {
+			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
+				force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
+				last_keepalive = time.Now()
+			}
+		}
+		// Okta is configured with one hour as the access token lifetime,
+		// refresh at 45 minutes
+		if time.Since(refresh).Minutes() >= 45 {
+			tokens = refreshTokens(idp, clientid, tokens.Refresh)
+			if tokens != nil {
+				refresh = time.Now()
+				// Send the new tokens to the gateway
+				force_onboard = true
+			} else {
+				lg.Println("Token refresh failed, will try again in 30 seconds")
+			}
+		}
+		if !onboarded || force_onboard {
+			if ControllerOnboard(lg, controller, tokens.AccessToken) {
+				onboarded = true
+				force_onboard = false
+				if regInfo.Keepalive == 0 {
+					keepalive = 5 * 60
+				} else {
+					keepalive = regInfo.Keepalive
+				}
+			}
+		}
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func args() {
+	flag.Parse()
+	idp = "https://dev-24743301.okta.com"
+	clientid = "0oav0q3hn65I4Zkmr5d6"
+	controller = "server.nextensio.net:8080"
+	username, password = credentials()
+}
+
+func initOnboard() {
+	common.MAXBUF = (64 * 1024)
+	unique = uuid.New()
+	args()
+	uniqueId = unique.String()
+	go monitorController(lg)
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: .\nxt-windows.exe nxt0")
 		os.Exit(ExitSetupFailed)
 	}
 	interfaceName := os.Args[1]
+	lg = log.New(os.Stdout, "Nextensio\n", 0)
+	initOnboard()
 
 	logger = device.NewLogger(
 		device.LogLevelVerbose,
@@ -291,7 +375,6 @@ func main() {
 	signal.Notify(term, os.Interrupt)
 	signal.Notify(term, syscall.SIGTERM)
 
-	lg := log.New(os.Stdout, "Nextensio: ", log.LstdFlags)
 	pktserver := websock.NewListener(context.TODO(), lg, nil, nil, PKTTCPPORT, 0, 0)
 	tchan := make(chan common.NxtStream)
 	go pktserver.Listen(tchan)
