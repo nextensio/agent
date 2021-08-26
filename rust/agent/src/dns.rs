@@ -677,6 +677,7 @@ impl DnsPacket {
     }
 }
 
+#[allow(dead_code)]
 pub fn print_responses(req_buffer: &mut BytePacketBuffer) {
     let mut request;
     if let Ok(r) = DnsPacket::from_buffer(req_buffer) {
