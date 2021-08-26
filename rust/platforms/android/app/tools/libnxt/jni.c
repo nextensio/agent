@@ -45,7 +45,7 @@ extern void agent_stats(struct AgentStats *stats);
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    agent_init(0 /*android*/, 0 /*direct*/, MTU, 0 /* low memory device */, /* no tcp port */);
+    agent_init(0 /*android*/, 0 /*direct*/, MTU, 0 /* low memory device */, 0/* no tcp port */);
     return 0;
 }
 
