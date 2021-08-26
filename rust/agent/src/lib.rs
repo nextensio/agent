@@ -37,8 +37,6 @@ use std::{sync::atomic::AtomicI32, sync::atomic::AtomicU32, sync::atomic::Atomic
 use webproxy::WebProxy;
 use websock::WebSession;
 mod dns;
-#[cfg(target_os = "windows")]
-use env_logger::Env;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
@@ -2415,10 +2413,9 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
         .unwrap();
 
     #[cfg(target_os = "windows")]
-    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
-    /*log::set_boxed_logger(Box::new(winlog::WinLogger::new("Nextensio")))
-    .map(|()| log::set_max_level(LevelFilter::Error))
-    .ok();*/
+    log::set_boxed_logger(Box::new(winlog::WinLogger::new("Nextensio")))
+        .map(|()| log::set_max_level(LevelFilter::Error))
+        .ok();
 
     error!(
         "Agent init called, platform {}, direct {},mtu {}, highmem {}",

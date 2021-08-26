@@ -12,7 +12,6 @@ oslog = "0.1.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winlog = "*"
-env_logger = "0.9.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
@@ -25,7 +24,6 @@ mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
 common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 websock = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 fd = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
-winpipe = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 l3proxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 dummy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 netconn = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
