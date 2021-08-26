@@ -12,7 +12,7 @@ replace gvisor.dev/gvisor v0.0.0-20201204040109-0ba39926c86f => github.com/gopak
 require (
 	github.com/google/uuid v1.2.0
 	gitlab.com/nextensio/common v0.0.0-20210823213928-d19c3ae409b9 // indirect
-	gitlab.com/nextensio/common/go v0.0.0-20210823213928-d19c3ae409b9
+	gitlab.com/nextensio/common/go v0.0.0-20210826151155-82eb113cc634
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 )
