@@ -2417,6 +2417,9 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
         .map(|()| log::set_max_level(LevelFilter::Error))
         .ok();
 
+    #[cfg(target_os = "linux")]
+    env_logger::init();
+
     error!(
         "Agent init called, platform {}, direct {},mtu {}, highmem {}",
         platform, direct, mtu, highmem
