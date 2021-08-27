@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/windows/services"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
 var defaultInterface winipcfg.LUID
 var defaultIP uint32
+var bind = conn.NewDefaultBind()
 
 // If ip address changes, then the bind in the agent will fail and sessions
 // will fail till this routine updates it again. We can avoid this if rust
@@ -84,9 +86,10 @@ func bindSocketRoute(family winipcfg.AddressFamily, ourLUID winipcfg.LUID, lastL
 		defaultInterface = luid
 		defaultIP = findAdapterIP(family)
 		C.agent_default_route(C.uint32_t(defaultIP))
+		binder := bind.(conn.BindSocketToInterface)
+		binder.BindSocketToInterface4(index, blackhole)
 		log.Printf("Binding v4 socket to interface %d (blackhole=%v), ip %4x", index, blackhole, defaultIP)
 	} else if family == windows.AF_INET6 {
-		log.Printf("Binding v6 socket to interface %d (blackhole=%v)", index, blackhole)
 	}
 	return nil
 }
@@ -169,13 +172,10 @@ type interfaceWatcher struct {
 
 func (iw *interfaceWatcher) setup(family winipcfg.AddressFamily) {
 	var changeCallbacks *[]winipcfg.ChangeCallback
-	var ipversion string
 	if family == windows.AF_INET {
 		changeCallbacks = &iw.changeCallbacks4
-		ipversion = "v4"
 	} else if family == windows.AF_INET6 {
 		changeCallbacks = &iw.changeCallbacks6
-		ipversion = "v6"
 	} else {
 		return
 	}
@@ -187,7 +187,6 @@ func (iw *interfaceWatcher) setup(family winipcfg.AddressFamily) {
 	}
 	var err error
 
-	log.Printf("Monitoring default %s routes", ipversion)
 	*changeCallbacks, err = monitorDefaultRoutes(family, true, iw.luid)
 	if err != nil {
 		iw.errors <- interfaceWatcherError{services.ErrorBindSocketsToDefaultRoutes, err}

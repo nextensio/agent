@@ -23,6 +23,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/windows"
@@ -101,7 +102,6 @@ func agentToVpn(tcpTun *common.Transport) {
 			return
 		}
 		if !handshaked {
-			logger.Verbosef("Got handshake %s", string(bufs[0]))
 			handshaked = true
 		} else {
 			writeLock.Lock()
@@ -187,14 +187,13 @@ func vpnToAgent(tcpTun *common.Transport) {
 }
 
 func agentInit(port int) {
-	C.agent_init(2 /*windows*/, 1, MTU, 1, C.uint32_t(port))
+	C.agent_init(2 /*windows*/, 0, MTU, 1, C.uint32_t(port))
 }
 
 func agentConnection(tchan chan common.NxtStream) {
 	for {
 		select {
 		case client := <-tchan:
-			logger.Verbosef("Got connection from agent")
 			go agentToVpn(&client.Stream)
 			go vpnToAgent(&client.Stream)
 		}
@@ -221,7 +220,6 @@ func monitorController(lg *log.Logger) {
 		if tokens != nil {
 			break
 		}
-		lg.Println("Unable to authenticate connector with the IDP")
 		time.Sleep(10 * time.Second)
 	}
 	refresh := time.Now()
@@ -241,6 +239,9 @@ func monitorController(lg *log.Logger) {
 				refresh = time.Now()
 				// Send the new tokens to the gateway
 				force_onboard = true
+				regInfoLock.Lock()
+				regInfo.AccessToken = tokens.AccessToken
+				regInfoLock.Unlock()
 			} else {
 				lg.Println("Token refresh failed, will try again in 30 seconds")
 			}
@@ -271,9 +272,96 @@ func args() {
 func initOnboard() {
 	common.MAXBUF = (64 * 1024)
 	unique = uuid.New()
-	args()
 	uniqueId = unique.String()
-	go monitorController(lg)
+	args()
+}
+
+func agentOnboard() {
+	l := len(regInfo.Domains)
+	domains := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(uintptr(0))))
+	Cdomains := (*[1 << 28]*C.char)(domains)
+
+	needdns := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(C.int(0))))
+	Cneeddns := (*[1 << 28]C.int)(needdns)
+
+	dnsip := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(uintptr(0))))
+	Cdnsip := (*[1 << 28]*C.char)(dnsip)
+
+	for i, d := range regInfo.Domains {
+		need := 0
+		if d.NeedDns {
+			need = 1
+		}
+		Cdomains[i] = C.CString(d.Name)
+		Cneeddns[i] = C.int(need)
+		Cdnsip[i] = C.CString(d.DnsIP)
+	}
+
+	l = len(regInfo.CACert)
+	ca_cert := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(C.uint8_t(0))))
+	Cca_cert := (*[1 << 28]C.uint8_t)(ca_cert)
+	for i, c := range regInfo.CACert {
+		Cca_cert[i] = C.uint8_t(c)
+	}
+
+	l = len(regInfo.Services)
+	services := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(uintptr(0))))
+	Cservices := (*[1 << 28]*C.char)(services)
+	for i, s := range regInfo.Services {
+		Cservices[i] = C.CString(s)
+	}
+
+	creg := C.CRegistrationInfo{
+		gateway:      C.CString(regInfo.Gateway),
+		access_token: C.CString(regInfo.AccessToken),
+		connect_id:   C.CString(regInfo.ConnectID),
+		cluster:      C.CString(regInfo.Cluster),
+		domains:      (**C.char)(domains),
+		needdns:      (*C.int)(needdns),
+		dnsip:        (**C.char)(dnsip),
+		num_domains:  C.int(len(regInfo.Domains)),
+		ca_cert:      (*C.char)(ca_cert),
+		num_cacert:   C.int(len(regInfo.CACert)),
+		userid:       C.CString(regInfo.Userid),
+		uuid:         C.CString(uniqueId),
+		services:     (**C.char)(services),
+		num_services: C.int(len(regInfo.Services)),
+		hostname:     C.CString("localhost"),
+		model:        C.CString("unknown"),
+		os_type:      C.CString("windows"),
+		os_name:      C.CString("unknown"),
+		os_patch:     0,
+		os_major:     0,
+		os_minor:     0,
+	}
+
+	C.onboard(creg)
+
+	for i, _ := range regInfo.Domains {
+		C.free(unsafe.Pointer(Cdomains[i]))
+		C.free(unsafe.Pointer(Cdnsip[i]))
+	}
+	C.free(unsafe.Pointer(domains))
+	C.free(unsafe.Pointer(needdns))
+	C.free(unsafe.Pointer(dnsip))
+
+	C.free(ca_cert)
+
+	for i, _ := range regInfo.Services {
+		C.free(unsafe.Pointer(Cservices[i]))
+	}
+	C.free(unsafe.Pointer(services))
+
+	C.free(unsafe.Pointer(creg.gateway))
+	C.free(unsafe.Pointer(creg.access_token))
+	C.free(unsafe.Pointer(creg.connect_id))
+	C.free(unsafe.Pointer(creg.cluster))
+	C.free(unsafe.Pointer(creg.userid))
+	C.free(unsafe.Pointer(creg.uuid))
+	C.free(unsafe.Pointer(creg.hostname))
+	C.free(unsafe.Pointer(creg.model))
+	C.free(unsafe.Pointer(creg.os_type))
+	C.free(unsafe.Pointer(creg.os_name))
 }
 
 func main() {
@@ -282,14 +370,21 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 	interfaceName := os.Args[1]
-	lg = log.New(os.Stdout, "Nextensio\n", 0)
+	lg = log.New(os.Stdout, "Nextensio: ", 0)
 	initOnboard()
+	go monitorController(lg)
+	for {
+		if !onboarded {
+			time.Sleep(time.Second)
+			continue
+		}
+		break
+	}
 
 	logger = device.NewLogger(
 		device.LogLevelVerbose,
 		fmt.Sprintf("(%s) ", interfaceName),
 	)
-	logger.Verbosef("Starting nxt-windows version %s", "1.0.0")
 
 	watcher, err := watchInterface()
 	if err != nil {
@@ -297,7 +392,6 @@ func main() {
 		return
 	}
 
-	logger.Verbosef("Starting tunnel", tun.WintunPool)
 	err = elevate.DoAsSystem(func() error {
 		t, terr := tun.CreateTUN(interfaceName, MTU)
 		vpnTun = &t
@@ -314,8 +408,6 @@ func main() {
 	defer (*vpnTun).Close()
 	nativeTunDevice := (*vpnTun).(*tun.NativeTun)
 	luid := winipcfg.LUID(nativeTunDevice.LUID())
-
-	logger.Verbosef("TunIf created %s, %d", realInterfaceName, luid)
 
 	err = luid.SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
 	if err != nil {
@@ -369,7 +461,6 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 	firewall.EnableFirewall(uint64(luid), true, nil)
-	logger.Verbosef("Device started")
 
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt)
@@ -396,7 +487,6 @@ func main() {
 	}
 
 	agentInit(PKTTCPPORT)
-	logger.Verbosef("Agent started")
 
 	select {
 	case <-term:
@@ -404,6 +494,5 @@ func main() {
 
 	// clean up
 	watcher.Destroy()
-
 	logger.Verbosef("Shutting down")
 }
