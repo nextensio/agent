@@ -13,7 +13,6 @@ if exist .deps\prepared goto :build
 	rmdir /s /q .deps 2> NUL
 	mkdir .deps || goto :error
 	cd .deps || goto :error
-	rem Download GOLANG
 	call :download wintun.zip https://www.wintun.net/builds/wintun-0.12.zip eba90e26686ed86595ae0a6d4d3f4f022924b1758f5148a32a91c60cc6e604df || goto :error
 	copy /y NUL prepared > NUL || goto :error
 	set GOPRIVATE=gitlab.com

@@ -206,7 +206,7 @@ func credentials() (string, string) {
 	fmt.Print("Nextensio Username: ")
 	username, _ := reader.ReadString('\n')
 	fmt.Print("Nextensio Password: ")
-	bytePassword, _ := terminal.ReadPassword(0)
+	bytePassword, _ := terminal.ReadPassword(int(syscall.Stdin))
 	password := string(bytePassword)
 	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
