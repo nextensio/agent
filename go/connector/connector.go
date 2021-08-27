@@ -17,15 +17,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	common "gitlab.com/nextensio/common/go"
-	"gitlab.com/nextensio/common/go/messages/nxthdr"
-	"gitlab.com/nextensio/common/go/transport/netconn"
-	"golang.org/x/crypto/ssh/terminal"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	jaegerlog "github.com/uber/jaeger-client-go/log"
 	"github.com/uber/jaeger-lib/metrics/prometheus"
+	common "gitlab.com/nextensio/common/go"
+	"gitlab.com/nextensio/common/go/messages/nxthdr"
+	"gitlab.com/nextensio/common/go/transport/netconn"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type nxtSpan struct {
@@ -157,7 +157,7 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 						if (serr == nil) && (spanCtx != nil) {
 							a := regexp.MustCompile(`-`)
 							cluster := a.Split(flow.ConnectorPod, 2)[0]
-							span := tracer.StartSpan(cluster + "-" + regInfo.Userid,
+							span := tracer.StartSpan(cluster+"-"+regInfo.Userid,
 								ext.RPCServerOption(spanCtx))
 							spaninfo.active = true
 							spaninfo.span = span
@@ -320,6 +320,9 @@ func monitorController(lg *log.Logger) {
 				refresh = time.Now()
 				// Send the new tokens to the gateway
 				force_onboard = true
+				regInfoLock.Lock()
+				regInfo.AccessToken = tokens.AccessToken
+				regInfoLock.Unlock()
 			} else {
 				lg.Println("Token refresh failed, will try again in 30 seconds")
 			}

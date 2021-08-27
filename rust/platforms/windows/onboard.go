@@ -49,8 +49,13 @@ func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bo
 				agentOnboard()
 				regInfoLock.Unlock()
 				if err == nil {
+					lg.Println("Agent succesfully onboarded")
 					return true
+				} else {
+					lg.Println("Json unmarshall failed", err)
 				}
+			} else {
+				lg.Println("Onboarding json failed", err)
 			}
 		} else {
 			lg.Println("Onboard request failed", err)
@@ -100,7 +105,4 @@ func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, 
 		lg.Println("Keepalive failed", err, ka)
 	}
 	return false
-}
-
-func agentOnboard() {
 }
