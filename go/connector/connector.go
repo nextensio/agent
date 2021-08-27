@@ -321,7 +321,7 @@ func monitorController(lg *log.Logger) {
 				// Send the new tokens to the gateway
 				force_onboard = true
 				regInfoLock.Lock()
-				reginfo.AccessToken = tokens.AccessToken
+				regInfo.AccessToken = tokens.AccessToken
 				regInfoLock.Unlock()
 			} else {
 				lg.Println("Token refresh failed, will try again in 30 seconds")
