@@ -578,7 +578,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
         Err((_, e)) => match e.code {
             EWOULDBLOCK => {
                 tun.tx_ready = false;
-                false
+                true
             }
             _ => {
                 error!("Onboard fail {}", e.detail);
