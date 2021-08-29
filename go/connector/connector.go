@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	jaegerlog "github.com/uber/jaeger-client-go/log"
 	"github.com/uber/jaeger-lib/metrics/prometheus"
@@ -158,13 +157,19 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 							a := regexp.MustCompile(`-`)
 							cluster := a.Split(flow.ConnectorPod, 2)[0]
 							span := tracer.StartSpan(cluster+"-"+regInfo.Userid,
-								ext.RPCServerOption(spanCtx))
+								opentracing.FollowsFrom(spanCtx))
 							spaninfo.active = true
 							spaninfo.span = span
 							span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
 							span.SetTag("nxt-trace-destagent", flow.DestAgent)
 							span.SetTag("nxt-trace-requestid", flow.TraceRequestId)
 							span.SetTag("nxt-trace-userid", flow.Userid)
+							span.Tracer().Inject(
+								span.Context(),
+								opentracing.HTTPHeaders,
+								opentracing.HTTPHeadersCarrier(httpHdr),
+							)
+							flow.TraceCtx = httpHdr.Get("Uber-Trace-Id")
 						} else {
 							lg.Println("Error extracting spanCtx from " + flow.TraceCtx)
 						}

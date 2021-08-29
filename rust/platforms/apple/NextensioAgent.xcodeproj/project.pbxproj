@@ -699,7 +699,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -733,7 +733,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -768,7 +768,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -809,7 +809,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -969,7 +969,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1005,7 +1005,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1042,7 +1042,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1077,7 +1077,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.10;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
