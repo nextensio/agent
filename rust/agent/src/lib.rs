@@ -78,6 +78,7 @@ const MONITOR_FLOW_AGE: u64 = 30; // 30 seconds
 const MONITOR_CONNECTIONS: u64 = 2; // 2 seconds
 const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
+const ONBOARD_RETRY: u64 = 100;
 const MAXPAYLOAD: usize = 64 * 1024;
 const MINPKTBUF: usize = 4096;
 const MAX_PENDING_RX: usize = 4;
@@ -547,7 +548,7 @@ fn dial_gateway(
     }
 }
 
-fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
+fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
     let mut onb = NxtOnboard::default();
     onb.agent = true;
     onb.userid = reginfo.userid.clone();
@@ -578,16 +579,14 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) -> bool {
         Err((_, e)) => match e.code {
             EWOULDBLOCK => {
                 tun.tx_ready = false;
-                true
+                error!("Onboard message sent (block)");
             }
             _ => {
-                error!("Onboard fail {}", e.detail);
-                false
+                error!("Onboard message send fail ({})", e.detail);
             }
         },
         Ok(_) => {
-            error!("Onboard success");
-            true
+            error!("Onboard message sent (ok)");
         }
     }
 }
@@ -646,6 +645,7 @@ fn external_sock_rx(
     poll: &mut Poll,
     check_tuns: &mut HashMap<usize, ()>,
     flows_active: &mut HashMap<FlowV4Key, ()>,
+    gw_onboarded: &mut bool,
 ) {
     if tun.pending_rx >= MAX_PENDING_RX {
         tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
@@ -700,6 +700,7 @@ fn external_sock_rx(
                                 "Got onboard response, user {}, uuid {}",
                                 onb.userid, onb.uuid
                             );
+                            *gw_onboarded = true;
                         }
                         Hdr::Flow(_) => {
                             let mut found = false;
@@ -2453,6 +2454,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
     let mut service_parse_ager = Instant::now();
     let mut monitor_ager = Instant::now();
     let mut buffer_monitor = Instant::now();
+    let mut last_onboard = Instant::now();
 
     loop {
         let hundred_ms = Duration::from_millis(SERVICE_PARSE_TIMEOUT);
@@ -2554,6 +2556,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                                     &mut poll,
                                     &mut agent.check_tuns,
                                     &mut agent.flows_active,
+                                    &mut agent.gw_onboarded,
                                 );
                             }
                             if event.is_writable() {
@@ -2629,6 +2632,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                             &mut poll,
                             &mut check_tuns,
                             &mut agent.flows_active,
+                            &mut agent.gw_onboarded,
                         );
                         agent.tuns.insert(idx, tun_info);
                     }
@@ -2638,9 +2642,11 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
         }
 
         if !agent.gw_onboarded && agent.idp_onboarded {
-            if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
-                agent.gw_onboarded = send_onboard_info(&mut agent.reginfo, &mut gw_tun.tun());
-                error!("Sending onboard message")
+            if Instant::now() > last_onboard + Duration::from_millis(ONBOARD_RETRY) {
+                if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
+                    send_onboard_info(&mut agent.reginfo, &mut gw_tun.tun());
+                    last_onboard = Instant::now();
+                }
             }
         }
 
