@@ -365,11 +365,7 @@ func agentOnboard() {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: .\nxt-windows.exe nxt0")
-		os.Exit(ExitSetupFailed)
-	}
-	interfaceName := os.Args[1]
+	interfaceName := "nxt0"
 	lg = log.New(os.Stdout, "Nextensio: ", 0)
 	initOnboard()
 	go monitorController(lg)
