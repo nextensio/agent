@@ -74,11 +74,7 @@ const (
 )
 
 // Use a CGNAT address that doesnt clash with anything else.
-// If we are capturing default internet traffic also, then we set a
-// default route and add our own public dns servers (TODO: this needs to
-// be configurable from controller). But if we are just capturing enterprise
-// traffic, we just add a CGNAT route and add a dummy dns server, we will
-// respond to enterprise URLs from the CGNAT range
+// See comments against vpnRoutes() for more details on all the circus done here
 var (
 	nxtIPAddresToAdd = net.IPNet{
 		IP:   net.IP{100, 64, 1, 1},
@@ -92,13 +88,26 @@ var (
 		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
 	}
-	dnsSpecificToSet = []net.IP{
-		net.IPv4(100, 64, 1, 3),
-	}
 	nxtDefaultRouteIPv4ToAdd = winipcfg.RouteData{
 		Destination: net.IPNet{
 			IP:   net.IP{0, 0, 0, 0},
 			Mask: net.IPMask{0, 0, 0, 0},
+		},
+		NextHop: net.IP{100, 64, 1, 2},
+		Metric:  0,
+	}
+	nxtDNS1RouteIPv4ToAdd = winipcfg.RouteData{
+		Destination: net.IPNet{
+			IP:   net.IP{8, 8, 8, 8},
+			Mask: net.IPMask{255, 255, 255, 255},
+		},
+		NextHop: net.IP{100, 64, 1, 2},
+		Metric:  0,
+	}
+	nxtDNS2RouteIPv4ToAdd = winipcfg.RouteData{
+		Destination: net.IPNet{
+			IP:   net.IP{8, 8, 4, 4},
+			Mask: net.IPMask{255, 255, 255, 255},
 		},
 		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
@@ -420,11 +429,27 @@ func agentOnboard() {
 // Here again, since nxt0 is the lowest metric, we will be the only one getting all the
 // dns requests and hence we will have to respond to both.
 //
-// NOTE: We can play some more tricks with interface metric - we can say that in catch-all
+// NOTE1: We can play some more tricks with interface metric - we can say that in catch-all
 // mode we have metric 0 and in the private-only mode we have a large metric. But then in the
 // private only mode with smart DNS OFF, we will never get our private dns requests ! What
 // windows really needs is a mac/ios style capability to differentiate dns servers based on
 // the match-domains, rather than this wierd interface metric based mechanism.
+//
+// NOTE2: You can see that we wierdly add 8.8.8.8/32 and 8.8.4.4/32 to the route table, the
+// reason for that is as follows - like we mentioned earlier, windows will end up broadcasting
+// public requests on dns servers of Wi-Fi AND nxt0. For private requests alone, we can give
+// some dummy DNS server IP like 100.64.1.3 for example, it doesnt matter since we respond
+// ourselves. If we do that, for public DNS also, windows will send the DNS packet with the
+// dest-IP of 100.64.1.3 and then we have to translate that to some legitimate public DNS server
+// IP and send it out and get the response back. If we dont get the response back, windows
+// claims to be "smart" and waiting only for the first response (Wi-fi in this case) etc.., but
+// I have seen that if we dont respond over nxt0, there is some kind of additional delay introduced
+// in dns resolution, so we better respond with a proper response for public DNS also on nxt0.
+// As of today the rust agent is very simple - if a request comes to some dest IP, it just opens
+// a socket to that dest IP and sends the request across, there is no logic to "map" from a dummy
+// IP to a legit IP etc.., so we just ensure that the DNS IP we give here is a legit one, and of
+// course we also need to ensure that legit IP comes via nxt0 so we get the request and can
+// respond to it.
 func vpnRoutes() {
 	if luid == nil {
 		return
@@ -438,7 +463,7 @@ func vpnRoutes() {
 	}
 
 	if hasDefault {
-		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd})
+		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
 		if err != nil {
 			logger.Errorf("Failed to create RouteData: %v", err)
 			os.Exit(ExitSetupFailed)
@@ -449,12 +474,12 @@ func vpnRoutes() {
 			os.Exit(ExitSetupFailed)
 		}
 	} else {
-		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd})
+		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
 		if err != nil {
 			logger.Errorf("Failed to create RouteData: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
-		err = (*luid).SetDNS(windows.AF_INET, dnsSpecificToSet, nil)
+		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
 		if err != nil {
 			logger.Errorf("Failed to create DNS: %v", err)
 			os.Exit(ExitSetupFailed)
