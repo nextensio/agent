@@ -41,8 +41,11 @@ func findAdapterIP(family winipcfg.AddressFamily) uint32 {
 	}
 	for _, a := range addrs {
 		if a.LUID == defaultInterface {
-			d := a.FirstUnicastAddress.Address.IP()
-			return uint32(uint32(d[0])<<24 | uint32(d[1])<<16 | uint32(d[2])<<8 | uint32(d[3]))
+			ucast := a.FirstUnicastAddress
+			if ucast != nil {
+				d := ucast.Address.IP()
+				return uint32(uint32(d[0])<<24 | uint32(d[1])<<16 | uint32(d[2])<<8 | uint32(d[3]))
+			}
 		}
 	}
 	return 0

@@ -78,7 +78,7 @@ const MONITOR_FLOW_AGE: u64 = 30; // 30 seconds
 const MONITOR_CONNECTIONS: u64 = 2; // 2 seconds
 const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
-const ONBOARD_RETRY: u64 = 100;
+const ONBOARD_RETRY: u64 = 500; // milliseconds
 const MAXPAYLOAD: usize = 64 * 1024;
 const MINPKTBUF: usize = 4096;
 const MAX_PENDING_RX: usize = 4;
@@ -583,6 +583,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
             }
             _ => {
                 error!("Onboard message send fail ({})", e.detail);
+                tun.tun.close(0).ok();
             }
         },
         Ok(_) => {
