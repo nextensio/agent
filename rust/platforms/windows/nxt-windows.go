@@ -58,6 +58,7 @@ var username string
 var password string
 var idp string
 var clientid string
+var luid *winipcfg.LUID
 
 const MTU = 1500
 
@@ -72,13 +73,29 @@ const (
 	ExitSetupFailed  = 1
 )
 
-// Use a CGNAT address that doesnt clash with anything else
+// Use a CGNAT address that doesnt clash with anything else.
+// If we are capturing default internet traffic also, then we set a
+// default route and add our own public dns servers (TODO: this needs to
+// be configurable from controller). But if we are just capturing enterprise
+// traffic, we just add a CGNAT route and add a dummy dns server, we will
+// respond to enterprise URLs from the CGNAT range
 var (
 	nxtIPAddresToAdd = net.IPNet{
 		IP:   net.IP{100, 64, 1, 1},
-		Mask: net.IPMask{255, 224, 0, 0},
+		Mask: net.IPMask{255, 192, 0, 0},
 	}
-	nxtRouteIPv4ToAdd = winipcfg.RouteData{
+	nxtSpecificRouteIPv4ToAdd = winipcfg.RouteData{
+		Destination: net.IPNet{
+			IP:   net.IP{100, 64, 0, 0},
+			Mask: net.IPMask{255, 192, 0, 0},
+		},
+		NextHop: net.IP{100, 64, 1, 2},
+		Metric:  0,
+	}
+	dnsSpecificToSet = []net.IP{
+		net.IPv4(100, 64, 1, 3),
+	}
+	nxtDefaultRouteIPv4ToAdd = winipcfg.RouteData{
 		Destination: net.IPNet{
 			IP:   net.IP{0, 0, 0, 0},
 			Mask: net.IPMask{0, 0, 0, 0},
@@ -86,7 +103,7 @@ var (
 		NextHop: net.IP{100, 64, 1, 2},
 		Metric:  0,
 	}
-	dnsesToSet = []net.IP{
+	dnsDefaultToSet = []net.IP{
 		net.IPv4(8, 8, 8, 8),
 		net.IPv4(8, 8, 4, 4),
 	}
@@ -362,11 +379,96 @@ func agentOnboard() {
 	C.free(unsafe.Pointer(creg.model))
 	C.free(unsafe.Pointer(creg.os_type))
 	C.free(unsafe.Pointer(creg.os_name))
+
+	// See if the routes need to change from catch-all to specific or vice versa
+	vpnRoutes()
+}
+
+// By default, windows enables "smart dns" - ie it broadcasts the dns
+// request parallely on all interfaces that advertise a dns server -
+// which means even the private domain names dns requests will be broadcast
+// on the public interface (yikes), but thats what it does. The "smart"
+// part is that windows accepts the first dns response that comes from any
+// interface. But smart dns can be turned off in which case windows will just
+// send the dns request on the interface with the lowest metric, and the answer
+// from that will be chosen as the dns response. Turning off smart dns needs
+// editing registry etc.., so "normal" users for sure wont do it, maybe enterprise
+// users might have security stuff install on the laptop that does that.
+// So Lets consider four cases below. Note that the nextensio tunnel will always
+// have the lowest metric (0) of all interfaces
+//
+// Case 1: Smart DNS ON, Nextensio attracting ALL traffic public and private (catch-all route)
+// In this case windows will send dns on both Wi-Fi and the nxt0 tunnel. The nxt0
+// tunnel of course relays that over Wi-Fi anyways, so there is effectively double
+// dns requests sent. Whichever response comes first will be taken. The nxt0 interface
+// does have to advertise a dns server because we want to DNS respond to private domain
+// requests (which will fail over public)
+//
+// Case 2: Smart DNS ON, Nextensio attracting only private traffic (no catch-all route)
+// In this case also, DNS behaves same as before. TODO: We "can" make this behaviour
+// different if we can somehow tell windows to send DNS requests to a server only on
+// matching some domains, like NEDNSSettings.matchDomains in apple. Not sure if such
+// a thing exists in windows, need to find out. If it exists, then we can ensure that
+// only private domain dns requests come to nxt0.
+//
+// Case 3: Smart DNS OFF, Nextensio attracting ALL traffic (catch-all route)
+// Here, nxt0 will be the only interface getting dns request because we are the lowest
+// metric interface. And we have to ensure that we respond to both public and private
+// DNS.
+//
+// Case 4: Smart DNS OFF, Nextensio attracting only private traffic (no catch-all route)
+// Here again, since nxt0 is the lowest metric, we will be the only one getting all the
+// dns requests and hence we will have to respond to both.
+//
+// NOTE: We can play some more tricks with interface metric - we can say that in catch-all
+// mode we have metric 0 and in the private-only mode we have a large metric. But then in the
+// private only mode with smart DNS OFF, we will never get our private dns requests ! What
+// windows really needs is a mac/ios style capability to differentiate dns servers based on
+// the match-domains, rather than this wierd interface metric based mechanism.
+func vpnRoutes() {
+	if luid == nil {
+		return
+	}
+
+	hasDefault := false
+	for _, d := range regInfo.Domains {
+		if d.Name == "nextensio-default-internet" {
+			hasDefault = true
+		}
+	}
+
+	if hasDefault {
+		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd})
+		if err != nil {
+			logger.Errorf("Failed to create RouteData: %v", err)
+			os.Exit(ExitSetupFailed)
+		}
+		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
+		if err != nil {
+			logger.Errorf("Failed to create DNS: %v", err)
+			os.Exit(ExitSetupFailed)
+		}
+	} else {
+		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd})
+		if err != nil {
+			logger.Errorf("Failed to create RouteData: %v", err)
+			os.Exit(ExitSetupFailed)
+		}
+		err = (*luid).SetDNS(windows.AF_INET, dnsSpecificToSet, nil)
+		if err != nil {
+			logger.Errorf("Failed to create DNS: %v", err)
+			os.Exit(ExitSetupFailed)
+		}
+	}
 }
 
 func main() {
 	interfaceName := "nxt0"
 	lg = log.New(os.Stdout, "Nextensio: ", 0)
+	logger = device.NewLogger(
+		device.LogLevelVerbose,
+		fmt.Sprintf("(%s) ", interfaceName),
+	)
 	initOnboard()
 	go monitorController(lg)
 	for {
@@ -376,11 +478,6 @@ func main() {
 		}
 		break
 	}
-
-	logger = device.NewLogger(
-		device.LogLevelVerbose,
-		fmt.Sprintf("(%s) ", interfaceName),
-	)
 
 	watcher, err := watchInterface()
 	if err != nil {
@@ -403,36 +500,16 @@ func main() {
 
 	defer (*vpnTun).Close()
 	nativeTunDevice := (*vpnTun).(*tun.NativeTun)
-	luid := winipcfg.LUID(nativeTunDevice.LUID())
+	luidVal := winipcfg.LUID(nativeTunDevice.LUID())
+	luid = &luidVal
 
-	err = luid.SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
+	err = (*luid).SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
 	if err != nil {
 		logger.Errorf("Failed to create IP Addr: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	err = luid.SetRoutes([]*winipcfg.RouteData{&nxtRouteIPv4ToAdd})
-	if err != nil {
-		logger.Errorf("Failed to create RouteData: %v", err)
-		os.Exit(ExitSetupFailed)
-	}
-	/* Windows has a "smart dns" resolver, if you google for it there is plenty
-	 * of details. Basically windows will send a dns request out of every interface
-	 * that advertises a dns server - it will send it out "directly" on that interface
-	 * bypassing all vpns (by binding to that interface). And whichever interface will
-	 * respond first will be the dns answer taken. So we dont really need to advertise
-	 * any public dns servers, that will be resolved via the ethernet/wi-fi interface.
-	 * But if someone turns OFF smart dns, then we are in trouble because then windows
-	 * will try to resolve dns servers of the interface with the lowest metric - now
-	 * what if the lowest metric interface doesnt advertise dns (like us), will windows
-	 * fall back to the next higher metric interface ? I hope so, not sure.
-	err = luid.SetDNS(windows.AF_INET, dnsesToSet, nil)
-	if err != nil {
-		logger.Errorf("Failed to create DNS: %v", err)
-		os.Exit(ExitSetupFailed)
-	}
-	*/
 
-	iface, err := luid.IPInterface(windows.AF_INET)
+	iface, err := (*luid).IPInterface(windows.AF_INET)
 	if err != nil {
 		logger.Errorf("Failed to get iface for mtu: %v", err)
 		os.Exit(ExitSetupFailed)
@@ -444,7 +521,7 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 
-	ipif, err := luid.IPInterface(windows.AF_INET)
+	ipif, err := (*luid).IPInterface(windows.AF_INET)
 	if err != nil {
 		logger.Errorf("Failed to get iface for metric: %v", err)
 		os.Exit(ExitSetupFailed)
@@ -456,7 +533,7 @@ func main() {
 		logger.Errorf("Failed to set iface for metric: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
-	firewall.EnableFirewall(uint64(luid), true, nil)
+	firewall.EnableFirewall(uint64(*luid), true, nil)
 
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt)
@@ -467,7 +544,7 @@ func main() {
 	go pktserver.Listen(tchan)
 	go agentConnection(tchan)
 
-	watcher.Configure(luid)
+	watcher.Configure(*luid)
 	go monitorDefaultIP(windows.AF_INET)
 
 	// There is no point sending traffic to agent till we have told it which
@@ -483,6 +560,10 @@ func main() {
 	}
 
 	agentInit(PKTTCPPORT)
+
+	regInfoLock.Lock()
+	vpnRoutes()
+	regInfoLock.Unlock()
 
 	select {
 	case <-term:
