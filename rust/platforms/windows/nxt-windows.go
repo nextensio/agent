@@ -13,6 +13,7 @@ import "C"
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -464,23 +465,23 @@ func vpnRoutes() {
 
 	if hasDefault {
 		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
-		if err != nil {
+		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			logger.Errorf("Failed to create RouteData: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
 		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
-		if err != nil {
+		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			logger.Errorf("Failed to create DNS: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
 	} else {
 		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
-		if err != nil {
+		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			logger.Errorf("Failed to create RouteData: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
 		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
-		if err != nil {
+		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			logger.Errorf("Failed to create DNS: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
