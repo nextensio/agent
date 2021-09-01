@@ -391,9 +391,12 @@ fn set_tx_socket(
         direct = true;
     }
 
-    // TODO: let all dns go direct as of today, need a better dns story in future,
-    // like for private domains how do we deal with dns ?
-    if key.dport == 53 {
+    // We dont want dns to be backhauled to nextensio clusters and add to
+    // the delay in name resolution ! So let that go direct. This takes
+    // care of plain dns and Dns over Tls (853). But Dns over HTTPs is
+    // unfortunately just port 443 and we cant figure that out without adding
+    // more logic about the destinatio IP also (well known dns servers)
+    if key.dport == 53 || key.dport == 853 {
         direct = true;
     }
 
@@ -1074,6 +1077,9 @@ fn flow_handle_dns(
     tx: &mut NxtBufs,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
 ) -> bool {
+    // We can only handle plain un-encrypted dns requests as of
+    // today. So for private domains, some device (like android)
+    // sends us encrypted dns requests, we are hosed
     if key.dport != 53 || key.proto != common::UDP {
         return false;
     }
@@ -2002,7 +2008,7 @@ fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4) {
     if key.proto == common::TCP {
         flow.cleanup_after = CLEANUP_TCP_IDLE;
     } else {
-        if key.dport == 53 {
+        if key.dport == 53 || key.dport == 853 {
             flow.cleanup_after = CLEANUP_UDP_DNS;
         } else {
             flow.cleanup_after = CLEANUP_UDP_IDLE;
@@ -2143,7 +2149,7 @@ fn monitor_flows(
         if k.proto == common::TCP {
             tcp += 1;
         } else {
-            if k.dport == 53 {
+            if k.dport == 53 || k.dport == 853 {
                 dns += 1;
             }
             udp += 1;

@@ -43,7 +43,7 @@ public class NxtAgent extends AppCompatActivity {
     private WebAuthClient authClient;
     private SessionClient sessionClient;
     private static final int VPN_REQUEST_CODE = 0x0F;
-
+    
     private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
     .clientId("0oav0rc5g0E3irFto5d6")
     .redirectUri("nextensio.agent:/login")
@@ -59,39 +59,26 @@ public class NxtAgent extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (NxtAgentService.BROADCAST_VPN_STATE.equals(intent.getAction())) {
-                if (intent.getBooleanExtra("destroyed", false)) {
-                    doUnbindService();
-                    Log.i(TAG, "Message: Service destroyed");
-                }  else {
-                    if (agentService != null) {
-                        vpnStatus(agentService.vpnReady);
-                    }
-                    Log.i(TAG, String.format("Message: VPN status %b, bound %b", 
-                                             intent.getBooleanExtra("running", false), (agentService != null)));
+                if (agentService != null) {
+                    vpnStatus(agentService.vpnReady);
                 }
+                Log.i(TAG, String.format("Message: VPN status %b, bound %b", 
+                                        intent.getBooleanExtra("running", false), (agentService != null)));
             }
         }
     };
 
-    // This connection stuff is to be able to access the NxtAgentService class 
-    // and call the methods inside it, it creates a "binding" to the actual object
-    // in memory that represents the NxtAgentService class. The bind/unbind stuff
-    // is needed only if we want to access data inside that object or call methods
-    // inside that object etc..
     private ServiceConnection connection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
+            boolean first = (agentService == null);
             agentService = ((NxtAgentService.NxtAgentServiceBinder)service).getService();
             vpnStatus(agentService.vpnReady);
-            Log.i(TAG, "Bound with service " + String.format("%s, vpn %b", className, agentService.vpnReady));
+            if (first == true) {
+                signin();
+            }
+            Log.i(TAG, "Agent Bound with service " + String.format("%s, vpn %b", className, agentService.vpnReady));
         }
-
         public void onServiceDisconnected(ComponentName className) {
-            // This is called when the connection with the service has been
-            // unexpectedly disconnected -- that is, its process crashed.
-            // Because it is running in our same process, we should never
-            // see this happen.
-            agentService = null;
-            Log.e(TAG, "Service disconnected");
         }
     };
 
@@ -99,22 +86,10 @@ public class NxtAgent extends AppCompatActivity {
         // Attempts to establish a connection with the service.  We use an
         // explicit class name because we want a specific service
         // implementation that we know will be running in our own process
-        // (and thus won't be supporting component replacement by other
-        // applications).
         if (!bindService(new Intent(NxtAgent.this, NxtAgentService.class),
                 connection, 0)) {
             Log.e(TAG, "Bind failed");
         }
-    }
-
-    void doUnbindService() {
-        Log.i(TAG, "Unbind service");
-        if (agentService != null) {
-            // Release information about the service's state.
-            unbindService(connection);
-            agentService = null;
-        }
-        vpnStatus(false);
     }
 
     private void vpnStatus(boolean vpnOn) {
@@ -127,7 +102,23 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
-    private void startVPN() {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == VPN_REQUEST_CODE) {
+            if (resultCode == RESULT_OK) {
+                if (agentService == null) {
+                    startService(new Intent(this, NxtAgentService.class));
+                    doBindService();
+                }
+                Log.i(TAG, "VPN result ok");
+            } else {
+                Log.e(TAG, "VPN Result not-ok " + String.format(" = %d", resultCode));
+            }
+        }
+    }
+
+    private void startService() {
         Intent vpnIntent = VpnService.prepare(this);
         if (vpnIntent != null) {
             startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
@@ -138,57 +129,25 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
+    void signin() {
+        authClient.signIn(this, null);
+        Log.i(TAG, "User signin");
+    }
+
     // This gets called when user clicks the button to start VPN. The prepare()
     // call will throw a popup asking user for permission to allow VPN and the 
     // result of the user action is sent as a result message to callback onActivityResult()
     // If the user has already allowed the VPN, then we just call the callback right away
     private void toggleVPN() {
         if (agentService == null) {
-            authClient.signIn(this, null);
-            startVPN();
-        } else {
+            startService();
+            return;
+        }
+        if (agentService.vpnReady == true) {
             agentService.stop();
-            doUnbindService();
             Log.i(TAG, "Stopped VPN");
-        }
-    }
-
-    private void introspect() {
-        try {
-            sessionClient.introspectToken(sessionClient.getTokens().getAccessToken(),
-                TokenTypeHint.REFRESH_TOKEN, new RequestCallback<IntrospectInfo, AuthorizationException>() {
-                    @Override
-                    public void onSuccess(@NonNull IntrospectInfo result) {
-                        Log.i(TAG, "Introspect active" + result.isActive() + " username " + result.getUsername() + 
-                                     " uid " + result.getUid() + " sub " + result.getSub() + " aud " + result.getAud() + 
-                                    " iss " + result.getIss() + " exp " + result.getExp() + " dev " + result.getDeviceId() +
-                                    " client " + result.getClientId() + " scope " + result.getScope() +
-                                    " ttype " + result.getTokenType());
-                    }
-        
-                    @Override
-                    public void onError(String error, AuthorizationException exception) {
-                        Log.i(TAG, "Introspect failed " + error + " desc " + exception.errorDescription);
-                    }
-                }
-            );
-        } catch (AuthorizationException e) {
-            Log.i(TAG, "Introspect failed with exception");
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == VPN_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) {
-                startService(new Intent(this, NxtAgentService.class));
-                doBindService();
-                Log.i(TAG, "VPN result ok");
-            } else {
-                doUnbindService();
-                Log.e(TAG, "VPN Result not-ok " + String.format(" = %d", resultCode));
-            }
+        } else {
+            signin();
         }
     }
 
@@ -201,8 +160,8 @@ public class NxtAgent extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_nextensio);
-
         NxtApp app = (NxtApp) this.getApplicationContext();
+
         authClient = new Okta.WebAuthBuilder()
         .withConfig(mOidcConfig)
         .withContext(app)
@@ -217,7 +176,7 @@ public class NxtAgent extends AppCompatActivity {
                     try {
                         //client is authorized.
                         Tokens tokens = sessionClient.getTokens();
-                        app.SetTokens(tokens.getAccessToken(), tokens.getRefreshToken());
+                        app.SetTokens(agentService, tokens.getAccessToken(), tokens.getRefreshToken());
                     } catch (AuthorizationException exception) {
                         return;
                     }
@@ -271,6 +230,6 @@ public class NxtAgent extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        doUnbindService();
+        unbindService(connection);
     }    
 }
