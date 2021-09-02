@@ -7,7 +7,7 @@ go 1.15
 // seem to be honored/inherited and hence we are having to repeat it here. The gvisor lib has
 // a couple of fixes required for android and hence we have forked it into our own repo and added
 // the couple of fixes on top
-replace gvisor.dev/gvisor v0.0.0-20201204040109-0ba39926c86f => github.com/gopakumarce/gvisor v0.0.0-20210204213648-2e0adbf0d94a
+replace gvisor.dev/gvisor v0.0.0-20201204040109-0ba39926c86f => github.com/nextensio/gvisor v0.0.0-20210204213648-2e0adbf0d94a
 
 require (
 	github.com/google/uuid v1.2.0
@@ -15,7 +15,7 @@ require (
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
 	gitlab.com/nextensio/common v0.0.0-20210823213928-d19c3ae409b9 // indirect
-	gitlab.com/nextensio/common/go v0.0.0-20210826151155-82eb113cc634
+	gitlab.com/nextensio/common/go v0.0.0-20210902182420-a728c5caaaf1
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 )
