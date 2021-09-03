@@ -35,7 +35,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var last_version = ""
     var uuid = UUID().uuidString
     var stopKeepalive = false
-    
+    var domains = [String]()
+    var hasDefault = false
+
     override init() {
         super.init()
     }
@@ -61,13 +63,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     os_log("url error %{public}s", error!.localizedDescription)
                 }
                 self.pendingStartCompletion?(NSError(domain:"onboarding url failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
+                self.pendingStartCompletion = nil
                 return
             }
             guard let data = data else {
                 os_log("data error")
                 self.pendingStartCompletion?(NSError(domain:"onboarding data failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
+                self.pendingStartCompletion = nil
                 return 
             }
             do {
@@ -76,15 +78,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.onboardNextensioAgent(accessToken: accessToken, json: onboard)
                     self.turnOnNextensioAgent()
                     self.pendingStartCompletion?(nil)
-		    self.pendingStartCompletion = nil
-		    os_log("Successfully onboarded")
-		    return
+                    self.pendingStartCompletion = nil
+                    os_log("Successfully onboarded")
+                    return
                 }
             } catch _ {
                 os_log("error in json serialization")
                 self.pendingStartCompletion?(NSError(domain:"onboarding json failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
-		return 
+                self.pendingStartCompletion = nil
+                return 
             }
         })
         task.resume()
@@ -146,33 +148,46 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // which can be used as basic whitelist/blacklist routing.
         
         let ipv4Settings = NEIPv4Settings(addresses: ["169.254.2.1"], subnetMasks: ["255.255.255.0"])
+
+        if self.hasDefault {
+            // We want all default traffic to go via nextensio, so we need DNS
+            // servers for that. TODO: We can let these dns server IPs be configured
+            // via controller
+            let dnsSettings = NEDNSSettings(servers: ["8.8.8.8", "8.8.4.4"])
+            dnsSettings.matchDomains = [""] // match all
+            networkSettings.dnsSettings = dnsSettings
+            ipv4Settings.includedRoutes = [
+                NEIPv4Route.default()
+            ]
+        } else {
+            // Only our private domains need to be dns resolved by us,
+            // the public domains can go to whatever dns server is configured
+            // And for private domains, the dns server IP doesnt really matter,
+            // we parse the dns requests and respond to it ourselves
+            let dnsSettings = NEDNSSettings(servers: ["100.64.1.1"])
+            dnsSettings.matchDomains = self.domains
+            dnsSettings.matchDomainsNoSearch = true
+            networkSettings.dnsSettings = dnsSettings
+            // We advertise IP addresses in the CGNAT range for private services
+            ipv4Settings.includedRoutes = [
+                NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),
+            ]
+        }
         
-        ipv4Settings.includedRoutes = [
-            NEIPv4Route.default()
-        ]
         ipv4Settings.excludedRoutes = [
         ]
         networkSettings.ipv4Settings = ipv4Settings
         networkSettings.mtu = mtu as NSNumber?
-
-        // This overrides system DNS settings. We dont really need
-        // a dns server and it doesnt get used either because we are
-        // not setting any domains to match, but without any dns server,
-        // the vpn interface doesnt seem to get any ip address
-        let dnsSettings = NEDNSSettings(servers: ["8.8.8.8"])
-        dnsSettings.matchDomains = [""]
-        networkSettings.dnsSettings = dnsSettings
         
         if (conf["highMem"] as! Bool) == true {
-            highmem = 1; 
+            highmem = 1;
         }
-        let access = (conf["access"] as! String)
-         
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
             os_log("Network tunnel saved")
         }
     }
+
 
     @objc func runner(sender:Any) {
         let direct = sender as! String
@@ -306,6 +321,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.stopKeepalive = true
         super.stopTunnel(with: reason, completionHandler: completionHandler)
         self.turnOffNextensioAgent()
+        self.hasDefault = false
+        self.domains = [String]()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
@@ -374,15 +391,24 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.cluster = UnsafeMutablePointer<Int8>(mutating: (json["cluster"] as! NSString).utf8String)
         registration.uuid = UnsafeMutablePointer<Int8>(mutating: (uuid as NSString).utf8String)
-        
+        registration.jaeger_collector = UnsafeMutablePointer<Int8>(mutating: (json["jaegerCollector"] as! NSString).utf8String)
+        registration.trace_users = UnsafeMutablePointer<Int8>(mutating: (json["traceusers"] as! NSString).utf8String)
+
         let dom = json["domains"] as! NSMutableArray
         registration.num_domains = Int32(dom.count)
+        self.domains = [String]()
+        self.hasDefault = false
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
             registration.dnsip = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
             registration.needdns = UnsafeMutablePointer<Int32>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
                 let d = dom[i] as! NSDictionary
+                if d["name"] as! String != "nextensio-default-internet" {
+                    self.domains.append((d["name"] as! String))
+                } else {
+                    self.hasDefault = true
+                }
                 registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (d["name"] as! NSString).utf8String)
                 registration.dnsip[i] = UnsafeMutablePointer<Int8>(mutating: (d["dnsip"] as! NSString).utf8String)
                 let dns = d["needdns"] as! Bool
@@ -441,6 +467,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         onboarded = true
         force_onboard = false
+        
+        // Update the NEDNS settings if there are new domains added
+        setupVPN()
     }
     
     
@@ -488,7 +517,9 @@ extension CRegistrationInfo {
                   os_name: nil,
                   os_patch: 0,
                   os_major: 0,
-                  os_minor: 0)
+                  os_minor: 0,
+                  jaeger_collector: nil,
+                  trace_users: nil)
     }
 }
 
