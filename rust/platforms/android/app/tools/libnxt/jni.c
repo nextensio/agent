@@ -24,6 +24,8 @@ struct CRegistrationInfo
     int os_patch;
     int os_major;
     int os_minor;
+    const char *jaeger_collector;
+    const char *trace_users;
 };
 
 struct AgentStats
@@ -35,7 +37,7 @@ struct AgentStats
     int total_flows;
 };
 
-extern void agent_init(uint32_t platform, uint32_t direct,  uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
+extern void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
@@ -45,7 +47,7 @@ extern void agent_stats(struct AgentStats *stats);
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    agent_init(0 /*android*/, 0 /*direct*/, MTU, 0 /* low memory device */, 0/* no tcp port */);
+    agent_init(0 /*android*/, 0 /*direct*/, MTU, 0 /* low memory device */, 0 /* no tcp port */);
     return 0;
 }
 
@@ -67,7 +69,8 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
                                                               jbyteArray cacert, jobjectArray domains, jobjectArray dnsip,
                                                               jintArray needdns, jobjectArray services,
                                                               jstring hostname, jstring model, jstring ostype, jstring osname,
-                                                              jint major, jint minor, jint patch)
+                                                              jint major, jint minor, jint patch, jstring jaeger_collector,
+                                                              jstring trace_users)
 {
     struct CRegistrationInfo creg = {};
 
@@ -111,6 +114,9 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     creg.os_minor = minor;
     creg.os_patch = patch;
 
+    creg.jaeger_collector = (*env)->GetStringUTFChars(env, jaeger_collector, NULL);
+    creg.trace_users = (*env)->GetStringUTFChars(env, trace_users, NULL);
+
     // Call Rust to onboard
     onboard(creg);
 
@@ -142,6 +148,13 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
         (*env)->ReleaseStringUTFChars(env, s1, creg.services[i]);
     }
     free(creg.services);
+
+    (*env)->ReleaseStringUTFChars(env, hostname, creg.hostname);
+    (*env)->ReleaseStringUTFChars(env, model, creg.model);
+    (*env)->ReleaseStringUTFChars(env, ostype, creg.os_type);
+    (*env)->ReleaseStringUTFChars(env, osname, creg.os_name);
+    (*env)->ReleaseStringUTFChars(env, jaeger_collector, creg.jaeger_collector);
+    (*env)->ReleaseStringUTFChars(env, trace_users, creg.trace_users);
 }
 
 JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobject obj)

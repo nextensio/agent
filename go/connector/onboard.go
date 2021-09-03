@@ -36,17 +36,19 @@ type Domain struct {
 }
 
 type RegistrationInfo struct {
-	Gateway     string   `json:"gateway"`
-	AccessToken string   `json:"accessToken"`
-	ConnectID   string   `json:"connectid"`
-	Cluster     string   `json:"cluster"`
-	Domains     []Domain `json:"domains"`
-	CACert      []rune   `json:"cacert"`
-	Userid      string   `json:"userid"`
-	Tenant      string   `json:"tenant"`
-	Services    []string `json:"services"`
-	Version     string   `json:"version"`
-	Keepalive   uint     `json:"keepalive"`
+	Gateway         string   `json:"gateway"`
+	AccessToken     string   `json:"accessToken"`
+	ConnectID       string   `json:"connectid"`
+	Cluster         string   `json:"cluster"`
+	Domains         []Domain `json:"domains"`
+	CACert          []rune   `json:"cacert"`
+	Userid          string   `json:"userid"`
+	Tenant          string   `json:"tenant"`
+	Services        []string `json:"services"`
+	Version         string   `json:"version"`
+	Keepalive       uint     `json:"keepalive"`
+	JaegerCollector string   `json:"jaegerCollector"`
+	TraceUsers      string   `json:"traceusers"`
 }
 
 func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bool {

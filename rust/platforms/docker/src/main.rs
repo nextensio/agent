@@ -45,6 +45,8 @@ struct OnboardInfo {
     cacert: Vec<u8>,
     version: String,
     keepalive: usize,
+    jaegerCollector: String,
+    traceusers: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -224,6 +226,10 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
     let model = CString::new("model").unwrap();
     let os_type = CString::new("linux").unwrap();
     let os_name = CString::new("linux").unwrap();
+
+    let c_jaeger_collector = CString::new(onb.jaegerCollector.clone()).unwrap();
+    let c_trace_users = CString::new(onb.traceusers.clone()).unwrap();
+
     let creg = CRegistrationInfo {
         gateway: c_gateway.as_ptr(),
         access_token: c_access_token.as_ptr(),
@@ -246,6 +252,8 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         os_patch: 1,
         os_major: 10,
         os_minor: 8,
+        jaeger_collector: c_jaeger_collector.as_ptr(),
+        trace_users: c_trace_users.as_ptr(),
     };
     unsafe { onboard(creg) };
 }
@@ -528,9 +536,7 @@ fn main() {
         println!("Trying to login to nextensio");
     }
 
-    if test {
-        env_logger::init();
-    }
+    env_logger::init();
     let fd = create_tun().unwrap();
     config_tun(test, MTU);
 

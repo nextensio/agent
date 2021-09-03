@@ -465,9 +465,9 @@ func svrAccept(lg *log.Logger) {
 }
 
 func initJaegerTrace(service string, lg *log.Logger) io.Closer {
-	collector_url := os.Getenv("COLLECTOR_URL")
+	collector_url := os.Getenv("JAEGER_COLLECTOR")
 	if collector_url == "" {
-		collector_url = "https://nxt-nextensio.nxt-kc1.do-sf.nextensio.net/jaegerthrift14268/api/traces"
+		collector_url = regInfo.JaegerCollector
 	}
 	cfg := &jaegercfg.Configuration{
 		ServiceName: service,

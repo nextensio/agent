@@ -108,6 +108,8 @@ pub struct RegistrationInfo {
     os_patch: usize,
     os_major: usize,
     os_minor: usize,
+    jaeger_collector: String,
+    trace_users: String,
 }
 
 #[repr(C)]
@@ -133,6 +135,8 @@ pub struct CRegistrationInfo {
     pub os_patch: c_int,
     pub os_major: c_int,
     pub os_minor: c_int,
+    pub jaeger_collector: *const c_char,
+    pub trace_users: *const c_char,
 }
 
 #[derive(Default, Debug)]
@@ -215,6 +219,13 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
         reginfo.os_patch = creg.os_patch as usize;
         reginfo.os_major = creg.os_major as usize;
         reginfo.os_minor = creg.os_minor as usize;
+
+        reginfo.jaeger_collector = CStr::from_ptr(creg.jaeger_collector)
+            .to_string_lossy()
+            .into_owned();
+        reginfo.trace_users = CStr::from_ptr(creg.trace_users)
+            .to_string_lossy()
+            .into_owned();
     }
     return reginfo;
 }
@@ -2424,9 +2435,6 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
     log::set_boxed_logger(Box::new(winlog::WinLogger::new("Nextensio")))
         .map(|()| log::set_max_level(LevelFilter::Error))
         .ok();
-
-    #[cfg(target_os = "linux")]
-    env_logger::init();
 
     error!(
         "Agent init called, platform {}, direct {},mtu {}, highmem {}",

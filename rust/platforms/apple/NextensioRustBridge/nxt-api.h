@@ -33,6 +33,8 @@ typedef struct CRegistrationInfo
     int os_patch;
     int os_major;
     int os_minor;
+    char *jaeger_collector;
+    char *trace_users;
 } CRegistrationInfo;
 
 void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
