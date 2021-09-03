@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,11 +25,6 @@ import (
 	"gitlab.com/nextensio/common/go/transport/netconn"
 	"golang.org/x/crypto/ssh/terminal"
 )
-
-type nxtSpan struct {
-	span   opentracing.Span
-	active bool
-}
 
 type flowKey struct {
 	sport uint32
@@ -64,6 +58,7 @@ var password *string
 var idp *string
 var clientid *string
 var gateway *string
+var cluster string
 var ports []int = []int{}
 
 func flowAdd(key *flowKey, app common.Transport) {
@@ -99,21 +94,53 @@ func flowGet(key flowKey, gwRx common.Transport) common.Transport {
 	return nil
 }
 
-func gwToAppClose(tun common.Transport, dest ConnStats) {
+func gwToAppClose(tun common.Transport, dest ConnStats, span *opentracing.Span) {
 	tun.Close()
 	if dest.Conn != nil {
 		dest.Conn.Close()
 	}
+	if span != nil {
+		(*span).Finish()
+	}
+}
+
+func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
+	// Do tracing only if TraceCtx is set
+	if flow.TraceCtx == "" {
+		return nil
+	}
+	// Fake "uber-trace-id" http header to create tracer spanCtx
+	httpHdr := make(http.Header)
+	httpHdr.Add("Uber-Trace-Id", flow.TraceCtx)
+	tracer := opentracing.GlobalTracer()
+	spanCtx, serr := tracer.Extract(opentracing.HTTPHeaders,
+		opentracing.HTTPHeadersCarrier(httpHdr))
+	if (serr != nil) || (spanCtx == nil) {
+		return nil
+	}
+	span := tracer.StartSpan(cluster+"-"+regInfo.Userid,
+		opentracing.FollowsFrom(spanCtx))
+	span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
+	span.SetTag("nxt-trace-destagent", flow.DestAgent)
+	span.SetTag("nxt-trace-requestid", flow.TraceRequestId)
+	span.SetTag("nxt-trace-userid", flow.Userid)
+	span.Tracer().Inject(
+		span.Context(),
+		opentracing.HTTPHeaders,
+		opentracing.HTTPHeadersCarrier(httpHdr),
+	)
+	flow.TraceCtx = httpHdr.Get("Uber-Trace-Id")
+	return &span
 }
 
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
-	var spaninfo nxtSpan
+	var span *opentracing.Span
 
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
-			gwToAppClose(tun, dest)
+			gwToAppClose(tun, dest, span)
 			return
 		}
 		switch hdr.Hdr.(type) {
@@ -133,7 +160,7 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 					// the appStreams passed here never gets used
 					e := dest.Conn.Dial(appStreams)
 					if e != nil {
-						gwToAppClose(tun, dest)
+						gwToAppClose(tun, dest, span)
 						return
 					}
 
@@ -142,38 +169,10 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 					// the flow is originated from the connector to gateway, so reverse already exists
 					newTun := tun.NewStream(nil)
 					if newTun == nil {
-						gwToAppClose(tun, dest)
+						gwToAppClose(tun, dest, span)
 						return
 					}
-					// Do tracing only if TraceCtx is set
-					if flow.TraceCtx != "" {
-						// Fake "uber-trace-id" http header to create tracer spanCtx
-						httpHdr := make(http.Header)
-						httpHdr.Add("Uber-Trace-Id", flow.TraceCtx)
-						tracer := opentracing.GlobalTracer()
-						spanCtx, serr := tracer.Extract(opentracing.HTTPHeaders,
-							opentracing.HTTPHeadersCarrier(httpHdr))
-						if (serr == nil) && (spanCtx != nil) {
-							a := regexp.MustCompile(`-`)
-							cluster := a.Split(flow.ConnectorPod, 2)[0]
-							span := tracer.StartSpan(cluster+"-"+regInfo.Userid,
-								opentracing.FollowsFrom(spanCtx))
-							spaninfo.active = true
-							spaninfo.span = span
-							span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
-							span.SetTag("nxt-trace-destagent", flow.DestAgent)
-							span.SetTag("nxt-trace-requestid", flow.TraceRequestId)
-							span.SetTag("nxt-trace-userid", flow.Userid)
-							span.Tracer().Inject(
-								span.Context(),
-								opentracing.HTTPHeaders,
-								opentracing.HTTPHeadersCarrier(httpHdr),
-							)
-							flow.TraceCtx = httpHdr.Get("Uber-Trace-Id")
-						} else {
-							lg.Println("Error extracting spanCtx from " + flow.TraceCtx)
-						}
-					}
+					span = traceFlow(flow)
 
 					// copy the flow
 					newFlow := *flow
@@ -191,13 +190,12 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 				}
 			}
 			e := dest.Conn.Write(hdr, buf)
-			if spaninfo.active {
-				spaninfo.span.Finish()
-				spaninfo.active = false
-			}
 			if e != nil {
-				gwToAppClose(tun, dest)
+				gwToAppClose(tun, dest, span)
 				return
+			}
+			if span != nil {
+				(*span).Finish()
 			}
 			dest.Tx += 1
 		}
@@ -400,6 +398,14 @@ func credentials() (string, string) {
 	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
 
+func getClusterName(gateway string) string {
+	if len(gateway) <= len(".nextensio.net") {
+		return "unknown"
+	}
+	end := len(gateway) - len(".nextensio.net")
+	return gateway[0:end]
+}
+
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
 	username = flag.String("username", "", "connector onboarding userid")
@@ -424,7 +430,8 @@ func args() {
 	if *username == "" || *password == "" {
 		*username, *password = credentials()
 	}
-	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway, ports)
+	cluster = getClusterName(*gateway)
+	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway, cluster, ports)
 }
 
 func svrListen(lg *log.Logger, conn *netconn.NetConn, port int) {

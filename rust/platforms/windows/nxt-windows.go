@@ -412,7 +412,9 @@ func agentOnboard() {
 // tunnel of course relays that over Wi-Fi anyways, so there is effectively double
 // dns requests sent. Whichever response comes first will be taken. The nxt0 interface
 // does have to advertise a dns server because we want to DNS respond to private domain
-// requests (which will fail over public)
+// requests (which will fail over public). (The "Whichever response comes first will be taken"
+// statement is dubious/behaviour is doubtful because if we drop dns requests on nxt0,
+// then we can clearly see dns resolution overall getting delayed)
 //
 // Case 2: Smart DNS ON, Nextensio attracting only private traffic (no catch-all route)
 // In this case also, DNS behaves same as before. TODO: We "can" make this behaviour
@@ -436,7 +438,7 @@ func agentOnboard() {
 // windows really needs is a mac/ios style capability to differentiate dns servers based on
 // the match-domains, rather than this wierd interface metric based mechanism.
 //
-// NOTE2: You can see that we wierdly add 8.8.8.8/32 and 8.8.4.4/32 to the route table, the
+// NOTE2: Down below, we wierdly add 8.8.8.8/32 and 8.8.4.4/32 to the route table, the
 // reason for that is as follows - like we mentioned earlier, windows will end up broadcasting
 // public requests on dns servers of Wi-Fi AND nxt0. For private requests alone, we can give
 // some dummy DNS server IP like 100.64.1.3 for example, it doesnt matter since we respond

@@ -37,8 +37,10 @@ public class NxtApp extends Application {
     private static final String TAG = "NxtApp";
     private static final int VPN_REQUEST_CODE = 0x0F;
     private OkHttpClient client = new OkHttpClient();
-    
-    public void SetTokens(String access, String refresh) {
+    private NxtAgentService agentService = null;
+
+    public void SetTokens(NxtAgentService service, String access, String refresh) {
+        agentService = service;
         accessToken = access;
         refreshToken = refresh;
         force_onboard = true;
@@ -62,16 +64,11 @@ public class NxtApp extends Application {
             public void run() {
                 Thread.currentThread().setName("nextensio.onboard");
                 while (true) {
-                    int sleep_time = 30000;
-                    if (accessToken.equals("")) {
-                        // We want to onboard as fast as user logs in, so till user
-                        // logs in we sleep for a shorter time frame
-                        sleep_time = 1000;
-                    } else {
+                    if (!accessToken.equals("")) {
                         doOnboard(); 
                     }
                     try { 
-                        Thread.sleep(sleep_time);
+                        Thread.sleep(1000);
                     } catch (InterruptedException exception) {
                         Log.i(TAG, "Sleep failed");
                     }                  
@@ -87,6 +84,7 @@ public class NxtApp extends Application {
         client.setReadTimeout(15, TimeUnit.SECONDS);    // socket timeout
         client.setWriteTimeout(15, TimeUnit.SECONDS);    // socket timeout
     }
+
 
     private void doOnboard() {
         Instant now = Instant.now();
@@ -106,7 +104,7 @@ public class NxtApp extends Application {
             last_refresh = now;
         }
         
-        if (!onboarded || force_onboard) {
+        if ((!onboarded || force_onboard) && (agentService != null)) {
             controllerOnboard();
         }
     }
@@ -201,6 +199,7 @@ public class NxtApp extends Application {
                 cacert[i] = (byte)cert.getInt(i);
             }
 
+            boolean hasDefault = false;
             JSONArray dom = onboard.getJSONArray("domains");
             String[] domains = new String[dom.length()];
             String[] dnsip = new String[dom.length()];
@@ -213,6 +212,9 @@ public class NxtApp extends Application {
                     needdns[i] = 1;
                 } else {
                     needdns[i] = 0;
+                }
+                if (domains[i].equals("nextensio-default-internet")) {
+                    hasDefault = true;
                 }
             }
             
@@ -243,6 +245,7 @@ public class NxtApp extends Application {
             }
             onboarded = true;
             force_onboard = false;
+            agentService.start(hasDefault);
             Log.i(TAG, "nxtOnboard success");
 
         } catch (final JSONException e)  {

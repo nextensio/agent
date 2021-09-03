@@ -20,7 +20,7 @@ env_logger = "0.8.4"
 
 [dependencies]
 log = "0.4.14"
-object-pool = { git = "https://github.com/gopakumarce/object-pool.git", branch = "gopa-objpool" }
+object-pool = { git = "https://github.com/nextensio/object-pool.git", branch = "nextensio-alpha" }
 mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
 common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 websock = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
