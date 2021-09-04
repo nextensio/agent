@@ -196,6 +196,7 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 			}
 			if span != nil {
 				(*span).Finish()
+				span = nil
 			}
 			dest.Tx += 1
 		}
