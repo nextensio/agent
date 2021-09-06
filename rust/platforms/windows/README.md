@@ -84,9 +84,9 @@
 <b>Build and run nxt-windows.exe</b>
 1. Launch powershell as administrator
 2. cd agent\rust\agent
-3. ./build_windows.ps1
+3. .\build_windows.ps1
 4. cd agent\rust\platforms\windows
-5. ./build.bat
+5. .\build.bat
 6. .\amd64\nxt-windows.exe nxt0
 7. nxt0 adaptor can be seen here: Control Panel => Network and Internet => Network Connection
 
@@ -99,7 +99,26 @@ Network Destination        Netmask          Gateway       Interface  Metric
           0.0.0.0          0.0.0.0      192.168.4.1     192.168.4.88     45
           0.0.0.0          0.0.0.0       10.82.31.4       10.82.31.5      5 <-- nxt-windows IP, lower metric is better
 ```
+<b> Windows Installer XML (WiX) </b>
+1. WiX toolset is an opensource MSI (Microsoft Installer) package generator
+2. Go to https://wixtoolset.org/releases/, download Recommended Build. 
+3. Extract the zip file to C:\SourceControl\WiX311\
+4. Add this path to your system environment variable
+Ref: https://www.packtpub.com/product/wix-3-6-a-developer-s-guide-to-windows-installer-xml/9781782160427
+
+<b> Nxt-win.wxs </b>
+1. nxt-win.wxs is the XML manifest file to create the agent's MSI package. Its an input to WiX. 
+2. Run: .\build.bat msi, to generate the MSI package: dist\nxt-win-{ARCH}.msi, where {ARCH} is amd64, etc.
+3. Double clicking nx-win-{ARCH}.wxs will install 2 files: amd64\nxt-windows.exe and nxt-win-userguide.txt in C:\Program Files\nextensio
+4. To update the agent version: Modify .\build.bat ProductVersion defined variable in the compiler
+Note: To generate GUID, use PowerShell "New-Guid": https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/new-guid?view=powershell-7.1
+
+<b> Uninstall Nextensio Agent </b>
+1. To uninstall, go to Control Panel -> Programs -> Uninstall a program
+2. Search for Nextensio Agent
+3. Click 'Uninstall'
+Note1: Because the product ID is fixed, everytime you need to install a new msi, you need to delete it first.
+Note2: To workaround this, change Product Id in wxs to "*" to auto-generate the Product ID. Clean up later.
 
 <b> Todo </b>
-1. Installation to 3rd party computers
-2. Develop a GUI
+1. Develop a GUI

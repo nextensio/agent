@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Copyright (C) 2021 Nextensio. All Rights Reserved.
+-->
+<?if $(var.AGENT_PLAT) = "amd64"?>
+	<?define UpgradeCode = "{e5f3af5e-1394-44ef-a046-09491d9fa0cb}"?>
+  <?define NxtAgentCode = "{fb952a10-ff9c-4594-87b4-18238aba2c9b}"?>
+<?else?>
+	<?error Unknown platform ?>
+<?endif?>
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="D0135DCE-8059-4117-8661-32A5CDE4B928" 
+           Name="Nextensio Agent for Windows"
+           Language="1033"
+           Manufacturer="Nextensio"
+           Version="$(var.ProductVersion)" 
+           UpgradeCode="$(var.UpgradeCode)">
+    
+    <Package InstallerVersion="500" 
+               Compressed="yes" 
+               InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" 
+               Title="Nextensio Agent" 
+               Level="1">
+      <ComponentGroupRef Id="CMP_NxtAgent" />
+      <ComponentGroupRef Id="CMP_UserGuideTXT" />
+    </Feature>
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" 
+                       Name="nextensio">
+          <Directory Id="INSTALLFOLDERPLAT"
+                       Name="$(var.AGENT_PLAT)" />
+        </Directory>
+      </Directory>
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="CMP_NxtAgent" 
+                      Directory="INSTALLFOLDERPLAT">
+      <Component Id="NxtWindowsEXE" 
+                    Guid="$(var.NxtAgentCode)">
+        <File Source="$(var.AGENT_PLAT)\nxt-windows.exe" 
+              KeyPath="yes" />
+      </Component>
+      <!-- Add DLLs Component Id here (ex. Wintun) -->
+    </ComponentGroup>
+    <ComponentGroup Id="CMP_UserGuideTXT" 
+                      Directory="INSTALLFOLDER">
+      <Component Id="UserGuideTXT" 
+                    Guid="{b48dfb95-3e4a-42f6-bf16-0733fbef5f3a}">
+        <File Source="nxt-win-userguide.txt" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

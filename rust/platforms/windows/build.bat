@@ -7,6 +7,12 @@ set PATH=%BUILDDIR%.deps;%PATH%
 set PATHEXT=.exe
 cd /d %BUILDDIR% || exit /b 1
 
+if "%1"=="msi" ( 
+	set WIX_CANDLE_FLAGS=-nologo
+    set WIX_LIGHT_FLAGS=-nologo -spdb -sice:ICE71 -sice:ICE61
+	call :msi amd64 x86_64 x64 || goto :error
+	exit /b 0
+)
 
 if exist .deps\prepared goto :build
 :installdeps
@@ -60,6 +66,14 @@ if exist .deps\prepared goto :build
 	windres.exe -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
 	echo [+] Building program %1
 	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nxt-windows.exe" || exit /b 1
+	goto :eof
+
+:msi
+	if not exist "%~1" mkdir "%~1"
+	echo [+] wix compiling nxt-win.wxs
+	candle %WIX_CANDLE_FLAGS% -dAGENT_PLAT="%~1" -dProductVersion="1.0.0" -o "%~1\nxt-win.wixobj" -arch %~3 nxt-win.wxs || goto :error
+	echo [+] wix linking nxt-win-%~1.msi package
+	light %WIX_LIGHT_FLAGS% -out "dist\nxt-win-%~1.msi" "%~1\nxt-win.wixobj" || goto :error
 	goto :eof
 
 :error
