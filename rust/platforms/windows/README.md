@@ -103,22 +103,22 @@ Network Destination        Netmask          Gateway       Interface  Metric
 1. WiX toolset is an opensource MSI (Microsoft Installer) package generator
 2. Go to https://wixtoolset.org/releases/, download Recommended Build. 
 3. Extract the zip file to C:\SourceControl\WiX311\
-4. Add this path to your system environment variable
+4. Add this path to your system environment variable.
 Ref: https://www.packtpub.com/product/wix-3-6-a-developer-s-guide-to-windows-installer-xml/9781782160427
 
-<b> Install Nextensio Agent Apps using MSI </b>
+<b> Install Nextensio Agent Console App using MSI </b>
 1. nxt-win.wxs is the XML manifest file to create the agent's MSI package. Its an input to WiX. 
 2. Run: .\build.bat msi, to generate the MSI package: dist\nxt-win-{ARCH}.msi, where {ARCH} is amd64, etc.
 3. From File Explorer, double clicking nx-win-{ARCH}.wxs. It will install all files into C:\Program Files\nextensio
-4. To update the agent version: Modify .\build.bat ProductVersion defined variable in the compiler
-Note: To generate GUID, use PowerShell "New-Guid": https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/new-guid?view=powershell-7.1
+4. To update the agent version: Modify .\build.bat ProductVersion defined variable in the compiler 
+5. To generate GUID, use PowerShell "New-Guid": https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/new-guid?view=powershell-7.1
 
-<b> Uninstall Nextensio Agent Apps </b>
+<b> Uninstall Nextensio Agent Console App </b>
 1. To uninstall, go to Control Panel -> Programs -> Uninstall a program
 2. Search for Nextensio Agent
 3. Click 'Uninstall'
-Note1: Because the product ID is fixed, everytime you need to install a new msi, you need to delete it first.
-Note2: To workaround this, change Product Id in wxs to "*" to auto-generate the Product ID. Clean up later.
+4. Note1: Because the product ID is fixed, everytime you need to install a new msi, you need to delete it first.
+5. Note2: To workaround this, change Product Id in wxs to "*" to auto-generate the Product ID. Clean up later.
 
 <b> Todo </b>
 1. Develop a GUI
