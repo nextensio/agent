@@ -9,7 +9,7 @@ cd /d %BUILDDIR% || exit /b 1
 
 if "%1"=="msi" ( 
 	set WIX_CANDLE_FLAGS=-nologo
-    set WIX_LIGHT_FLAGS=-nologo -spdb -sice:ICE71 -sice:ICE61
+    set WIX_LIGHT_FLAGS=-nologo -spdb
 	call :msi amd64 x86_64 x64 || goto :error
 	exit /b 0
 )

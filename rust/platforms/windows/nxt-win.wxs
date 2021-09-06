@@ -5,6 +5,7 @@
 <?if $(var.AGENT_PLAT) = "amd64"?>
 	<?define UpgradeCode = "{e5f3af5e-1394-44ef-a046-09491d9fa0cb}"?>
   <?define NxtAgentCode = "{fb952a10-ff9c-4594-87b4-18238aba2c9b}"?>
+  <?define WintunDLLCode = "{0ac06682-6637-49e3-98f3-c30c857e895a}"?>
 <?else?>
 	<?error Unknown platform ?>
 <?endif?>
@@ -52,7 +53,11 @@
         <File Source="$(var.AGENT_PLAT)\nxt-windows.exe" 
               KeyPath="yes" />
       </Component>
-      <!-- Add DLLs Component Id here (ex. Wintun) -->
+      <Component Id="WintunDLL" 
+                    Guid="$(var.WintunDLLCode)">
+        <File Source=".deps\wintun\bin\$(var.AGENT_PLAT)\wintun.dll" 
+              KeyPath="yes" />
+      </Component>
     </ComponentGroup>
     <ComponentGroup Id="CMP_UserGuideTXT" 
                       Directory="INSTALLFOLDER">
