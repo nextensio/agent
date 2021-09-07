@@ -875,8 +875,7 @@ fn parse_dns(
     tcp_pool: &Arc<Pool<Vec<u8>>>,
     nameip: &mut NameIP,
 ) -> bool {
-    // The flow did not match any domains, see if the flow's ip address
-    // matches any of the domains (reverse lookup)
+    // See if the flow's ip address matches any of the domains (reverse lookup)
     let ip: Result<Ipv4Addr, _> = key.dip.parse();
     if let Ok(ip) = ip {
         if let Some(r) = nameip.rdns.get(&ip) {
