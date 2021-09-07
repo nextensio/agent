@@ -319,6 +319,7 @@ func monitorController(lg *log.Logger) {
 		// Okta is configured with one hour as the access token lifetime,
 		// refresh at 45 minutes
 		if time.Since(refresh).Minutes() >= 45 {
+			old_tokens := tokens
 			tokens = refreshTokens(*idp, *clientid, tokens.Refresh)
 			if tokens != nil {
 				refresh = time.Now()
@@ -328,6 +329,7 @@ func monitorController(lg *log.Logger) {
 				regInfo.AccessToken = tokens.AccessToken
 				regInfoLock.Unlock()
 			} else {
+				tokens = old_tokens
 				lg.Println("Token refresh failed, will try again in 30 seconds")
 			}
 		}
