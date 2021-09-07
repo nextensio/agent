@@ -1,7 +1,9 @@
 // The code here is from https://github.com/EmilHernvall/dnsguide sample5.rs
 
 use log::error;
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::time::Instant;
 
 type Error = Box<dyn std::error::Error>;
 type Result<T> = std::result::Result<T, Error>;
@@ -721,7 +723,55 @@ pub fn print_responses(req_buffer: &mut BytePacketBuffer) {
     }
 }
 
+pub fn monitor_dns(nameip: &mut super::NameIP) {
+    let mut aged = vec![];
+    for (k, v) in nameip.dns.iter() {
+        if v.alloc_time.elapsed().as_secs() >= super::DNS_TTL as u64 {
+            aged.push(k.clone());
+            nameip.rdns.remove(&v.ip);
+        }
+    }
+    for a in aged {
+        nameip.dns.remove(&a);
+    }
+}
+
+fn get_dns(rdns: &HashMap<Ipv4Addr, super::Rdns>, start: &Instant) -> Ipv4Addr {
+    // Poor man's random - I DONT want to pull in the rand crate just
+    // for this, the rand crate also pulls in humongous crates like serde
+    let mut count = 0;
+    loop {
+        // get a random IP address 100.64.x.y (CG-NAT range)
+        let elapsed = start.elapsed().as_nanos();
+        let val1 = (elapsed & 0xFFFF) as u16;
+        let val2 = ((elapsed >> 16) & 0xFFFF) as u16;
+        let val3 = ((elapsed >> 32) & 0xFFFF) as u16;
+        let val4 = ((elapsed >> 48) & 0xFFFF) as u16;
+        let val5 = ((elapsed >> 64) & 0xFFFF) as u16;
+        let val6 = ((elapsed >> 80) & 0xFFFF) as u16;
+        let val7 = ((elapsed >> 96) & 0xFFFF) as u16;
+        let val8 = ((elapsed >> 112) & 0xFFFF) as u16;
+        let val = val1 ^ val2 ^ val3 ^ val4 ^ val5 ^ val6 ^ val7 ^ val8;
+        // 100.64.1.1, 100.64.1.2, 100.64.1.3 are usually used by android/ios/windows
+        // etc.. as the tunnel IP, tunnel next-hop and the dns server IP
+        if val == 0 || val == 0x0101 || val == 0x0102 || val == 0x0103 {
+            count += 1;
+            continue;
+        }
+        let ip = Ipv4Addr::new(100, 64, (val >> 8) as u8, (val & 0xFF) as u8);
+        if rdns.contains_key(&ip) {
+            count += 1;
+            continue;
+        }
+        if count != 0 {
+            error!("DNS looped {} times", count);
+        }
+        return ip;
+    }
+}
+
 pub fn handle_nextensio_query(
+    nameip: &mut super::NameIP,
     domains: &[super::Domain],
     req_buffer: &mut BytePacketBuffer,
     res_buffer: &mut BytePacketBuffer,
@@ -741,25 +791,37 @@ pub fn handle_nextensio_query(
 
     if let Some(question) = request.questions.pop() {
         let mut found = false;
-        let mut idx = 0;
         for i in 0..domains.len() {
             if question.name.contains(&domains[i].name) {
                 found = true;
-                idx = i;
                 break;
             }
         }
         if found {
-            let addr = Ipv4Addr::new(
-                ((domains[idx].dnsip >> 24) & 0xFF) as u8,
-                ((domains[idx].dnsip >> 16) & 0xFF) as u8,
-                ((domains[idx].dnsip >> 8) & 0xFF) as u8,
-                (domains[idx].dnsip & 0xFF) as u8,
-            );
+            let addr;
+            if let Some(d) = nameip.dns.get_mut(&question.name) {
+                addr = d.ip;
+                d.alloc_time = Instant::now();
+            } else {
+                addr = get_dns(&mut nameip.rdns, &nameip.start);
+                nameip.rdns.insert(
+                    addr,
+                    super::Rdns {
+                        fqdn: question.name.clone(),
+                    },
+                );
+                nameip.dns.insert(
+                    question.name.clone(),
+                    super::Dns {
+                        ip: addr,
+                        alloc_time: Instant::now(),
+                    },
+                );
+            }
             let ans = DnsRecord::A {
                 domain: question.name.clone(),
                 addr,
-                ttl: 300,
+                ttl: super::DNS_TTL,
             };
             packet.questions.push(question.clone());
             packet.header.rescode = ResultCode::NOERROR;

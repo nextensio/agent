@@ -55,7 +55,6 @@ static STATS_LASTFLAP: AtomicI32 = AtomicI32::new(0);
 static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
 static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
 static AGENT_STARTED: AtomicUsize = AtomicUsize::new(0);
-
 const NXT_AGENT_PROXY: usize = 8181;
 
 const UNUSED_IDX: usize = 0;
@@ -74,6 +73,8 @@ const CLEANUP_TCP_IDLE: usize = 60 * 60; // one hour
 const CLEANUP_UDP_IDLE: usize = 4 * 60; // 4 minutes
 const CLEANUP_UDP_DNS: usize = 10; // 10 seconds
 const MONITOR_IDLE_BUFS: u64 = 1; // 1 seconds
+const DNS_TTL: u32 = 300; // 5 minutes
+const MONITOR_DNS: u64 = 360; // 6 minutes
 const MONITOR_FLOW_AGE: u64 = 30; // 30 seconds
 const MONITOR_CONNECTIONS: u64 = 2; // 2 seconds
 const PARSE_MAX: usize = 2048;
@@ -327,6 +328,21 @@ fn alloc_perf() -> AgentPerf {
     AgentPerf {}
 }
 
+pub struct Dns {
+    pub ip: Ipv4Addr,
+    pub alloc_time: Instant,
+}
+
+pub struct Rdns {
+    pub fqdn: String,
+}
+
+pub struct NameIP {
+    pub start: Instant,
+    pub dns: HashMap<String, Dns>,
+    pub rdns: HashMap<Ipv4Addr, Rdns>,
+}
+
 struct AgentInfo {
     idp_onboarded: bool,
     gw_onboarded: bool,
@@ -353,10 +369,16 @@ struct AgentInfo {
     perf: AgentPerf,
     tcp_vpn: u32,
     tcp_vpn_handshake: Option<NxtBufs>,
+    nameip: NameIP,
 }
 
 impl Default for AgentInfo {
     fn default() -> Self {
+        let nameip = NameIP {
+            start: Instant::now(),
+            dns: HashMap::new(),
+            rdns: HashMap::new(),
+        };
         AgentInfo {
             idp_onboarded: false,
             gw_onboarded: false,
@@ -383,6 +405,7 @@ impl Default for AgentInfo {
             perf: alloc_perf(),
             tcp_vpn: 0,
             tcp_vpn_handshake: None,
+            nameip,
         }
     }
 }
@@ -776,6 +799,7 @@ fn external_sock_tx(
     vpn_rx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
 ) {
     tun.tx_ready = true;
 
@@ -784,7 +808,9 @@ fn external_sock_tx(
             flow.pending_tx_qed = false;
             flow.rx_socket.write_ready();
             flow.rx_socket.poll(vpn_rx, vpn_tx);
-            flow_data_to_external(&key, flow, None, tun, reginfo, poll, pkt_pool, _perf);
+            flow_data_to_external(
+                &key, flow, None, tun, reginfo, poll, pkt_pool, nameip, _perf,
+            );
             // If the flow is back to waiting state then we cant send any more
             // on this tunnel, so break out and try next time
             if flow.pending_tx.is_some() {
@@ -818,21 +844,6 @@ fn set_dest_agent(
             has_default = true;
         }
     }
-    // The flow did not match any domains, see if the flow's ip address
-    // matches any of the domains (reverse lookup)
-    if !found {
-        let ip: Result<Ipv4Addr, _> = key.dip.parse();
-        if let Ok(ip) = ip {
-            let ip = common::as_u32_be(&ip.octets());
-            for im in reginfo.domains.iter() {
-                if im.dnsip == ip {
-                    flow.dest_agent = im.name.clone();
-                    found = true;
-                    break;
-                }
-            }
-        }
-    }
 
     if !found {
         if has_default {
@@ -850,6 +861,41 @@ fn set_dest_agent(
         pkt_pool,
         tcp_pool,
     );
+}
+
+fn parse_dns(
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    reginfo: &RegistrationInfo,
+    tuns: &mut HashMap<usize, TunInfo>,
+    next_tun_idx: &mut usize,
+    poll: &mut Poll,
+    gw_onboarded: bool,
+    pkt_pool: &Arc<Pool<Vec<u8>>>,
+    tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
+) -> bool {
+    // The flow did not match any domains, see if the flow's ip address
+    // matches any of the domains (reverse lookup)
+    let ip: Result<Ipv4Addr, _> = key.dip.parse();
+    if let Ok(ip) = ip {
+        if let Some(r) = nameip.rdns.get(&ip) {
+            flow.service = r.fqdn.clone();
+            set_dest_agent(
+                key,
+                flow,
+                reginfo,
+                tuns,
+                next_tun_idx,
+                poll,
+                gw_onboarded,
+                pkt_pool,
+                tcp_pool,
+            );
+            return true;
+        }
+    }
+    return false;
 }
 
 fn parse_https_and_http(
@@ -954,8 +1000,26 @@ fn parse_or_maxlen(
     gw_onboarded: bool,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
     buffer: &[u8],
 ) -> bool {
+    // Easiest option: See if its an ip addresses we handed out and if so
+    // we can reverse map the fqdn
+    if parse_dns(
+        key,
+        flow,
+        reginfo,
+        tuns,
+        next_tun_idx,
+        poll,
+        gw_onboarded,
+        pkt_pool,
+        tcp_pool,
+        nameip,
+    ) {
+        return true;
+    }
+
     // We dont yet have any clue how to parse udp / dtls
     if key.proto == common::UDP {
         flow.service = key.dip.clone();
@@ -1017,6 +1081,7 @@ fn parse_complete(
     gw_onboarded: bool,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
 ) -> Option<NxtBufs> {
     if tx.bufs.is_empty() {
         return None;
@@ -1035,6 +1100,7 @@ fn parse_complete(
         gw_onboarded,
         pkt_pool,
         tcp_pool,
+        nameip,
         &tx.bufs[0][tx.headroom..],
     ) {
         return Some(tx);
@@ -1064,6 +1130,7 @@ fn parse_complete(
         gw_onboarded,
         pkt_pool,
         tcp_pool,
+        nameip,
         &pending[0..],
     ) {
         let mut v = vec![pending];
@@ -1087,6 +1154,7 @@ fn flow_handle_dns(
     reginfo: &RegistrationInfo,
     tx: &mut NxtBufs,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
 ) -> bool {
     // We can only handle plain un-encrypted dns requests as of
     // today. So for private domains, some device (like android)
@@ -1100,7 +1168,7 @@ fn flow_handle_dns(
     let mut req = dns::BytePacketBuffer::new(&mut tx.bufs[0][tx.headroom..]);
     if let Some(mut buf) = pool_get(pkt_pool.clone()) {
         let mut resp = dns::BytePacketBuffer::new(&mut buf[0..]);
-        if dns::handle_nextensio_query(&reginfo.domains, &mut req, &mut resp) {
+        if dns::handle_nextensio_query(nameip, &reginfo.domains, &mut req, &mut resp) {
             let len = resp.pos();
             unsafe {
                 buf.set_len(len);
@@ -1139,6 +1207,7 @@ fn flow_data_to_external(
     reginfo: &RegistrationInfo,
     poll: &mut Poll,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
     _perf: &mut AgentPerf,
 ) {
     loop {
@@ -1186,7 +1255,7 @@ fn flow_data_to_external(
 
         // See if its a dns query for a private domain that we can respond to
         let ret;
-        if flow_handle_dns(key, flow, reginfo, &mut tx, pkt_pool) {
+        if flow_handle_dns(key, flow, reginfo, &mut tx, pkt_pool, nameip) {
             // flow_rx_tx which called us will call flow_data_from_external and send
             // the dns response to vpn_tx
             ret = Ok(());
@@ -1294,6 +1363,7 @@ fn proxyclient_rx(
     check_tuns: &mut HashMap<usize, ()>,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
     _perf: &mut AgentPerf,
 ) -> Option<TunInfo> {
     match tun_info {
@@ -1336,6 +1406,7 @@ fn proxyclient_rx(
                                     reginfo,
                                     poll,
                                     pkt_pool,
+                                    nameip,
                                     _perf,
                                 );
                                 if let Some(mut empty) = pool_get(pkt_pool.clone()) {
@@ -1381,6 +1452,7 @@ fn proxyclient_rx(
                         reginfo,
                         poll,
                         pkt_pool,
+                        nameip,
                         _perf,
                     );
                 }
@@ -1424,6 +1496,7 @@ fn flow_parse(
     gw_onboarded: bool,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
 ) -> (bool, Option<NxtBufs>) {
     if flow.service != "" {
         // already parsed
@@ -1445,6 +1518,7 @@ fn flow_parse(
                     gw_onboarded,
                     pkt_pool,
                     tcp_pool,
+                    nameip,
                 ) {
                     // succesfully parsed
                     return (true, Some(p));
@@ -1478,6 +1552,7 @@ fn flow_rx_tx(
     reginfo: &RegistrationInfo,
     check_tuns: &mut HashMap<usize, ()>,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
     _perf: &mut AgentPerf,
 ) {
     if let Some(tx_sock) = tuns.get_mut(&flow.tx_socket) {
@@ -1489,6 +1564,7 @@ fn flow_rx_tx(
             reginfo,
             poll,
             pkt_pool,
+            nameip,
             _perf,
         );
         flow_data_from_external(&key, flow, &mut tx_sock.tun(), check_tuns);
@@ -1534,6 +1610,7 @@ fn vpntun_rx(
     check_tuns: &mut HashMap<usize, ()>,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
     _perf: &mut AgentPerf,
 ) {
     let mut tcp_flows = HashMap::new();
@@ -1546,7 +1623,7 @@ fn vpntun_rx(
                         if let Some(flow) = flows.get_mut(&key) {
                             flow_rx_tx(
                                 &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns,
-                                pkt_pool, _perf,
+                                pkt_pool, nameip, _perf,
                             );
                         }
                     }
@@ -1607,12 +1684,13 @@ fn vpntun_rx(
                                 gw_onboarded,
                                 pkt_pool,
                                 tcp_pool,
+                                nameip,
                             );
                             if parsed {
                                 if key.proto != common::TCP {
                                     flow_rx_tx(
                                         &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo,
-                                        check_tuns, pkt_pool, _perf,
+                                        check_tuns, pkt_pool, nameip, _perf,
                                     );
                                 } else {
                                     if !tcp_flows.contains_key(&key) {
@@ -1630,7 +1708,8 @@ fn vpntun_rx(
     for (key, data) in tcp_flows {
         if let Some(flow) = flows.get_mut(&key) {
             flow_rx_tx(
-                &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, pkt_pool, _perf,
+                &key, flow, data, vpn_rx, vpn_tx, tuns, poll, reginfo, check_tuns, pkt_pool,
+                nameip, _perf,
             );
         }
     }
@@ -1904,6 +1983,7 @@ fn monitor_parse_pending(
     gw_onboarded: bool,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &mut NameIP,
     _perf: &mut AgentPerf,
 ) {
     let mut keys = Vec::new();
@@ -1941,6 +2021,7 @@ fn monitor_parse_pending(
                             reginfo,
                             poll,
                             pkt_pool,
+                            nameip,
                             _perf,
                         );
                     }
@@ -2139,6 +2220,7 @@ fn monitor_flows(
     flows_active: &mut HashMap<FlowV4Key, ()>,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     tcp_pool: &Arc<Pool<Vec<u8>>>,
+    nameip: &NameIP,
 ) {
     STATS_NUMFLOWS.store(flows.len() as i32, Relaxed);
 
@@ -2187,7 +2269,7 @@ fn monitor_flows(
         gw_pending = tun.tun().pending_rx;
     }
     error!(
-        "tcp {}, udp {}, dns {}, pkt bufs {}, tcp bufs {}, pending rx {} / tx {}, idle {}, gw pending {}",
+        "tcp {}, udp {}, dns {}, pkt bufs {}, tcp bufs {}, pending rx {} / tx {}, idle {}, gw pending {}, dns {}, rdns{}",
         tcp,
         udp,
         dns,
@@ -2196,7 +2278,8 @@ fn monitor_flows(
         pending_rx,
         pending_tx,
         idle,
-        gw_pending
+        gw_pending,
+        nameip.dns.len(), nameip.rdns.len()
     );
 }
 
@@ -2470,9 +2553,11 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
     let mut monitor_ager = Instant::now();
     let mut buffer_monitor = Instant::now();
     let mut last_onboard = Instant::now();
+    let mut dns_monitor = Instant::now();
 
     loop {
         let hundred_ms = Duration::from_millis(SERVICE_PARSE_TIMEOUT);
+        let now = Instant::now();
         match poll.poll(&mut events, Some(hundred_ms)) {
             Err(e) => error!("Error polling {:?}, retrying", e),
             Ok(_) => {}
@@ -2499,6 +2584,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                             &mut agent.check_tuns,
                             &agent.pkt_pool,
                             &agent.tcp_pool,
+                            &mut agent.nameip,
                             &mut agent.perf,
                         );
                     }
@@ -2552,6 +2638,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                                     &mut agent.check_tuns,
                                     &agent.pkt_pool,
                                     &agent.tcp_pool,
+                                    &mut agent.nameip,
                                     &mut agent.perf,
                                 );
                                 if rereg.is_some() {
@@ -2584,6 +2671,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                                     &mut agent.vpn_rx,
                                     &mut agent.vpn_tx,
                                     &agent.pkt_pool,
+                                    &mut agent.nameip,
                                 );
                             }
                             agent.tuns.insert(idx.0, tun_info);
@@ -2632,6 +2720,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                             &mut check_tuns,
                             &agent.pkt_pool,
                             &agent.tcp_pool,
+                            &mut agent.nameip,
                             &mut agent.perf,
                         );
                         if rereg.is_some() {
@@ -2657,24 +2746,24 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
         }
 
         if !agent.gw_onboarded && agent.idp_onboarded {
-            if Instant::now() > last_onboard + Duration::from_millis(ONBOARD_RETRY) {
+            if now > last_onboard + Duration::from_millis(ONBOARD_RETRY) {
                 if let Some(gw_tun) = agent.tuns.get_mut(&GWTUN_IDX) {
                     send_onboard_info(&mut agent.reginfo, &mut gw_tun.tun());
-                    last_onboard = Instant::now();
+                    last_onboard = now;
                 }
             }
         }
 
         // Note that we have a poll timeout of two seconds, but packets can keep the loop busy
         // so make sure we monitor only every two secs
-        if Instant::now() > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
+        if now > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
             monitor_onboard(&mut agent);
             monitor_gw(&mut agent, &mut poll);
             monitor_fd_vpn(&mut agent, &mut poll);
             monitor_tcp_vpn(&mut agent, &mut poll);
-            monitor_ager = Instant::now();
+            monitor_ager = now;
         }
-        if Instant::now() > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+        if now > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
             monitor_parse_pending(
                 &mut agent.flows,
                 &mut agent.parse_pending,
@@ -2685,11 +2774,12 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                 agent.gw_onboarded,
                 &agent.pkt_pool,
                 &agent.tcp_pool,
+                &mut agent.nameip,
                 &mut agent.perf,
             );
-            service_parse_ager = Instant::now();
+            service_parse_ager = now;
         }
-        if Instant::now() > flow_ager + Duration::from_secs(MONITOR_FLOW_AGE) {
+        if now > flow_ager + Duration::from_secs(MONITOR_FLOW_AGE) {
             // Check the flow aging only once every 30 seconds
             monitor_flows(
                 &mut poll,
@@ -2699,12 +2789,17 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                 &mut agent.flows_active,
                 &agent.pkt_pool,
                 &agent.tcp_pool,
+                &agent.nameip,
             );
-            flow_ager = Instant::now();
+            flow_ager = now;
         }
-        if Instant::now() > buffer_monitor + Duration::from_secs(MONITOR_IDLE_BUFS) {
+        if now > buffer_monitor + Duration::from_secs(MONITOR_IDLE_BUFS) {
             monitor_buffers(&mut agent.flows, &mut agent.flows_active);
-            buffer_monitor = Instant::now();
+            buffer_monitor = now;
+        }
+        if now > dns_monitor + Duration::from_secs(MONITOR_DNS) {
+            dns::monitor_dns(&mut agent.nameip);
+            dns_monitor = now;
         }
     }
 }
