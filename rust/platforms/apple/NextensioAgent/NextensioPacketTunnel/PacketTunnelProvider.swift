@@ -149,6 +149,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         
         let ipv4Settings = NEIPv4Settings(addresses: ["169.254.2.1"], subnetMasks: ["255.255.255.0"])
 
+        // An informative/interesting rant on how mac DNS works is below:
+        // https://threadreaderapp.com/thread/1380388035250941957.html
         if self.hasDefault {
             // We want all default traffic to go via nextensio, so we need DNS
             // servers for that. TODO: We can let these dns server IPs be configured
