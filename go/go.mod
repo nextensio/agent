@@ -15,7 +15,7 @@ require (
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
 	gitlab.com/nextensio/common v0.0.0-20210823213928-d19c3ae409b9 // indirect
-	gitlab.com/nextensio/common/go v0.0.0-20210902182420-a728c5caaaf1
+	gitlab.com/nextensio/common/go v0.0.0-20210908233514-4f844fb27b4c
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 )
