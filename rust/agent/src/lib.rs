@@ -585,6 +585,9 @@ fn dial_gateway(
     }
 }
 
+// NOTE: Serde makes it easy to do this, but serde is a freaking huge
+// crate with tons of dependencies and we dont want that to bloat our
+// agent size (especially on ios)
 fn extended_attributes(reginfo: &RegistrationInfo) -> String {
     // NOTE NOTE NOTE REMEMBER: There is no comma after the last element
     // in json. If the json format here is wrong then minion code will barf.

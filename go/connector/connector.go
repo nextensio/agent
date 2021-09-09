@@ -60,6 +60,7 @@ var clientid *string
 var gateway *string
 var cluster string
 var ports []int = []int{}
+var wireTracer opentracing.Tracer
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -118,6 +119,12 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 	if (serr != nil) || (spanCtx == nil) {
 		return nil
 	}
+	if flow.WireSpanStartTime != "" {
+		var startTime time.Time
+		startTime.UnmarshalJSON([]byte(flow.WireSpanStartTime))
+		span := wireTracer.StartSpan("On Wire", opentracing.StartTime(startTime), opentracing.FollowsFrom(spanCtx))
+		span.Finish()
+	}
 	span := tracer.StartSpan(cluster+"-"+regInfo.Userid,
 		opentracing.FollowsFrom(spanCtx))
 	span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
@@ -136,6 +143,7 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 	var span *opentracing.Span
+	var finishT time.Time
 
 	for {
 		hdr, buf, err := tun.Read()
@@ -187,6 +195,12 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 						timeout = UDP_AGER
 					}
 					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
+					if span != nil {
+						t := time.Now()
+						byteA, _ := t.MarshalJSON()
+						newFlow.WireSpanStartTime = string(byteA)
+						finishT = t
+					}
 				}
 			}
 			e := dest.Conn.Write(hdr, buf)
@@ -195,7 +209,9 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 				return
 			}
 			if span != nil {
-				(*span).Finish()
+				var finishTime opentracing.FinishOptions
+				finishTime.FinishTime = finishT
+				(*span).FinishWithOptions(finishTime)
 				span = nil
 			}
 			dest.Tx += 1
@@ -297,7 +313,7 @@ func monitorController(lg *log.Logger) {
 	var keepalive uint = 30
 	force_onboard := false
 	var tokens *accessIdTokens
-	var closer io.Closer
+	var closer, closerWire io.Closer
 
 	for {
 		tokens = authenticate(*idp, *clientid, *username, *password)
@@ -344,9 +360,19 @@ func monitorController(lg *log.Logger) {
 					keepalive = regInfo.Keepalive
 				}
 				if closer == nil {
-					closer = initJaegerTrace("nxt-"+regInfo.Tenant+"-trace", lg)
+					closer = initJaegerTrace("nxt-"+regInfo.Tenant+"-trace", lg, false)
 					if closer != nil {
 						defer closer.Close()
+					}
+				}
+				// The below trace is for generating spans for the duration when the packet is on
+				// the wire (From dest.write() to read() from the tunnel on the other end of the tunnel)
+				// Seperate instance of the Jaegertrace with different service name is needed to display
+				// these gap spans in different colors compared to the spans generated from the above instance.
+				if closerWire == nil {
+					closerWire = initJaegerTrace("nxt-"+regInfo.Tenant+"-onwire-trace", lg, true)
+					if closerWire != nil {
+						defer closerWire.Close()
 					}
 				}
 			}
@@ -467,7 +493,10 @@ func svrAccept(lg *log.Logger) {
 	}
 }
 
-func initJaegerTrace(service string, lg *log.Logger) io.Closer {
+func initJaegerTrace(service string, lg *log.Logger, onWire bool) io.Closer {
+	var tracer opentracing.Tracer
+	var closer io.Closer
+	var err error
 	collector_url := os.Getenv("JAEGER_COLLECTOR")
 	if collector_url == "" {
 		collector_url = regInfo.JaegerCollector
@@ -486,16 +515,25 @@ func initJaegerTrace(service string, lg *log.Logger) io.Closer {
 	jLogger := jaegerlog.StdLogger
 	debugLogger := jaegerlog.DebugLogAdapter(jLogger)
 	jMetricsFactory := prometheus.New()
-	tracer, closer, err := cfg.NewTracer(
-		jaegercfg.Logger(debugLogger),
-		jaegercfg.Metrics(jMetricsFactory),
-	)
+	if onWire {
+		tracer, closer, err = cfg.NewTracer(jaegercfg.Logger(debugLogger))
+	} else {
+		tracer, closer, err = cfg.NewTracer(
+			jaegercfg.Logger(debugLogger),
+			jaegercfg.Metrics(jMetricsFactory),
+		)
+	}
 	if err != nil {
 		lg.Println("JaegerTraceInit Failed - %v", err)
 		cfg.Disabled = true
 		tracer, closer, err = cfg.NewTracer()
 	}
-	opentracing.SetGlobalTracer(tracer)
+	if onWire {
+		wireTracer = tracer
+	} else {
+		opentracing.SetGlobalTracer(tracer)
+
+	}
 	lg.Println("JaegerTrace Initialized. Collector Endpoint:", collector_url)
 	return closer
 }
