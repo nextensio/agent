@@ -585,6 +585,35 @@ fn dial_gateway(
     }
 }
 
+// NOTE: Serde makes it easy to do this, but serde is a freaking huge
+// crate with tons of dependencies and we dont want that to bloat our
+// agent size (especially on ios)
+fn extended_attributes(reginfo: &RegistrationInfo) -> String {
+    // NOTE NOTE NOTE REMEMBER: There is no comma after the last element
+    // in json. If the json format here is wrong then minion code will barf.
+    // So to save some testing time, first print out this whole thing in a test
+    // program and throw the json into an online json linter / validator and then
+    // proceed to do rest of the testing
+    return format!(
+        r#"{{
+        "_hostname": "{}", 
+        "_model": "{}",
+        "_osType": "{}",
+        "_osName": "{}",
+        "_osPatch": {},
+        "_osMajor": {},
+        "_osMinor": {}
+    }}"#,
+        reginfo.hostname.clone(),
+        reginfo.model.clone(),
+        reginfo.os_type.clone(),
+        reginfo.os_name.clone(),
+        reginfo.os_patch as u32,
+        reginfo.os_major as u32,
+        reginfo.os_minor as u32
+    );
+}
+
 fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
     let mut onb = NxtOnboard::default();
     onb.agent = true;
@@ -594,13 +623,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
     onb.access_token = reginfo.access_token.clone();
     onb.cluster = reginfo.cluster.clone();
     onb.connect_id = reginfo.connect_id.clone();
-    onb.hostname = reginfo.hostname.clone();
-    onb.model = reginfo.model.clone();
-    onb.os_type = reginfo.os_type.clone();
-    onb.os_name = reginfo.os_name.clone();
-    onb.os_patch = reginfo.os_patch as u32;
-    onb.os_major = reginfo.os_major as u32;
-    onb.os_minor = reginfo.os_minor as u32;
+    onb.attributes = extended_attributes(reginfo);
 
     let mut hdr = NxtHdr::default();
     hdr.hdr = Some(Hdr::Onboard(onb));
