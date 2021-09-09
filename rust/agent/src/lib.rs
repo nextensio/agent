@@ -36,6 +36,7 @@ use std::{
 use std::{sync::atomic::AtomicI32, sync::atomic::AtomicU32, sync::atomic::AtomicUsize};
 use webproxy::WebProxy;
 use websock::WebSession;
+use serde_json::json;
 mod dns;
 
 // Note1: The "vpn" seen in this file refers to the tun interface from the OS on the device
@@ -594,13 +595,17 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
     onb.access_token = reginfo.access_token.clone();
     onb.cluster = reginfo.cluster.clone();
     onb.connect_id = reginfo.connect_id.clone();
-    onb.hostname = reginfo.hostname.clone();
-    onb.model = reginfo.model.clone();
-    onb.os_type = reginfo.os_type.clone();
-    onb.os_name = reginfo.os_name.clone();
-    onb.os_patch = reginfo.os_patch as u32;
-    onb.os_major = reginfo.os_major as u32;
-    onb.os_minor = reginfo.os_minor as u32;
+
+    let attributes = json!({
+        "_hostname": reginfo.hostname.clone(),
+        "_model": reginfo.model.clone(),
+        "_osType": reginfo.os_type.clone(),
+        "_osName": reginfo.os_name.clone(),
+        "_osPatch": reginfo.os_patch as u32,
+        "_osMajor": reginfo.os_major as u32,
+        "_osMinor": reginfo.os_minor as u32
+        });
+    onb.attributes = attributes.to_string();
 
     let mut hdr = NxtHdr::default();
     hdr.hdr = Some(Hdr::Onboard(onb));
