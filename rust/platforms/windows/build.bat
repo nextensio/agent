@@ -72,8 +72,8 @@ if exist .deps\prepared goto :build
 	if not exist "%~1" mkdir "%~1"
 	echo [+] wix compiling nxt-win.wxs
 	candle %WIX_CANDLE_FLAGS% -dAGENT_PLAT="%~1" -dProductVersion="1.0.0" -o "%~1\nxt-win.wixobj" -arch %~3 nxt-win.wxs || goto :error
-	echo [+] wix linking nxt-win-%~1.msi package
-	light %WIX_LIGHT_FLAGS% -out "dist\nxt-win-%~1.msi" "%~1\nxt-win.wixobj" || goto :error
+	echo [+] wix linking nextensio-%~1.msi package
+	light %WIX_LIGHT_FLAGS% -out "dist\nextensio-%~1.msi" "%~1\nxt-win.wixobj" || goto :error
 	goto :eof
 
 :error
