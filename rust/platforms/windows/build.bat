@@ -41,10 +41,10 @@ if exist .deps\prepared goto :build
 	if "%SigningCertificate%"=="" goto :success
 	if "%TimestampServer%"=="" goto :success
 	echo [+] Signing
-	signtool sign /sha1 "%SigningCertificate%" /fd sha256 /tr "%TimestampServer%" /td sha256 /d nextensio.net amd64\nxt-windows.exe || goto :error
+	signtool sign /sha1 "%SigningCertificate%" /fd sha256 /tr "%TimestampServer%" /td sha256 /d nextensio.net amd64\nextensio.exe || goto :error
 
 :success
-	echo [+] Success. Launch nxt-windows.exe.
+	echo [+] Success. Launch nextensio.exe.
 	exit /b 0
 
 :download
@@ -59,13 +59,13 @@ if exist .deps\prepared goto :build
 	goto :eof
 
 :build_plat
-	del %~1\nxt-windows.exe
+	del %~1\nextensio.exe
 	set GOARCH=%~3
 	mkdir %1 >NUL 2>&1
 	echo [+] Assembling resources %1
 	windres.exe -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
 	echo [+] Building program %1
-	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nxt-windows.exe" || exit /b 1
+	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nextensio.exe" || exit /b 1
 	goto :eof
 
 :msi

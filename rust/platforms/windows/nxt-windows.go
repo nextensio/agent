@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -30,6 +29,10 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/device"
 
+	fyne "fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
@@ -60,6 +63,9 @@ var password string
 var idp string
 var clientid string
 var luid *winipcfg.LUID
+var loginStatus *widget.Button
+var watcher *interfaceWatcher
+var myApp fyne.App
 
 const MTU = 1500
 
@@ -288,21 +294,6 @@ func monitorController(lg *log.Logger) {
 	}
 }
 
-func args() {
-	flag.Parse()
-	idp = "https://dev-24743301.okta.com"
-	clientid = "0oav0q3hn65I4Zkmr5d6"
-	controller = "server.nextensio.net:8080"
-	username, password = credentials()
-}
-
-func initOnboard() {
-	common.MAXBUF = (64 * 1024)
-	unique = uuid.New()
-	uniqueId = unique.String()
-	args()
-}
-
 func agentOnboard() {
 	l := len(regInfo.Domains)
 	domains := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(uintptr(0))))
@@ -469,40 +460,74 @@ func vpnRoutes() {
 		}
 	}
 
-	if hasDefault {
-		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create RouteData: %v", err)
-			os.Exit(ExitSetupFailed)
+	count := 0
+	for {
+		count += 1
+		if hasDefault {
+			err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				logger.Errorf("Failed to create RouteData: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				logger.Errorf("Failed to create DNS: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+		} else {
+			err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				logger.Errorf("Failed to create RouteData: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				logger.Errorf("Failed to create DNS: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
 		}
-		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create DNS: %v", err)
-			os.Exit(ExitSetupFailed)
-		}
-	} else {
-		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create RouteData: %v", err)
-			os.Exit(ExitSetupFailed)
-		}
-		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create DNS: %v", err)
-			os.Exit(ExitSetupFailed)
-		}
+		break
 	}
 }
 
-func main() {
+func UIEventLoop() {
+	myApp = app.New()
+	w := myApp.NewWindow("Login")
+	w.Resize(fyne.NewSize(300, 100))
+	w.SetOnClosed(func() {
+	})
+
+	u := widget.NewEntry()
+	p := widget.NewPasswordEntry()
+	loginStatus = widget.NewButton("Login", func() {
+		username = u.Text
+		password = p.Text
+		loginStatus.Text = "Logging user in"
+		tokens := authenticate(idp, clientid, username, password)
+		if tokens != nil {
+			loginStatus.Text = "Logged in"
+			loginStatus.Disable()
+			go monitorController(lg)
+		} else {
+			loginStatus.Text = "Login failed, please try again"
+		}
+	})
+
+	w.SetContent(container.NewVBox(
+		u,
+		p,
+		loginStatus,
+	))
+
+	w.ShowAndRun()
+}
+
+func postLogin() {
 	interfaceName := "nxt0"
-	lg = log.New(os.Stdout, "Nextensio: ", 0)
-	logger = device.NewLogger(
-		device.LogLevelVerbose,
-		fmt.Sprintf("(%s) ", interfaceName),
-	)
-	initOnboard()
-	go monitorController(lg)
 	for {
 		if !onboarded {
 			time.Sleep(time.Second)
@@ -511,7 +536,8 @@ func main() {
 		break
 	}
 
-	watcher, err := watchInterface()
+	var err error
+	watcher, err = watchInterface()
 	if err != nil {
 		logger.Verbosef("Watcher error %s", err)
 		return
@@ -600,8 +626,25 @@ func main() {
 	select {
 	case <-term:
 	}
+	myApp.Quit()
+}
 
-	// clean up
-	watcher.Destroy()
+func main() {
+	lg = log.New(os.Stdout, "Nextensio: ", 0)
+	logger = device.NewLogger(
+		device.LogLevelVerbose,
+		"(nxt0) ",
+	)
+	common.MAXBUF = (64 * 1024)
+	unique = uuid.New()
+	uniqueId = unique.String()
+	idp = "https://dev-24743301.okta.com"
+	clientid = "0oav0q3hn65I4Zkmr5d6"
+	controller = "server.nextensio.net:8080"
+	go postLogin()
+	UIEventLoop()
 	logger.Verbosef("Shutting down")
+	if watcher != nil {
+		watcher.Destroy()
+	}
 }
