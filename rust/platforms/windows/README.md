@@ -123,6 +123,6 @@ Ref: https://www.packtpub.com/product/wix-3-6-a-developer-s-guide-to-windows-ins
 
 Miscellaneous Notes:
 
-1. If you want to distribute some "debug" version with console output, you can 
-remove the "-H windowsgui" flag in build.bat and then the distributable version
+1. If you want to generate a "debug" version with console output, you can 
+remove the "-H windowsgui" flag in build.bat and then the  version
 that is built will pop up a console when the nextensio app is launched 
