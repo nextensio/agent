@@ -193,7 +193,6 @@ public class NxtApp extends Application {
             String gateway = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
             String cluster = onboard.getString("cluster");
-            String jaeger = onboard.getString("jaegerCollector");
             String traceusers = onboard.getString("traceusers");
             JSONArray cert = onboard.getJSONArray("cacert");
             byte[] cacert = new byte[cert.length()];
@@ -238,7 +237,7 @@ public class NxtApp extends Application {
             }
 
             nxtOnboard(accessToken, uuid, userid, gateway, connectid, cluster, cacert, domains, dnsip, needdns, services,
-                       hostname, model, "android", osname, major, minor, patch, jaeger, traceusers);
+                       hostname, model, "android", osname, major, minor, patch, traceusers);
 
             last_version = onboard.getString("version");
             keepalive = onboard.getInt("keepalive");
@@ -263,6 +262,6 @@ public class NxtApp extends Application {
                                           String connectid, String cluster, 
                                           byte []cacert, String []domains, String[] dnsip, int[] needdns, String []services,
                                           String hostname, String model, String ostype, String osname,
-                                          int major, int minor, int patch, String jaeger_collector,
+                                          int major, int minor, int patch,
                                           String traceusers);
 }

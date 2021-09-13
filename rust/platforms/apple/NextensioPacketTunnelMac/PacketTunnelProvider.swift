@@ -393,7 +393,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.cluster = UnsafeMutablePointer<Int8>(mutating: (json["cluster"] as! NSString).utf8String)
         registration.uuid = UnsafeMutablePointer<Int8>(mutating: (uuid as NSString).utf8String)
-        registration.jaeger_collector = UnsafeMutablePointer<Int8>(mutating: (json["jaegerCollector"] as! NSString).utf8String)
         registration.trace_users = UnsafeMutablePointer<Int8>(mutating: (json["traceusers"] as! NSString).utf8String)
         
         let dom = json["domains"] as! NSMutableArray
@@ -519,7 +518,6 @@ extension CRegistrationInfo {
                   os_patch: 0,
                   os_major: 0,
                   os_minor: 0,
-                  jaeger_collector: nil,
                   trace_users: nil)
     }
 }

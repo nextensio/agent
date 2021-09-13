@@ -36,22 +36,21 @@ type Domain struct {
 }
 
 type RegistrationInfo struct {
-	Gateway         string   `json:"gateway"`
-	AccessToken     string   `json:"accessToken"`
-	ConnectID       string   `json:"connectid"`
-	Cluster         string   `json:"cluster"`
-	Domains         []Domain `json:"domains"`
-	CACert          []rune   `json:"cacert"`
-	Userid          string   `json:"userid"`
-	Tenant          string   `json:"tenant"`
-	Services        []string `json:"services"`
-	Version         string   `json:"version"`
-	Keepalive       uint     `json:"keepalive"`
-	JaegerCollector string   `json:"jaegerCollector"`
-	TraceUsers      string   `json:"traceusers"`
+	Gateway     string   `json:"gateway"`
+	AccessToken string   `json:"accessToken"`
+	ConnectID   string   `json:"connectid"`
+	Cluster     string   `json:"cluster"`
+	Domains     []Domain `json:"domains"`
+	CACert      []rune   `json:"cacert"`
+	Userid      string   `json:"userid"`
+	Tenant      string   `json:"tenant"`
+	Services    []string `json:"services"`
+	Version     string   `json:"version"`
+	Keepalive   uint     `json:"keepalive"`
+	TraceUsers  string   `json:"traceusers"`
 }
 
-func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bool {
+func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool {
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
 	// should have verifiable certs via a test.nextensio.net domain or something
@@ -61,7 +60,7 @@ func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bo
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+accessToken)
+		req.Header.Add("Authorization", "Bearer "+sharedKey)
 		resp, err := client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
@@ -87,7 +86,7 @@ type KeepaliveResponse struct {
 	Version string `json:"version"`
 }
 
-func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, version string, uuid string) bool {
+func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, version string, uuid string) bool {
 	var ka KeepaliveResponse
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
@@ -98,7 +97,7 @@ func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, 
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/keepalive/"+version+"/"+uuid, nil)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+accessToken)
+		req.Header.Add("Authorization", "Bearer "+sharedKey)
 		resp, err := client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()

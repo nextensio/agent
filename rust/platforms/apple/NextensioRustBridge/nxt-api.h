@@ -33,7 +33,6 @@ typedef struct CRegistrationInfo
     int os_patch;
     int os_major;
     int os_minor;
-    char *jaeger_collector;
     char *trace_users;
 } CRegistrationInfo;
 

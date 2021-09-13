@@ -109,7 +109,6 @@ pub struct RegistrationInfo {
     os_patch: usize,
     os_major: usize,
     os_minor: usize,
-    jaeger_collector: String,
     trace_users: String,
 }
 
@@ -136,7 +135,6 @@ pub struct CRegistrationInfo {
     pub os_patch: c_int,
     pub os_major: c_int,
     pub os_minor: c_int,
-    pub jaeger_collector: *const c_char,
     pub trace_users: *const c_char,
 }
 
@@ -221,9 +219,6 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
         reginfo.os_major = creg.os_major as usize;
         reginfo.os_minor = creg.os_minor as usize;
 
-        reginfo.jaeger_collector = CStr::from_ptr(creg.jaeger_collector)
-            .to_string_lossy()
-            .into_owned();
         reginfo.trace_users = CStr::from_ptr(creg.trace_users)
             .to_string_lossy()
             .into_owned();

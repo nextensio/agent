@@ -237,21 +237,6 @@ version = "0.1.0"
 source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772edd7415714605817c51cdc1d0c"
 
 [[package]]
-name = "common"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "etherparse",
- "httparse",
- "log",
- "mio 0.7.11",
- "native-tls",
- "object-pool",
- "prost",
- "prost-build",
-]
-
-[[package]]
 name = "cookie"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -387,14 +372,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 
 [[package]]
-name = "dummy"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
-]
-
-[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -467,17 +444,6 @@ name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
-
-[[package]]
-name = "fd"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
- "libc",
- "mio 0.7.11",
- "object-pool",
-]
 
 [[package]]
 name = "fixedbitset"
@@ -799,17 +765,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "l3proxy"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
- "managed",
- "object-pool",
- "smoltcp",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -995,16 +950,6 @@ dependencies = [
  "cfg-if 0.1.10",
  "libc",
  "winapi 0.3.9",
-]
-
-[[package]]
-name = "netconn"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
- "mio 0.7.11",
- "object-pool",
 ]
 
 [[package]]
@@ -2160,32 +2105,6 @@ name = "wasi"
 version = "0.10.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
-
-[[package]]
-name = "webproxy"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
- "libc",
- "mio 0.7.11",
- "object-pool",
-]
-
-[[package]]
-name = "websock"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#4f844fb27b4cbe2f6b178baf308a881c0f484ae2"
-dependencies = [
- "bytes 1.0.1",
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
- "log",
- "mio 0.7.11",
- "native-tls",
- "object-pool",
- "prost",
- "socket2",
-]
 
 [[package]]
 name = "which"

@@ -339,29 +339,28 @@ func agentOnboard() {
 	}
 
 	creg := C.CRegistrationInfo{
-		gateway:          C.CString(regInfo.Gateway),
-		access_token:     C.CString(regInfo.AccessToken),
-		connect_id:       C.CString(regInfo.ConnectID),
-		cluster:          C.CString(regInfo.Cluster),
-		domains:          (**C.char)(domains),
-		needdns:          (*C.int)(needdns),
-		dnsip:            (**C.char)(dnsip),
-		num_domains:      C.int(len(regInfo.Domains)),
-		ca_cert:          (*C.char)(ca_cert),
-		num_cacert:       C.int(len(regInfo.CACert)),
-		userid:           C.CString(regInfo.Userid),
-		uuid:             C.CString(uniqueId),
-		services:         (**C.char)(services),
-		num_services:     C.int(len(regInfo.Services)),
-		hostname:         C.CString("localhost"),
-		model:            C.CString("unknown"),
-		os_type:          C.CString("windows"),
-		os_name:          C.CString("unknown"),
-		os_patch:         0,
-		os_major:         0,
-		os_minor:         0,
-		jaeger_collector: C.CString(regInfo.JaegerCollector),
-		trace_users:      C.CString(regInfo.TraceUsers),
+		gateway:      C.CString(regInfo.Gateway),
+		access_token: C.CString(regInfo.AccessToken),
+		connect_id:   C.CString(regInfo.ConnectID),
+		cluster:      C.CString(regInfo.Cluster),
+		domains:      (**C.char)(domains),
+		needdns:      (*C.int)(needdns),
+		dnsip:        (**C.char)(dnsip),
+		num_domains:  C.int(len(regInfo.Domains)),
+		ca_cert:      (*C.char)(ca_cert),
+		num_cacert:   C.int(len(regInfo.CACert)),
+		userid:       C.CString(regInfo.Userid),
+		uuid:         C.CString(uniqueId),
+		services:     (**C.char)(services),
+		num_services: C.int(len(regInfo.Services)),
+		hostname:     C.CString("localhost"),
+		model:        C.CString("unknown"),
+		os_type:      C.CString("windows"),
+		os_name:      C.CString("unknown"),
+		os_patch:     0,
+		os_major:     0,
+		os_minor:     0,
+		trace_users:  C.CString(regInfo.TraceUsers),
 	}
 
 	C.onboard(creg)
@@ -391,7 +390,6 @@ func agentOnboard() {
 	C.free(unsafe.Pointer(creg.model))
 	C.free(unsafe.Pointer(creg.os_type))
 	C.free(unsafe.Pointer(creg.os_name))
-	C.free(unsafe.Pointer(creg.jaeger_collector))
 	C.free(unsafe.Pointer(creg.trace_users))
 
 	// See if the routes need to change from catch-all to specific or vice versa

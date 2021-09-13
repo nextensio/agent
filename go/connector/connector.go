@@ -1,11 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -23,7 +22,6 @@ import (
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	"gitlab.com/nextensio/common/go/transport/netconn"
-	"golang.org/x/crypto/ssh/terminal"
 )
 
 type flowKey struct {
@@ -53,14 +51,16 @@ var gwTun common.Transport
 var gwStreams chan common.NxtStream
 var appStreams chan common.NxtStream
 var unique uuid.UUID
-var username *string
-var password *string
 var idp *string
 var clientid *string
 var gateway *string
+var keyFile *string
+var sharedKey string
 var cluster string
 var ports []int = []int{}
+var traceInitLock sync.Mutex
 var wireTracer opentracing.Tracer
+var globTracer opentracing.Tracer
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -106,6 +106,9 @@ func gwToAppClose(tun common.Transport, dest ConnStats, span *opentracing.Span) 
 }
 
 func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
+	if globTracer == nil || wireTracer == nil {
+		return nil
+	}
 	// Do tracing only if TraceCtx is set
 	if flow.TraceCtx == "" {
 		return nil
@@ -113,8 +116,7 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 	// Fake "uber-trace-id" http header to create tracer spanCtx
 	httpHdr := make(http.Header)
 	httpHdr.Add("Uber-Trace-Id", flow.TraceCtx)
-	tracer := opentracing.GlobalTracer()
-	spanCtx, serr := tracer.Extract(opentracing.HTTPHeaders,
+	spanCtx, serr := globTracer.Extract(opentracing.HTTPHeaders,
 		opentracing.HTTPHeadersCarrier(httpHdr))
 	if (serr != nil) || (spanCtx == nil) {
 		return nil
@@ -125,7 +127,7 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 		span := wireTracer.StartSpan("On Wire", opentracing.StartTime(startTime), opentracing.FollowsFrom(spanCtx))
 		span.Finish()
 	}
-	span := tracer.StartSpan(cluster+"-"+regInfo.Userid,
+	span := globTracer.StartSpan(cluster+"-"+regInfo.Userid,
 		opentracing.FollowsFrom(spanCtx))
 	span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
 	span.SetTag("nxt-trace-destagent", flow.DestAgent)
@@ -154,6 +156,8 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 		switch hdr.Hdr.(type) {
 		case *nxthdr.NxtHdr_Onboard:
 			lg.Println("Got onboard response")
+			onboard := hdr.Hdr.(*nxthdr.NxtHdr_Onboard).Onboard
+			initJaeger(lg, onboard)
 		case *nxthdr.NxtHdr_Flow:
 			if dest.Conn == nil {
 				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
@@ -312,45 +316,17 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 func monitorController(lg *log.Logger) {
 	var keepalive uint = 30
 	force_onboard := false
-	var tokens *accessIdTokens
-	var closer, closerWire io.Closer
 
-	for {
-		tokens = authenticate(*idp, *clientid, *username, *password)
-		if tokens != nil {
-			break
-		}
-		lg.Println("Unable to authenticate connector with the IDP")
-		time.Sleep(10 * time.Second)
-	}
-	refresh := time.Now()
 	last_keepalive := time.Now()
 	for {
 		if onboarded {
 			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
-				force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
+				force_onboard = ControllerKeepalive(lg, controller, sharedKey, regInfo.Version, uniqueId)
 				last_keepalive = time.Now()
 			}
 		}
-		// Okta is configured with one hour as the access token lifetime,
-		// refresh at 45 minutes
-		if time.Since(refresh).Minutes() >= 45 {
-			old_tokens := tokens
-			tokens = refreshTokens(*idp, *clientid, tokens.Refresh)
-			if tokens != nil {
-				refresh = time.Now()
-				// Send the new tokens to the gateway
-				force_onboard = true
-				regInfoLock.Lock()
-				regInfo.AccessToken = tokens.AccessToken
-				regInfoLock.Unlock()
-			} else {
-				tokens = old_tokens
-				lg.Println("Token refresh failed, will try again in 30 seconds")
-			}
-		}
 		if !onboarded || force_onboard {
-			if ControllerOnboard(lg, controller, tokens.AccessToken) {
+			if ControllerOnboard(lg, controller, sharedKey) {
 				onboarded = true
 				force_onboard = false
 				gw_onboarded = false
@@ -358,22 +334,6 @@ func monitorController(lg *log.Logger) {
 					keepalive = 5 * 60
 				} else {
 					keepalive = regInfo.Keepalive
-				}
-				if closer == nil {
-					closer = initJaegerTrace("nxt-"+regInfo.Tenant+"-trace", lg, false)
-					if closer != nil {
-						defer closer.Close()
-					}
-				}
-				// The below trace is for generating spans for the duration when the packet is on
-				// the wire (From dest.write() to read() from the tunnel on the other end of the tunnel)
-				// Seperate instance of the Jaegertrace with different service name is needed to display
-				// these gap spans in different colors compared to the spans generated from the above instance.
-				if closerWire == nil {
-					closerWire = initJaegerTrace("nxt-"+regInfo.Tenant+"-onwire-trace", lg, true)
-					if closerWire != nil {
-						defer closerWire.Close()
-					}
 				}
 			}
 		}
@@ -391,6 +351,7 @@ func monitorGw(lg *log.Logger) {
 				if *gateway != "" {
 					regInfo.Gateway = *gateway
 				}
+				cluster = getClusterName(regInfo.Gateway)
 				gwTun = DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
 				if gwTun != nil {
 					// The only data this will get is onboard response/control messages,
@@ -417,16 +378,6 @@ func monitorGw(lg *log.Logger) {
 	}
 }
 
-func credentials() (string, string) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Nextensio Username: ")
-	username, _ := reader.ReadString('\n')
-	fmt.Print("Nextensio Password: ")
-	bytePassword, _ := terminal.ReadPassword(0)
-	password := string(bytePassword)
-	return strings.TrimSpace(username), strings.TrimSpace(password)
-}
-
 func getClusterName(gateway string) string {
 	if len(gateway) <= len(".nextensio.net") {
 		return "unknown"
@@ -437,11 +388,10 @@ func getClusterName(gateway string) string {
 
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
-	username = flag.String("username", "", "connector onboarding userid")
-	password = flag.String("password", "", "connector onboarding password")
 	idp = flag.String("idp", "https://dev-24743301.okta.com", "IDP to use to onboard")
 	clientid = flag.String("client", "0oav0q3hn65I4Zkmr5d6", "IDP client id")
 	gateway = flag.String("gateway", "", "Gateway name")
+	keyFile = flag.String("key", "/opt/nextensio/connector.key", "Secret Key file name")
 	p := flag.String("ports", "", "Ports to listen on, comma seperated")
 	flag.Parse()
 	if *p != "" {
@@ -456,11 +406,15 @@ func args() {
 		}
 	}
 	controller = *c
-	if *username == "" || *password == "" {
-		*username, *password = credentials()
+	s, e := ioutil.ReadFile(*keyFile)
+	if e != nil {
+		fmt.Println("Cannot read from key file: ", *keyFile, e)
+		os.Exit(1)
 	}
-	cluster = getClusterName(*gateway)
-	fmt.Println(*c, *username, *password, *idp, *clientid, *gateway, cluster, ports)
+	sharedKey = string(s)
+	sharedKey = strings.TrimSpace(sharedKey)
+	sharedKey = strings.TrimRight(strings.TrimLeft(sharedKey, "\n"), "\n")
+	fmt.Println(*c, *idp, *clientid, *gateway, cluster, ports)
 }
 
 func svrListen(lg *log.Logger, conn *netconn.NetConn, port int) {
@@ -493,13 +447,10 @@ func svrAccept(lg *log.Logger) {
 	}
 }
 
-func initJaegerTrace(service string, lg *log.Logger, onWire bool) io.Closer {
-	var tracer opentracing.Tracer
-	var closer io.Closer
-	var err error
+func initJaegerTrace(service string, lg *log.Logger, onboard *nxthdr.NxtOnboard, onWire bool) {
 	collector_url := os.Getenv("JAEGER_COLLECTOR")
 	if collector_url == "" {
-		collector_url = regInfo.JaegerCollector
+		collector_url = onboard.JaegerCollector
 	}
 	cfg := &jaegercfg.Configuration{
 		ServiceName: service,
@@ -515,27 +466,41 @@ func initJaegerTrace(service string, lg *log.Logger, onWire bool) io.Closer {
 	jLogger := jaegerlog.StdLogger
 	debugLogger := jaegerlog.DebugLogAdapter(jLogger)
 	jMetricsFactory := prometheus.New()
+	var err error
 	if onWire {
-		tracer, closer, err = cfg.NewTracer(jaegercfg.Logger(debugLogger))
+		wireTracer, _, err = cfg.NewTracer(jaegercfg.Logger(debugLogger))
 	} else {
-		tracer, closer, err = cfg.NewTracer(
+		globTracer, _, err = cfg.NewTracer(
 			jaegercfg.Logger(debugLogger),
 			jaegercfg.Metrics(jMetricsFactory),
 		)
+		opentracing.SetGlobalTracer(globTracer)
 	}
 	if err != nil {
 		lg.Println("JaegerTraceInit Failed - %v", err)
 		cfg.Disabled = true
-		tracer, closer, err = cfg.NewTracer()
-	}
-	if onWire {
-		wireTracer = tracer
 	} else {
-		opentracing.SetGlobalTracer(tracer)
-
+		lg.Println("JaegerTrace Initialized. Collector Endpoint:", collector_url)
 	}
-	lg.Println("JaegerTrace Initialized. Collector Endpoint:", collector_url)
-	return closer
+}
+
+func initJaeger(lg *log.Logger, onboard *nxthdr.NxtOnboard) {
+	// Tunnels can flap and multiple onboards can in theory happen in parallel
+	// (although should be very rare in practise). Dont mess up trace init in
+	// that scenario
+	traceInitLock.Lock()
+	defer traceInitLock.Unlock()
+
+	if globTracer == nil {
+		initJaegerTrace("nxt-"+regInfo.Tenant+"-trace", lg, onboard, false)
+	}
+	// The below trace is for generating spans for the duration when the packet is on
+	// the wire (From dest.write() to read() from the tunnel on the other end of the tunnel)
+	// Seperate instance of the Jaegertrace with different service name is needed to display
+	// these gap spans in different colors compared to the spans generated from the above instance.
+	if wireTracer == nil {
+		initJaegerTrace("nxt-"+regInfo.Tenant+"-onwire-trace", lg, onboard, true)
+	}
 }
 
 func main() {
