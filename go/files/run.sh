@@ -5,8 +5,8 @@ echo "$NXT_GW_2_IP $NXT_GW_2_NAME" >> /etc/hosts
 echo "$NXT_GW_3_IP $NXT_GW_3_NAME" >> /etc/hosts
 
 mkdir /opt/nextensio
-echo $NXT_SECRET > /opt/nextensio/connector.key
-grep -o '".*"' /opt/nextensio/connector.key | sed 's/"//g' > /opt/nextensio/connector.key
+echo $NXT_SECRET > /tmp/connector.key
+grep -o '".*"' /tmp/connector.key | sed 's/"//g' > /opt/nextensio/connector.key
 
 # Serve from files to emulate a private webserver. NXT_GW_3_NAME is the name of
 # the server hosted by lighthttpd
