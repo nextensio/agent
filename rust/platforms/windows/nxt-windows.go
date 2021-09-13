@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -28,8 +27,11 @@ import (
 
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/windows"
-	"golang.zx2c4.com/wireguard/device"
 
+	fyne "fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
@@ -46,7 +48,6 @@ var fromAgent net.PacketConn
 var toAgent net.Addr
 var vpnTun *tun.Device
 var agentHandshake bool
-var logger *device.Logger
 var writeLock sync.Mutex
 var lg *log.Logger
 var onboarded bool
@@ -60,6 +61,9 @@ var password string
 var idp string
 var clientid string
 var luid *winipcfg.LUID
+var loginStatus *widget.Button
+var watcher *interfaceWatcher
+var myApp fyne.App
 
 const MTU = 1500
 
@@ -124,7 +128,7 @@ func agentToVpn(tcpTun *common.Transport) {
 	for {
 		_, bufs, e := (*tcpTun).Read()
 		if e != nil {
-			logger.Verbosef("Pipe Read error %s", e)
+			lg.Printf("Pipe Read error %s", e)
 			(*vpnTun).Close()
 			return
 		}
@@ -135,7 +139,7 @@ func agentToVpn(tcpTun *common.Transport) {
 			w, err := (*vpnTun).Write(bufs[0], 0)
 			writeLock.Unlock()
 			if err != nil || w != len(bufs[0]) {
-				logger.Verbosef("vpn write failed error %s, w %d, r %d", e, w, len(bufs[0]))
+				lg.Printf("vpn write failed error %s, w %d, r %d", e, w, len(bufs[0]))
 				(*vpnTun).Close()
 				return
 			}
@@ -194,7 +198,7 @@ func vpnToAgent(tcpTun *common.Transport) {
 		buf := make([]byte, MTU)
 		r, e := (*vpnTun).Read(buf[0:MTU], 0)
 		if e != nil {
-			logger.Verbosef("vpn Read error %s", e)
+			lg.Printf("vpn Read error %s", e)
 			(*vpnTun).Close()
 			return
 		}
@@ -206,7 +210,7 @@ func vpnToAgent(tcpTun *common.Transport) {
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
 		err := (*tcpTun).Write(hdr, net.Buffers{buf[0:r]})
 		if err != nil {
-			logger.Verbosef("Pipe write error %s,  r %d", e, r)
+			lg.Printf("Pipe write error %s,  r %d", e, r)
 			(*vpnTun).Close()
 			return
 		}
@@ -286,21 +290,6 @@ func monitorController(lg *log.Logger) {
 		}
 		time.Sleep(30 * time.Second)
 	}
-}
-
-func args() {
-	flag.Parse()
-	idp = "https://dev-24743301.okta.com"
-	clientid = "0oav0q3hn65I4Zkmr5d6"
-	controller = "server.nextensio.net:8080"
-	username, password = credentials()
-}
-
-func initOnboard() {
-	common.MAXBUF = (64 * 1024)
-	unique = uuid.New()
-	uniqueId = unique.String()
-	args()
 }
 
 func agentOnboard() {
@@ -467,40 +456,74 @@ func vpnRoutes() {
 		}
 	}
 
-	if hasDefault {
-		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create RouteData: %v", err)
-			os.Exit(ExitSetupFailed)
+	count := 0
+	for {
+		count += 1
+		if hasDefault {
+			err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				lg.Printf("Failed to create RouteData: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				lg.Printf("Failed to create DNS: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+		} else {
+			err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				lg.Printf("Failed to create RouteData: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
+			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+				lg.Printf("Failed to create DNS: %v (%d)", err, count)
+				time.Sleep(1 * time.Second)
+				continue
+			}
 		}
-		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create DNS: %v", err)
-			os.Exit(ExitSetupFailed)
-		}
-	} else {
-		err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create RouteData: %v", err)
-			os.Exit(ExitSetupFailed)
-		}
-		err = (*luid).SetDNS(windows.AF_INET, dnsDefaultToSet, nil)
-		if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			logger.Errorf("Failed to create DNS: %v", err)
-			os.Exit(ExitSetupFailed)
-		}
+		break
 	}
 }
 
-func main() {
+func UIEventLoop() {
+	myApp = app.New()
+	w := myApp.NewWindow("Login")
+	w.Resize(fyne.NewSize(300, 100))
+	w.SetOnClosed(func() {
+	})
+
+	u := widget.NewEntry()
+	p := widget.NewPasswordEntry()
+	loginStatus = widget.NewButton("Login", func() {
+		username = u.Text
+		password = p.Text
+		loginStatus.Text = "Logging user in"
+		tokens := authenticate(idp, clientid, username, password)
+		if tokens != nil {
+			loginStatus.Text = "Logged in"
+			loginStatus.Disable()
+			go monitorController(lg)
+		} else {
+			loginStatus.Text = "Login failed, please try again"
+		}
+	})
+
+	w.SetContent(container.NewVBox(
+		u,
+		p,
+		loginStatus,
+	))
+
+	w.ShowAndRun()
+}
+
+func postLogin() {
 	interfaceName := "nxt0"
-	lg = log.New(os.Stdout, "Nextensio: ", 0)
-	logger = device.NewLogger(
-		device.LogLevelVerbose,
-		fmt.Sprintf("(%s) ", interfaceName),
-	)
-	initOnboard()
-	go monitorController(lg)
 	for {
 		if !onboarded {
 			time.Sleep(time.Second)
@@ -509,9 +532,10 @@ func main() {
 		break
 	}
 
-	watcher, err := watchInterface()
+	var err error
+	watcher, err = watchInterface()
 	if err != nil {
-		logger.Verbosef("Watcher error %s", err)
+		lg.Printf("Watcher error %s", err)
 		return
 	}
 
@@ -521,7 +545,7 @@ func main() {
 		return terr
 	})
 	if err != nil {
-		logger.Errorf("Failed to create TUN device: %v", err)
+		lg.Printf("Failed to create TUN device: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
 
@@ -535,32 +559,32 @@ func main() {
 
 	err = (*luid).SetIPAddresses([]net.IPNet{nxtIPAddresToAdd})
 	if err != nil {
-		logger.Errorf("Failed to create IP Addr: %v", err)
+		lg.Printf("Failed to create IP Addr: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
 
 	iface, err := (*luid).IPInterface(windows.AF_INET)
 	if err != nil {
-		logger.Errorf("Failed to get iface for mtu: %v", err)
+		lg.Printf("Failed to get iface for mtu: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
 	iface.NLMTU = MTU
 	err = iface.Set()
 	if err != nil {
-		logger.Errorf("Failed to set iface for mtu: %v", err)
+		lg.Printf("Failed to set iface for mtu: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
 
 	ipif, err := (*luid).IPInterface(windows.AF_INET)
 	if err != nil {
-		logger.Errorf("Failed to get iface for metric: %v", err)
+		lg.Printf("Failed to get iface for metric: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
 	ipif.UseAutomaticMetric = false
 	ipif.Metric = 0
 	err = ipif.Set()
 	if err != nil {
-		logger.Errorf("Failed to set iface for metric: %v", err)
+		lg.Printf("Failed to set iface for metric: %v", err)
 		os.Exit(ExitSetupFailed)
 	}
 	firewall.EnableFirewall(uint64(*luid), true, nil)
@@ -582,7 +606,7 @@ func main() {
 	// wait till we figure out an interface to use
 	for {
 		if defaultIP == 0 {
-			logger.Verbosef("Wait for default IP")
+			lg.Printf("Wait for default IP")
 			time.Sleep(time.Second)
 			continue
 		}
@@ -598,8 +622,21 @@ func main() {
 	select {
 	case <-term:
 	}
+	myApp.Quit()
+}
 
-	// clean up
-	watcher.Destroy()
-	logger.Verbosef("Shutting down")
+func main() {
+	lg = log.New(os.Stdout, "Nextensio: ", 0)
+	common.MAXBUF = (64 * 1024)
+	unique = uuid.New()
+	uniqueId = unique.String()
+	idp = "https://dev-24743301.okta.com"
+	clientid = "0oav0q3hn65I4Zkmr5d6"
+	controller = "server.nextensio.net:8080"
+	go postLogin()
+	UIEventLoop()
+	lg.Printf("Shutting down")
+	if watcher != nil {
+		watcher.Destroy()
+	}
 }

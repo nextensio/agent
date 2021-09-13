@@ -120,5 +120,9 @@ Ref: https://www.packtpub.com/product/wix-3-6-a-developer-s-guide-to-windows-ins
 4. Note1: Because the product ID is fixed, everytime you need to install a new msi, you need to delete it first.
 5. Note2: To workaround this, change Product Id in wxs to "*" to auto-generate the Product ID. Clean up later.
 
-<b> Todo </b>
-1. Develop a GUI
+
+Miscellaneous Notes:
+
+1. If you want to generate a "debug" version with console output, you can 
+remove the "-H windowsgui" flag in build.bat and then the  version
+that is built will pop up a console when the nextensio app is launched 

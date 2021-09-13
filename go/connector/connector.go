@@ -121,14 +121,19 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 	if (serr != nil) || (spanCtx == nil) {
 		return nil
 	}
+	var span opentracing.Span
 	if flow.WireSpanStartTime != "" {
 		var startTime time.Time
 		startTime.UnmarshalJSON([]byte(flow.WireSpanStartTime))
-		span := wireTracer.StartSpan("On Wire", opentracing.StartTime(startTime), opentracing.FollowsFrom(spanCtx))
+		span = wireTracer.StartSpan("On Wire", opentracing.StartTime(startTime), opentracing.FollowsFrom(spanCtx))
 		span.Finish()
 	}
-	span := globTracer.StartSpan(cluster+"-"+regInfo.Userid,
-		opentracing.FollowsFrom(spanCtx))
+	// Note: Call to wSpan.Context() below is still valid after wSpan.Finish() according to Jaeger trace docs.
+	if span != nil {
+		span = globTracer.StartSpan(cluster+"-"+regInfo.Userid, opentracing.FollowsFrom(span.Context()))
+	} else {
+		span = globTracer.StartSpan(cluster+"-"+regInfo.Userid, opentracing.FollowsFrom(spanCtx))
+	}
 	span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
 	span.SetTag("nxt-trace-destagent", flow.DestAgent)
 	span.SetTag("nxt-trace-requestid", flow.TraceRequestId)
