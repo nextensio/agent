@@ -10,8 +10,8 @@
 <?endif?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="D0135DCE-8059-4117-8661-32A5CDE4B928" 
-           Name="Nextensio Agent for Windows"
+  <Product Id="*" 
+           Name="Nextensio Client for Windows"
            Language="1033"
            Manufacturer="Nextensio"
            Version="$(var.ProductVersion)" 
