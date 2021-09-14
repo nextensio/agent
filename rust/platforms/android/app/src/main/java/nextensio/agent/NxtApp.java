@@ -193,7 +193,6 @@ public class NxtApp extends Application {
             String gateway = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
             String cluster = onboard.getString("cluster");
-            String jaeger = onboard.getString("jaegerCollector");
             String traceusers = onboard.getString("traceusers");
             JSONArray cert = onboard.getJSONArray("cacert");
             byte[] cacert = new byte[cert.length()];
@@ -204,17 +203,9 @@ public class NxtApp extends Application {
             boolean hasDefault = false;
             JSONArray dom = onboard.getJSONArray("domains");
             String[] domains = new String[dom.length()];
-            String[] dnsip = new String[dom.length()];
-            int[] needdns = new int[dom.length()];
             for(int i = 0; i < dom.length(); i++) {
                 JSONObject d = dom.getJSONObject(i);
                 domains[i] = d.getString("name");
-                dnsip[i] = d.getString("dnsip");
-                if (d.getBoolean("needdns")) {
-                    needdns[i] = 1;
-                } else {
-                    needdns[i] = 0;
-                }
                 if (domains[i].equals("nextensio-default-internet")) {
                     hasDefault = true;
                 }
@@ -237,8 +228,8 @@ public class NxtApp extends Application {
                 patch = Integer.parseInt(matcher.group(3));
             }
 
-            nxtOnboard(accessToken, uuid, userid, gateway, connectid, cluster, cacert, domains, dnsip, needdns, services,
-                       hostname, model, "android", osname, major, minor, patch, jaeger, traceusers);
+            nxtOnboard(accessToken, uuid, userid, gateway, connectid, cluster, cacert, domains, services,
+                       hostname, model, "android", osname, major, minor, patch, traceusers);
 
             last_version = onboard.getString("version");
             keepalive = onboard.getInt("keepalive");
@@ -261,8 +252,8 @@ public class NxtApp extends Application {
 
     private static native void nxtOnboard(String accessToken, String uuid, String userid, String host,
                                           String connectid, String cluster, 
-                                          byte []cacert, String []domains, String[] dnsip, int[] needdns, String []services,
+                                          byte []cacert, String []domains,  String []services,
                                           String hostname, String model, String ostype, String osname,
-                                          int major, int minor, int patch, String jaeger_collector,
+                                          int major, int minor, int patch,
                                           String traceusers);
 }

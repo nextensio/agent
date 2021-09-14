@@ -8,8 +8,6 @@ struct CRegistrationInfo
     const char *connect_id;
     const char *cluster;
     const char **domains;
-    int *needdns;
-    const char **dnsip;
     int num_domains;
     signed char *ca_cert;
     int num_cacert;
@@ -24,7 +22,6 @@ struct CRegistrationInfo
     int os_patch;
     int os_major;
     int os_minor;
-    const char *jaeger_collector;
     const char *trace_users;
 };
 
@@ -66,10 +63,9 @@ JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOff(JNIEnv *env, 
 JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclass c, jstring accessToken,
                                                               jstring uuid, jstring userid, jstring gateway, jstring connectid,
                                                               jstring cluster,
-                                                              jbyteArray cacert, jobjectArray domains, jobjectArray dnsip,
-                                                              jintArray needdns, jobjectArray services,
+                                                              jbyteArray cacert, jobjectArray domains, jobjectArray services,
                                                               jstring hostname, jstring model, jstring ostype, jstring osname,
-                                                              jint major, jint minor, jint patch, jstring jaeger_collector,
+                                                              jint major, jint minor, jint patch,
                                                               jstring trace_users)
 {
     struct CRegistrationInfo creg = {};
@@ -86,16 +82,10 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
 
     creg.num_domains = (*env)->GetArrayLength(env, domains);
     creg.domains = malloc(creg.num_domains * sizeof(char *));
-    creg.dnsip = malloc(creg.num_domains * sizeof(char *));
-    creg.needdns = malloc(creg.num_domains * sizeof(int));
-    jint *int_arr = (*env)->GetIntArrayElements(env, needdns, 0);
     for (int i = 0; i < creg.num_domains; i++)
     {
         jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, domains, i));
         creg.domains[i] = (*env)->GetStringUTFChars(env, s1, 0);
-        jstring s2 = (jstring)((*env)->GetObjectArrayElement(env, dnsip, i));
-        creg.dnsip[i] = (*env)->GetStringUTFChars(env, s2, 0);
-        creg.needdns[i] = int_arr[i];
     }
 
     creg.num_services = (*env)->GetArrayLength(env, services);
@@ -114,7 +104,6 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     creg.os_minor = minor;
     creg.os_patch = patch;
 
-    creg.jaeger_collector = (*env)->GetStringUTFChars(env, jaeger_collector, NULL);
     creg.trace_users = (*env)->GetStringUTFChars(env, trace_users, NULL);
 
     // Call Rust to onboard
@@ -134,13 +123,8 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     {
         jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, domains, i));
         (*env)->ReleaseStringUTFChars(env, s1, creg.domains[i]);
-        jstring s2 = (jstring)((*env)->GetObjectArrayElement(env, dnsip, i));
-        (*env)->ReleaseStringUTFChars(env, s2, creg.dnsip[i]);
     }
     free(creg.domains);
-    free(creg.dnsip);
-    free((void *)creg.needdns);
-    (*env)->ReleaseIntArrayElements(env, needdns, int_arr, 0);
 
     for (int i = 0; i < creg.num_services; i++)
     {
@@ -153,7 +137,6 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     (*env)->ReleaseStringUTFChars(env, model, creg.model);
     (*env)->ReleaseStringUTFChars(env, ostype, creg.os_type);
     (*env)->ReleaseStringUTFChars(env, osname, creg.os_name);
-    (*env)->ReleaseStringUTFChars(env, jaeger_collector, creg.jaeger_collector);
     (*env)->ReleaseStringUTFChars(env, trace_users, creg.trace_users);
 }
 

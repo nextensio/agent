@@ -88,8 +88,6 @@ const FLOW_BUFFER_HOG: u64 = 4; // seconds;
 #[derive(Default, Debug)]
 pub struct Domain {
     pub name: String,
-    needdns: bool,
-    pub dnsip: u32,
 }
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -109,7 +107,6 @@ pub struct RegistrationInfo {
     os_patch: usize,
     os_major: usize,
     os_minor: usize,
-    jaeger_collector: String,
     trace_users: String,
 }
 
@@ -120,8 +117,6 @@ pub struct CRegistrationInfo {
     pub connect_id: *const c_char,
     pub cluster: *const c_char,
     pub domains: *const *const c_char,
-    pub needdns: *const c_int,
-    pub dnsip: *const *const c_char,
     pub num_domains: c_int,
     pub ca_cert: *const c_char,
     pub num_cacert: c_int,
@@ -136,7 +131,6 @@ pub struct CRegistrationInfo {
     pub os_patch: c_int,
     pub os_major: c_int,
     pub os_minor: c_int,
-    pub jaeger_collector: *const c_char,
     pub trace_users: *const c_char,
 }
 
@@ -175,30 +169,12 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
             .iter()
             .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
             .collect();
-        let tmp_array: &[c_int] = slice::from_raw_parts(creg.needdns, creg.num_domains as usize);
-        let needdns_array: Vec<_> = tmp_array.iter().map(|&v| v).collect();
-        let tmp_array: &[*const c_char] =
-            slice::from_raw_parts(creg.dnsip, creg.num_domains as usize);
-        let dnsip_array: Vec<_> = tmp_array
-            .iter()
-            .map(|&v| CStr::from_ptr(v).to_string_lossy().into_owned())
-            .collect();
         reginfo.domains = Vec::new();
         for i in 0..creg.num_domains as usize {
-            let ip: Result<Ipv4Addr, _> = dnsip_array[i].parse();
-            if ip.is_ok() {
-                let ip = ip.unwrap();
-                let dnsip = common::as_u32_be(&ip.octets());
-                let needdns = needdns_array[i] == 1;
-                let d = Domain {
-                    name: domain_array[i].clone(),
-                    needdns,
-                    dnsip,
-                };
-                reginfo.domains.push(d);
-            } else {
-                error!("Skipping bad ip address {}", &dnsip_array[i])
-            }
+            let d = Domain {
+                name: domain_array[i].clone(),
+            };
+            reginfo.domains.push(d);
         }
         // Longest name matches first
         reginfo
@@ -221,9 +197,6 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
         reginfo.os_major = creg.os_major as usize;
         reginfo.os_minor = creg.os_minor as usize;
 
-        reginfo.jaeger_collector = CStr::from_ptr(creg.jaeger_collector)
-            .to_string_lossy()
-            .into_owned();
         reginfo.trace_users = CStr::from_ptr(creg.trace_users)
             .to_string_lossy()
             .into_owned();

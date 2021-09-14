@@ -28,8 +28,6 @@ const MTU: u32 = 1500;
 #[derive(Debug, Deserialize)]
 struct Domain {
     name: String,
-    needdns: bool,
-    dnsip: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,7 +43,6 @@ struct OnboardInfo {
     cacert: Vec<u8>,
     version: String,
     keepalive: usize,
-    jaegerCollector: String,
     traceusers: String,
 }
 
@@ -64,7 +61,7 @@ impl fmt::Display for OnboardInfo {
         )
         .ok();
         for d in self.domains.iter() {
-            write!(f, " {}:{}:{}", d.name, d.needdns, d.dnsip).ok();
+            write!(f, " {}", d.name).ok();
         }
         Ok(())
     }
@@ -196,24 +193,6 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         c_domains.push(s);
         c_domains_ptr.push(p);
     }
-    let mut c_needdns: Vec<c_int> = Vec::new();
-    for d in &onb.domains {
-        let s;
-        if d.needdns {
-            s = 1;
-        } else {
-            s = 0;
-        }
-        c_needdns.push(s);
-    }
-    let mut c_dnsip: Vec<CString> = Vec::new();
-    let mut c_dnsip_ptr: Vec<*const c_char> = Vec::new();
-    for d in &onb.domains {
-        let s = CString::new(d.dnsip.clone()).unwrap();
-        let p = s.as_ptr();
-        c_dnsip.push(s);
-        c_dnsip_ptr.push(p);
-    }
     let mut c_services: Vec<CString> = Vec::new();
     let mut c_services_ptr: Vec<*const c_char> = Vec::new();
     for svc in &onb.services {
@@ -227,7 +206,6 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
     let os_type = CString::new("linux").unwrap();
     let os_name = CString::new("linux").unwrap();
 
-    let c_jaeger_collector = CString::new(onb.jaegerCollector.clone()).unwrap();
     let c_trace_users = CString::new(onb.traceusers.clone()).unwrap();
 
     let creg = CRegistrationInfo {
@@ -236,8 +214,6 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         connect_id: c_connectid.as_ptr(),
         cluster: c_cluster.as_ptr(),
         domains: c_domains_ptr.as_ptr() as *const *const c_char,
-        needdns: c_needdns.as_ptr() as *const c_int,
-        dnsip: c_dnsip_ptr.as_ptr() as *const *const c_char,
         num_domains: c_domains_ptr.len() as c_int,
         ca_cert: onb.cacert.as_ptr() as *const c_char,
         num_cacert: onb.cacert.len() as c_int,
@@ -252,7 +228,6 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         os_patch: 1,
         os_major: 10,
         os_minor: 8,
-        jaeger_collector: c_jaeger_collector.as_ptr(),
         trace_users: c_trace_users.as_ptr(),
     };
     unsafe { onboard(creg) };

@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	fyne.io/fyne v1.4.3 // indirect
-	fyne.io/fyne/v2 v2.0.4 // indirect
+	fyne.io/fyne/v2 v2.0.4
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.3.0
 	github.com/pion/dtls/v2 v2.0.9 // indirect
