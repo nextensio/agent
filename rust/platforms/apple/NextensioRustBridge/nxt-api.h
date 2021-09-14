@@ -17,8 +17,6 @@ typedef struct CRegistrationInfo
     char *connect_id;
     char *cluster;
     char **domains;
-    int *needdns;
-    char **dnsip;
     int num_domains;
     char *ca_cert;
     int num_cacert;

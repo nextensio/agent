@@ -18,10 +18,10 @@ then
     cp /go/files/index.html /var/www/html/index.lighttpd.html
     lighttpd -f /etc/lighttpd/lighttpd.conf
 
-    2>/var/log/connector.log 1>/var/log/connector.log /go/bin/connector -controller $NXT_CONTROLLER -idp $IDP_URI -client $CLIENT_ID&
+    2>/var/log/connector.log 1>/var/log/connector.log /go/bin/connector -controller $NXT_CONTROLLER&
 else
     # Launch connector listening on ports 80 and 443
-    2>/var/log/connector.log 1>/var/log/connector.log /go/bin/connector -controller $NXT_CONTROLLER -idp $IDP_URI -client $CLIENT_ID -ports 80,443&
+    2>/var/log/connector.log 1>/var/log/connector.log /go/bin/connector -controller $NXT_CONTROLLER -ports 80,443&
 
 fi
 

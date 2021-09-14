@@ -51,8 +51,6 @@ var gwTun common.Transport
 var gwStreams chan common.NxtStream
 var appStreams chan common.NxtStream
 var unique uuid.UUID
-var idp *string
-var clientid *string
 var gateway *string
 var keyFile *string
 var sharedKey string
@@ -393,8 +391,6 @@ func getClusterName(gateway string) string {
 
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
-	idp = flag.String("idp", "https://dev-24743301.okta.com", "IDP to use to onboard")
-	clientid = flag.String("client", "0oav0q3hn65I4Zkmr5d6", "IDP client id")
 	gateway = flag.String("gateway", "", "Gateway name")
 	keyFile = flag.String("key", "/opt/nextensio/connector.key", "Secret Key file name")
 	p := flag.String("ports", "", "Ports to listen on, comma seperated")
@@ -419,7 +415,7 @@ func args() {
 	sharedKey = string(s)
 	sharedKey = strings.TrimSpace(sharedKey)
 	sharedKey = strings.TrimRight(strings.TrimLeft(sharedKey, "\n"), "\n")
-	fmt.Println(*c, *idp, *clientid, *gateway, cluster, ports)
+	fmt.Println(*c, *gateway, cluster, ports)
 }
 
 func svrListen(lg *log.Logger, conn *netconn.NetConn, port int) {
@@ -515,7 +511,7 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
 	flows = make(map[flowKey]*flowTuns)
-	lg := log.New(os.Stdout, "CNTR\n", 0)
+	lg := log.New(os.Stdout, "CNTR: ", 0)
 	args()
 	uniqueId = unique.String()
 	go monitorController(lg)

@@ -297,20 +297,8 @@ func agentOnboard() {
 	domains := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(uintptr(0))))
 	Cdomains := (*[1 << 28]*C.char)(domains)
 
-	needdns := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(C.int(0))))
-	Cneeddns := (*[1 << 28]C.int)(needdns)
-
-	dnsip := C.malloc(C.size_t(l) * C.size_t(unsafe.Sizeof(uintptr(0))))
-	Cdnsip := (*[1 << 28]*C.char)(dnsip)
-
 	for i, d := range regInfo.Domains {
-		need := 0
-		if d.NeedDns {
-			need = 1
-		}
 		Cdomains[i] = C.CString(d.Name)
-		Cneeddns[i] = C.int(need)
-		Cdnsip[i] = C.CString(d.DnsIP)
 	}
 
 	l = len(regInfo.CACert)
@@ -333,8 +321,6 @@ func agentOnboard() {
 		connect_id:   C.CString(regInfo.ConnectID),
 		cluster:      C.CString(regInfo.Cluster),
 		domains:      (**C.char)(domains),
-		needdns:      (*C.int)(needdns),
-		dnsip:        (**C.char)(dnsip),
 		num_domains:  C.int(len(regInfo.Domains)),
 		ca_cert:      (*C.char)(ca_cert),
 		num_cacert:   C.int(len(regInfo.CACert)),
@@ -356,11 +342,8 @@ func agentOnboard() {
 
 	for i, _ := range regInfo.Domains {
 		C.free(unsafe.Pointer(Cdomains[i]))
-		C.free(unsafe.Pointer(Cdnsip[i]))
 	}
 	C.free(unsafe.Pointer(domains))
-	C.free(unsafe.Pointer(needdns))
-	C.free(unsafe.Pointer(dnsip))
 
 	C.free(ca_cert)
 

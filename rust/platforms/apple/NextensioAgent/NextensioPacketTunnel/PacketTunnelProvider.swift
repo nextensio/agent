@@ -401,8 +401,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.hasDefault = false
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
-            registration.dnsip = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
-            registration.needdns = UnsafeMutablePointer<Int32>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
                 let d = dom[i] as! NSDictionary
                 if d["name"] as! String != "nextensio-default-internet" {
@@ -411,13 +409,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.hasDefault = true
                 }
                 registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (d["name"] as! NSString).utf8String)
-                registration.dnsip[i] = UnsafeMutablePointer<Int8>(mutating: (d["dnsip"] as! NSString).utf8String)
-                let dns = d["needdns"] as! Bool
-                if dns {
-                    registration.needdns[i] = 1
-                } else {
-                    registration.needdns[i] = 0
-                }
             }
         } else {
             registration.domains = nil
@@ -458,8 +449,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // cleanup
         registration.ca_cert.deallocate()
         registration.domains.deallocate()
-        registration.dnsip.deallocate()
-        registration.needdns.deallocate()
         
         last_version = json["version"] as! String
         keepalive = json["keepalive"] as! Int
@@ -503,8 +492,6 @@ extension CRegistrationInfo {
                   connect_id: nil,
                   cluster: nil,
                   domains: nil,
-                  needdns: nil,
-                  dnsip: nil,
                   num_domains: 0,
                   ca_cert: nil,
                   num_cacert: 0,

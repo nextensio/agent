@@ -30,9 +30,7 @@ type ConnStats struct {
 }
 
 type Domain struct {
-	Name    string `json:"name" bson:"name"`
-	NeedDns bool   `json:"needdns" bson:"needdns"`
-	DnsIP   string `json:"dnsip" bson:"dnsip"`
+	Name string `json:"name" bson:"name"`
 }
 
 type RegistrationInfo struct {
