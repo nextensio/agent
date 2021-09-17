@@ -218,7 +218,7 @@ func vpnToAgent(tcpTun *common.Transport) {
 }
 
 func agentInit(port int) {
-	C.agent_init(2 /*windows*/, 0, MTU, 1, C.uint32_t(port))
+	C.agent_init(2 /*windows*/, 0, MTU, 2, C.uint32_t(port))
 }
 
 func agentConnection(tchan chan common.NxtStream) {
