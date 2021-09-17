@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -131,10 +132,22 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 	} else {
 		span = globTracer.StartSpan(cluster+"-"+regInfo.Userid, opentracing.FollowsFrom(spanCtx))
 	}
+	spanuattrs := make(map[string]interface{})
+	tReq := strings.SplitN(flow.TraceRequestId, ":", 2)
 	span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
 	span.SetTag("nxt-trace-destagent", flow.DestAgent)
-	span.SetTag("nxt-trace-requestid", flow.TraceRequestId)
+	span.SetTag("nxt-trace-requestid", tReq[0])
 	span.SetTag("nxt-trace-userid", flow.Userid)
+	if (len(tReq) > 1) && (len(tReq[1]) > 1) {  // there is a json string ?
+		err := json.Unmarshal([]byte(tReq[1]), &spanuattrs)
+		if err == nil {
+			for attr, val := range spanuattrs {
+				if attr != "" {
+					span.SetTag("nxt-trace-user-"+attr, val)
+				}
+			}
+		}
+	}
 	span.Tracer().Inject(
 		span.Context(),
 		opentracing.HTTPHeaders,
