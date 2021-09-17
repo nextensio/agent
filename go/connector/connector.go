@@ -120,9 +120,8 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 		return nil
 	}
 	var span opentracing.Span
-	if flow.WireSpanStartTime != "" {
-		var startTime time.Time
-		startTime.UnmarshalJSON([]byte(flow.WireSpanStartTime))
+	if flow.WireSpanStartTime != 0 {
+		var startTime = time.Unix(0, int64(flow.WireSpanStartTime))
 		span = wireTracer.StartSpan("On Wire", opentracing.StartTime(startTime), opentracing.FollowsFrom(spanCtx))
 		span.Finish()
 	}
@@ -148,7 +147,7 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 	var span *opentracing.Span
-	var finishT time.Time
+	var finishT int64
 
 	for {
 		hdr, buf, err := tun.Read()
@@ -203,10 +202,8 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 					}
 					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
 					if span != nil {
-						t := time.Now()
-						byteA, _ := t.MarshalJSON()
-						newFlow.WireSpanStartTime = string(byteA)
-						finishT = t
+						finishT = time.Now().UnixNano()
+						newFlow.WireSpanStartTime = uint64(finishT)
 					}
 				}
 			}
@@ -217,7 +214,7 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 			}
 			if span != nil {
 				var finishTime opentracing.FinishOptions
-				finishTime.FinishTime = finishT
+				finishTime.FinishTime = time.Unix(0, finishT)
 				(*span).FinishWithOptions(finishTime)
 				span = nil
 			}

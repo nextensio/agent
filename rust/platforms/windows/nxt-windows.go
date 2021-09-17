@@ -335,7 +335,6 @@ func agentOnboard() {
 		os_patch:     0,
 		os_major:     0,
 		os_minor:     0,
-		trace_users:  C.CString(regInfo.TraceUsers),
 	}
 
 	C.onboard(creg)
@@ -362,7 +361,6 @@ func agentOnboard() {
 	C.free(unsafe.Pointer(creg.model))
 	C.free(unsafe.Pointer(creg.os_type))
 	C.free(unsafe.Pointer(creg.os_name))
-	C.free(unsafe.Pointer(creg.trace_users))
 
 	// See if the routes need to change from catch-all to specific or vice versa
 	vpnRoutes()

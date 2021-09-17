@@ -45,7 +45,6 @@ type RegistrationInfo struct {
 	Services    []string `json:"services"`
 	Version     string   `json:"version"`
 	Keepalive   uint     `json:"keepalive"`
-	TraceUsers  string   `json:"traceusers"`
 }
 
 func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool {

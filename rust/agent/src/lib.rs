@@ -2,7 +2,7 @@
 use android_logger::Config;
 use common::{
     decode_ipv4, hdr_to_key, key_to_hdr,
-    nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtFlow, NxtHdr, NxtOnboard},
+    nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtFlow, NxtHdr, NxtOnboard, NxtTrace},
     parse_host, pool_get,
     tls::parse_sni,
     FlowV4Key, NxtBufs,
@@ -26,6 +26,7 @@ use std::net::Ipv4Addr;
 use std::slice;
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
 use std::{ffi::CStr, usize};
@@ -107,7 +108,6 @@ pub struct RegistrationInfo {
     os_patch: usize,
     os_major: usize,
     os_minor: usize,
-    trace_users: String,
 }
 
 #[repr(C)]
@@ -131,7 +131,6 @@ pub struct CRegistrationInfo {
     pub os_patch: c_int,
     pub os_major: c_int,
     pub os_minor: c_int,
-    pub trace_users: *const c_char,
 }
 
 #[derive(Default, Debug)]
@@ -196,10 +195,6 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
         reginfo.os_patch = creg.os_patch as usize;
         reginfo.os_major = creg.os_major as usize;
         reginfo.os_minor = creg.os_minor as usize;
-
-        reginfo.trace_users = CStr::from_ptr(creg.trace_users)
-            .to_string_lossy()
-            .into_owned();
     }
     return reginfo;
 }
@@ -213,6 +208,7 @@ struct FlowV4 {
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
     creation_time: Instant,
+    first_response: Option<Instant>,
     last_rdwr: Instant,
     cleanup_after: usize,
     dead: bool,
@@ -221,6 +217,8 @@ struct FlowV4 {
     parse_pending: Option<Reusable<Vec<u8>>>,
     dest_agent: String,
     active: bool,
+    trace_request: bool,
+    trace_response: bool,
 }
 
 enum TunFlow {
@@ -506,6 +504,7 @@ fn flow_new(
         pending_rx: VecDeque::with_capacity(1),
         last_rdwr: Instant::now(),
         creation_time: Instant::now(),
+        first_response: None,
         cleanup_after,
         dead: false,
         pending_tx_qed: false,
@@ -513,6 +512,8 @@ fn flow_new(
         dest_agent: "".to_string(),
         parse_pending: None,
         active: false,
+        trace_request: true,
+        trace_response: true,
     };
     if need_parsing {
         parse_pending.insert(key.clone(), ());
@@ -630,7 +631,7 @@ fn flow_rx_data(
     tun: &mut Tun,
     key: &FlowV4Key,
     flows: &mut HashMap<FlowV4Key, FlowV4>,
-    mut data: NxtBufs,
+    data: NxtBufs,
     vpn_rx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>,
     check_tuns: &mut HashMap<usize, ()>,
@@ -646,9 +647,6 @@ fn flow_rx_data(
                 _ => {}
             }
         }
-        // We dont need any nextensio headers at this point, so why waste memory
-        // if this gets queued up for long ? Set it to None
-        data.hdr = None;
         flow.pending_rx.push_back(data);
         tun.pending_rx += 1;
         flow_data_from_external(&key, flow, tun, check_tuns);
@@ -755,7 +753,7 @@ fn external_sock_rx(
                                 tun.tun.close(stream).ok();
                             }
                         }
-                        Hdr::Keepalive(_) => {}
+                        _ => {}
                     }
                 }
             } else {
@@ -1241,7 +1239,14 @@ fn flow_data_to_external(
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
                     f.source_agent = reginfo.connect_id.clone();
-                    f.dest_agent = flow.dest_agent.clone()
+                    f.dest_agent = flow.dest_agent.clone();
+                    if flow.trace_request {
+                        if let Ok(from_epoch) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                            f.wire_span_start_time = from_epoch.as_nanos() as u64;
+                            f.processing_time = flow.creation_time.elapsed().as_nanos() as u32;
+                            flow.trace_request = false;
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -1301,6 +1306,44 @@ fn flow_data_to_external(
     }
 }
 
+fn send_trace_info(flow: &mut FlowV4, hdr: Option<NxtHdr>, tun: &mut Tun) {
+    let mut trace = NxtTrace::default();
+    let hdr = hdr.unwrap();
+    match hdr.hdr.unwrap() {
+        Hdr::Flow(f) => {
+            trace.trace_ctx = f.trace_ctx;
+            trace.wire_span_start_time = f.wire_span_start_time;
+            if let Some(t) = flow.first_response {
+                trace.processing_time = t.elapsed().as_nanos() as u32;
+            }
+        }
+        _ => {}
+    }
+
+    let mut hdr = NxtHdr::default();
+    hdr.hdr = Some(Hdr::Trace(trace));
+
+    match tun.tun.write(
+        0,
+        NxtBufs {
+            hdr: Some(hdr),
+            bufs: vec![],
+            headroom: 0,
+        },
+    ) {
+        Err((_, e)) => match e.code {
+            EWOULDBLOCK => {
+                tun.tx_ready = false;
+            }
+            _ => {
+                error!("Trace message send fail ({})", e.detail);
+                tun.tun.close(0).ok();
+            }
+        },
+        Ok(_) => {}
+    }
+}
+
 // Check if the flow has payload from the gateway (or direct) queued up in its
 // pending_rx queue and if so try to give it to the tcp/udp stack and then if the
 // stack spits that data out to be sent as packets to the app, do so by calling poll()
@@ -1310,13 +1353,19 @@ fn flow_data_from_external(
     tun: &mut Tun,
     check_tuns: &mut HashMap<usize, ()>,
 ) {
-    while let Some(rx) = flow.pending_rx.pop_front() {
+    while let Some(mut rx) = flow.pending_rx.pop_front() {
+        let hdr = rx.hdr.take();
         tun.pending_rx -= 1;
+        if flow.first_response.is_none() {
+            flow.first_response = Some(Instant::now());
+        }
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
                 EWOULDBLOCK => {
                     // The stack cant accept these pkts now, return the data to the head again
-                    flow.pending_rx.push_front(data.unwrap());
+                    let mut d = data.unwrap();
+                    d.hdr = hdr;
+                    flow.pending_rx.push_front(d);
                     tun.pending_rx += 1;
                     return;
                 }
@@ -1332,6 +1381,10 @@ fn flow_data_from_external(
                     }
                 }
                 flow_alive(key, flow);
+                if hdr.is_some() && flow.trace_response {
+                    send_trace_info(flow, hdr, tun);
+                    flow.trace_response = false;
+                }
             }
         }
     }

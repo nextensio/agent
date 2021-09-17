@@ -22,7 +22,6 @@ struct CRegistrationInfo
     int os_patch;
     int os_major;
     int os_minor;
-    const char *trace_users;
 };
 
 struct AgentStats
@@ -65,8 +64,7 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
                                                               jstring cluster,
                                                               jbyteArray cacert, jobjectArray domains, jobjectArray services,
                                                               jstring hostname, jstring model, jstring ostype, jstring osname,
-                                                              jint major, jint minor, jint patch,
-                                                              jstring trace_users)
+                                                              jint major, jint minor, jint patch)
 {
     struct CRegistrationInfo creg = {};
 
@@ -104,8 +102,6 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     creg.os_minor = minor;
     creg.os_patch = patch;
 
-    creg.trace_users = (*env)->GetStringUTFChars(env, trace_users, NULL);
-
     // Call Rust to onboard
     onboard(creg);
 
@@ -137,7 +133,6 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     (*env)->ReleaseStringUTFChars(env, model, creg.model);
     (*env)->ReleaseStringUTFChars(env, ostype, creg.os_type);
     (*env)->ReleaseStringUTFChars(env, osname, creg.os_name);
-    (*env)->ReleaseStringUTFChars(env, trace_users, creg.trace_users);
 }
 
 JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobject obj)

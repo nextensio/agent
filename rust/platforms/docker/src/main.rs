@@ -43,7 +43,6 @@ struct OnboardInfo {
     cacert: Vec<u8>,
     version: String,
     keepalive: usize,
-    traceusers: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,8 +205,6 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
     let os_type = CString::new("linux").unwrap();
     let os_name = CString::new("linux").unwrap();
 
-    let c_trace_users = CString::new(onb.traceusers.clone()).unwrap();
-
     let creg = CRegistrationInfo {
         gateway: c_gateway.as_ptr(),
         access_token: c_access_token.as_ptr(),
@@ -228,7 +225,6 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
         os_patch: 1,
         os_major: 10,
         os_minor: 8,
-        trace_users: c_trace_users.as_ptr(),
     };
     unsafe { onboard(creg) };
 }
