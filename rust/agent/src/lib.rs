@@ -207,8 +207,9 @@ struct FlowV4 {
     tx_socket: usize,
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
-    creation_time: Instant,
-    first_response: Option<Instant>,
+    creation_instant: Instant,
+    creation_time: SystemTime,
+    first_response: Option<SystemTime>,
     last_rdwr: Instant,
     cleanup_after: usize,
     dead: bool,
@@ -503,7 +504,8 @@ fn flow_new(
         pending_tx: None,
         pending_rx: VecDeque::with_capacity(1),
         last_rdwr: Instant::now(),
-        creation_time: Instant::now(),
+        creation_instant: Instant::now(),
+        creation_time: SystemTime::now(),
         first_response: None,
         cleanup_after,
         dead: false,
@@ -1243,7 +1245,9 @@ fn flow_data_to_external(
                     if flow.trace_request {
                         if let Ok(from_epoch) = SystemTime::now().duration_since(UNIX_EPOCH) {
                             f.wire_span_start_time = from_epoch.as_nanos() as u64;
-                            f.processing_time = flow.creation_time.elapsed().as_nanos() as u32;
+                            if let Ok(d) = flow.creation_time.duration_since(UNIX_EPOCH) {
+                                f.processing_time = d.as_nanos() as u64;
+                            }
                             flow.trace_request = false;
                         }
                     }
@@ -1312,9 +1316,13 @@ fn send_trace_info(flow: &mut FlowV4, hdr: Option<NxtHdr>, tun: &mut Tun) {
     match hdr.hdr.unwrap() {
         Hdr::Flow(f) => {
             trace.trace_ctx = f.trace_ctx;
-            trace.wire_span_start_time = f.wire_span_start_time;
+            if let Ok(from_epoch) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                trace.processing_time = from_epoch.as_nanos() as u64;
+            }
             if let Some(t) = flow.first_response {
-                trace.processing_time = t.elapsed().as_nanos() as u32;
+                if let Ok(d) = t.duration_since(UNIX_EPOCH) {
+                    trace.wire_span_start_time = d.as_nanos() as u64;
+                }
             }
         }
         _ => {}
@@ -1357,7 +1365,7 @@ fn flow_data_from_external(
         let hdr = rx.hdr.take();
         tun.pending_rx -= 1;
         if flow.first_response.is_none() {
-            flow.first_response = Some(Instant::now());
+            flow.first_response = Some(SystemTime::now());
         }
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
@@ -2037,7 +2045,7 @@ fn monitor_parse_pending(
     let mut keys = Vec::new();
     for (k, _) in parse_pending.iter_mut() {
         if let Some(f) = flows.get_mut(k) {
-            if Instant::now() > f.creation_time + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
+            if Instant::now() > f.creation_instant + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
                 // We couldnt parse the service, just use dest ip as service
                 if f.service == "" {
                     f.service = k.dip.clone();

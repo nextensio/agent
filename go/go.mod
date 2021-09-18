@@ -14,7 +14,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
-	gitlab.com/nextensio/common/go v0.0.0-20210917194711-d718169bb019
+	gitlab.com/nextensio/common/go v0.0.0-20210918120439-aa5633a9976d
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 )
