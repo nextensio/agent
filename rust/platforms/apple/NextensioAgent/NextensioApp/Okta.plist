@@ -9,7 +9,7 @@
 	<key>clientId</key>
 	<string>0oav0q3hn65I4Zkmr5d6</string>
 	<key>issuer</key>
-	<string>https://dev-24743301.okta.com/oauth2/default</string>
+	<string>https://login.nextensio.net/oauth2/default</string>
 	<key>logoutRedirectUri</key>
 	<string>io.nextensio.agent1:/callback</string>
 </dict>

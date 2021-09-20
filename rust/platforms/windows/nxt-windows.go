@@ -611,7 +611,7 @@ func main() {
 	common.MAXBUF = (64 * 1024)
 	unique = uuid.New()
 	uniqueId = unique.String()
-	idp = "https://dev-24743301.okta.com"
+	idp = "https://login.nextensio.net"
 	clientid = "0oav0q3hn65I4Zkmr5d6"
 	controller = "server.nextensio.net:8080"
 	go postLogin()

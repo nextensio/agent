@@ -49,7 +49,7 @@ public class NxtAgent extends AppCompatActivity {
     .redirectUri("nextensio.agent:/login")
     .endSessionRedirectUri("nextensio.agent:/logout")
     .scopes("openid", "email", "profile", "offline_access")
-    .discoveryUri("https://dev-24743301.okta.com/oauth2/default")
+    .discoveryUri("https://login.nextensio.net/oauth2/default")
     .create();
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {

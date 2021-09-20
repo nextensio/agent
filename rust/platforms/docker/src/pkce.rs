@@ -9,7 +9,7 @@ const TEST_PROFILE: idp_profile = idp_profile {
     client_id: "0oaz5lndczD0DSUeh4x6",
 };
 const PROD_PROFILE: idp_profile = idp_profile {
-    idp: "https://dev-24743301.okta.com/",
+    idp: "https://login.nextensio.net/",
     client_id: "0oav0q3hn65I4Zkmr5d6",
 };
 
