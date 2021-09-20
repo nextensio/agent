@@ -138,7 +138,7 @@ func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
 	span.SetTag("nxt-trace-destagent", flow.DestAgent)
 	span.SetTag("nxt-trace-requestid", tReq[0])
 	span.SetTag("nxt-trace-userid", flow.Userid)
-	if (len(tReq) > 1) && (len(tReq[1]) > 1) {  // there is a json string ?
+	if (len(tReq) > 1) && (len(tReq[1]) > 1) { // there is a json string ?
 		err := json.Unmarshal([]byte(tReq[1]), &spanuattrs)
 		if err == nil {
 			for attr, val := range spanuattrs {
@@ -401,7 +401,7 @@ func getClusterName(gateway string) string {
 
 func args() {
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
-	gateway = flag.String("gateway", "", "Gateway name")
+	gateway = flag.String("gateway", "gateway.nextensio.net", "Gateway name")
 	keyFile = flag.String("key", "/opt/nextensio/connector.key", "Secret Key file name")
 	p := flag.String("ports", "", "Ports to listen on, comma seperated")
 	flag.Parse()
