@@ -361,7 +361,7 @@ func monitorGw(lg *log.Logger) {
 			if gwTun == nil || gwTun.IsClosed() {
 				gw_onboarded = false
 				// Override gateway if one is suppled on command line
-				if *gateway != "" {
+				if regInfo.Gateway == "" || *gateway != "gateway.nextensio.net" {
 					regInfo.Gateway = *gateway
 				}
 				cluster = getClusterName(regInfo.Gateway)
