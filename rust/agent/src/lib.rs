@@ -1341,6 +1341,9 @@ fn send_trace_info(flow: &mut FlowV4, hdr: Option<NxtHdr>, tun: &mut Tun) {
     ) {
         Err((_, e)) => match e.code {
             EWOULDBLOCK => {
+                // Well, here the data has to be actually queued up and resent. But
+                // that makes things more complicated, for now tracing is silently
+                // ignored if the send blocks and wants us to retry
                 tun.tx_ready = false;
             }
             _ => {
@@ -1364,7 +1367,7 @@ fn flow_data_from_external(
     while let Some(mut rx) = flow.pending_rx.pop_front() {
         let hdr = rx.hdr.take();
         tun.pending_rx -= 1;
-        if flow.first_response.is_none() {
+        if hdr.is_some() && flow.first_response.is_none() {
             flow.first_response = Some(SystemTime::now());
         }
         match flow.rx_socket.write(0, rx) {
