@@ -2,7 +2,7 @@
 use android_logger::Config;
 use common::{
     decode_ipv4, hdr_to_key, key_to_hdr,
-    nxthdr::{nxt_hdr::Hdr, nxt_hdr::StreamOp, NxtFlow, NxtHdr, NxtOnboard, NxtTrace},
+    nxthdr::{nxt_hdr::Hdr, NxtFlow, NxtHdr, NxtOnboard, NxtTrace},
     parse_host, pool_get,
     tls::parse_sni,
     FlowV4Key, NxtBufs,
@@ -712,50 +712,52 @@ fn external_sock_rx(
         },
         Ok((stream, data)) => {
             if let Some(hdr) = data.hdr.as_ref() {
-                // The stream close will only provide streamid, none of the other information will be valid
-                if hdr.streamop == StreamOp::Close as i32 {
-                    let mut ck = FlowV4Key::default();
-                    match tun.flows {
-                        TunFlow::OneToMany(ref mut tun_flows) => {
-                            if let Some(k) = tun_flows.get(&hdr.streamid) {
-                                ck = k.clone();
+                match hdr.hdr.as_ref().unwrap() {
+                    Hdr::Close(_) => {
+                        // The stream close will only provide streamid, none of the other information will be valid
+                        let mut ck = FlowV4Key::default();
+                        match tun.flows {
+                            TunFlow::OneToMany(ref mut tun_flows) => {
+                                if let Some(k) = tun_flows.get(&hdr.streamid) {
+                                    ck = k.clone();
+                                }
                             }
+                            _ => panic!("We expect hashmap for gateway flows"),
                         }
-                        _ => panic!("We expect hashmap for gateway flows"),
+                        if let Some(f) = flows.get_mut(&ck) {
+                            flow_dead(&ck, f);
+                        }
                     }
-                    if let Some(f) = flows.get_mut(&ck) {
-                        flow_dead(&ck, f);
+                    Hdr::Onboard(onb) => {
+                        assert_eq!(stream, 0);
+                        error!(
+                            "Got onboard response, user {}, uuid {}",
+                            onb.userid, onb.uuid
+                        );
+                        *gw_onboarded = true;
                     }
-                } else {
-                    match hdr.hdr.as_ref().unwrap() {
-                        Hdr::Onboard(onb) => {
-                            assert_eq!(stream, 0);
-                            error!(
-                                "Got onboard response, user {}, uuid {}",
-                                onb.userid, onb.uuid
+                    Hdr::Flow(_) => {
+                        let mut found = false;
+                        if let Some(key) = hdr_to_key(&hdr) {
+                            found = flow_rx_data(
+                                stream,
+                                tun,
+                                &key,
+                                flows,
+                                data,
+                                vpn_rx,
+                                vpn_tx,
+                                check_tuns,
+                                flows_active,
                             );
-                            *gw_onboarded = true;
                         }
-                        Hdr::Flow(_) => {
-                            let mut found = false;
-                            if let Some(key) = hdr_to_key(&hdr) {
-                                found = flow_rx_data(
-                                    stream,
-                                    tun,
-                                    &key,
-                                    flows,
-                                    data,
-                                    vpn_rx,
-                                    vpn_tx,
-                                    check_tuns,
-                                    flows_active,
-                                );
-                            }
-                            if !found {
-                                tun.tun.close(stream).ok();
-                            }
+                        if !found {
+                            tun.tun.close(stream).ok();
                         }
-                        _ => {}
+                    }
+                    _ => {
+                        // DO NOT BARF HERE on finding unknown types, we need to be forward
+                        // AND backward compatible, so just silently ignore unknown types
                     }
                 }
             } else {
@@ -1237,7 +1239,6 @@ fn flow_data_to_external(
         if flow.tx_socket == GWTUN_IDX && tx_init {
             let mut hdr = key_to_hdr(key, &flow.service);
             hdr.streamid = flow.tx_stream;
-            hdr.streamop = StreamOp::Noop as i32;
             match hdr.hdr.as_mut().unwrap() {
                 Hdr::Flow(ref mut f) => {
                     f.source_agent = reginfo.connect_id.clone();
@@ -1325,7 +1326,9 @@ fn send_trace_info(flow: &mut FlowV4, hdr: Option<NxtHdr>, tun: &mut Tun) {
                 }
             }
         }
-        _ => {}
+        _ => {
+            return;
+        }
     }
 
     let mut hdr = NxtHdr::default();
