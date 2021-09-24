@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -16,10 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/opentracing/opentracing-go"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-	"github.com/uber/jaeger-lib/metrics/prometheus"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	"gitlab.com/nextensio/common/go/transport/netconn"
@@ -57,9 +51,6 @@ var keyFile *string
 var sharedKey string
 var cluster string
 var ports []int = []int{}
-var traceInitLock sync.Mutex
-var wireTracer opentracing.Tracer
-var globTracer opentracing.Tracer
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -94,85 +85,24 @@ func flowGet(key flowKey, gwRx common.Transport) common.Transport {
 	return nil
 }
 
-func gwToAppClose(tun common.Transport, dest ConnStats, span *opentracing.Span) {
+func gwToAppClose(tun common.Transport, dest ConnStats) {
 	tun.Close()
 	if dest.Conn != nil {
 		dest.Conn.Close()
 	}
-	if span != nil {
-		(*span).Finish()
-	}
-}
-
-func traceFlow(flow *nxthdr.NxtFlow) *opentracing.Span {
-	if globTracer == nil || wireTracer == nil {
-		return nil
-	}
-	// Do tracing only if TraceCtx is set
-	if flow.TraceCtx == "" {
-		return nil
-	}
-	// Fake "uber-trace-id" http header to create tracer spanCtx
-	httpHdr := make(http.Header)
-	httpHdr.Add("Uber-Trace-Id", flow.TraceCtx)
-	spanCtx, serr := globTracer.Extract(opentracing.HTTPHeaders,
-		opentracing.HTTPHeadersCarrier(httpHdr))
-	if (serr != nil) || (spanCtx == nil) {
-		return nil
-	}
-	var span opentracing.Span
-	if flow.WireSpanStartTime != 0 {
-		var startTime = time.Unix(0, int64(flow.WireSpanStartTime))
-		span = wireTracer.StartSpan("On Wire", opentracing.StartTime(startTime), opentracing.FollowsFrom(spanCtx))
-		span.Finish()
-	}
-	// Note: Call to wSpan.Context() below is still valid after wSpan.Finish() according to Jaeger trace docs.
-	if span != nil {
-		span = globTracer.StartSpan(cluster+"-"+regInfo.Userid, opentracing.FollowsFrom(span.Context()))
-	} else {
-		span = globTracer.StartSpan(cluster+"-"+regInfo.Userid, opentracing.FollowsFrom(spanCtx))
-	}
-	spanuattrs := make(map[string]interface{})
-	tReq := strings.SplitN(flow.TraceRequestId, ":", 2)
-	span.SetTag("nxt-trace-source", cluster+"-"+regInfo.Userid)
-	span.SetTag("nxt-trace-destagent", flow.DestAgent)
-	span.SetTag("nxt-trace-requestid", tReq[0])
-	span.SetTag("nxt-trace-userid", flow.Userid)
-	if (len(tReq) > 1) && (len(tReq[1]) > 1) { // there is a json string ?
-		err := json.Unmarshal([]byte(tReq[1]), &spanuattrs)
-		if err == nil {
-			for attr, val := range spanuattrs {
-				if attr != "" {
-					span.SetTag("nxt-trace-user-"+attr, val)
-				}
-			}
-		}
-	}
-	span.Tracer().Inject(
-		span.Context(),
-		opentracing.HTTPHeaders,
-		opentracing.HTTPHeadersCarrier(httpHdr),
-	)
-	flow.TraceCtx = httpHdr.Get("Uber-Trace-Id")
-	return &span
 }
 
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
-	var span *opentracing.Span
-	var finishT int64
-
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
-			gwToAppClose(tun, dest, span)
+			gwToAppClose(tun, dest)
 			return
 		}
 		switch hdr.Hdr.(type) {
 		case *nxthdr.NxtHdr_Onboard:
 			lg.Println("Got onboard response")
-			onboard := hdr.Hdr.(*nxthdr.NxtHdr_Onboard).Onboard
-			initJaeger(lg, onboard)
 		case *nxthdr.NxtHdr_Flow:
 			if dest.Conn == nil {
 				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
@@ -187,7 +117,7 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 					// the appStreams passed here never gets used
 					e := dest.Conn.Dial(appStreams)
 					if e != nil {
-						gwToAppClose(tun, dest, span)
+						gwToAppClose(tun, dest)
 						return
 					}
 
@@ -196,10 +126,9 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 					// the flow is originated from the connector to gateway, so reverse already exists
 					newTun := tun.NewStream(nil)
 					if newTun == nil {
-						gwToAppClose(tun, dest, span)
+						gwToAppClose(tun, dest)
 						return
 					}
-					span = traceFlow(flow)
 
 					// copy the flow
 					newFlow := *flow
@@ -214,22 +143,12 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 						timeout = UDP_AGER
 					}
 					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
-					if span != nil {
-						finishT = time.Now().UnixNano()
-						newFlow.WireSpanStartTime = uint64(finishT)
-					}
 				}
 			}
 			e := dest.Conn.Write(hdr, buf)
 			if e != nil {
-				gwToAppClose(tun, dest, span)
+				gwToAppClose(tun, dest)
 				return
-			}
-			if span != nil {
-				var finishTime opentracing.FinishOptions
-				finishTime.FinishTime = time.Unix(0, finishT)
-				(*span).FinishWithOptions(finishTime)
-				span = nil
 			}
 			dest.Tx += 1
 		}
@@ -455,62 +374,6 @@ func svrAccept(lg *log.Logger) {
 				}
 			}
 		}
-	}
-}
-
-func initJaegerTrace(service string, lg *log.Logger, onboard *nxthdr.NxtOnboard, onWire bool) {
-	collector_url := os.Getenv("JAEGER_COLLECTOR")
-	if collector_url == "" {
-		collector_url = onboard.JaegerCollector
-	}
-	cfg := &jaegercfg.Configuration{
-		ServiceName: service,
-		Sampler: &jaegercfg.SamplerConfig{
-			Type:  "const",
-			Param: 1,
-		},
-		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans:          true,
-			CollectorEndpoint: collector_url,
-		},
-	}
-	jLogger := jaegerlog.StdLogger
-	debugLogger := jaegerlog.DebugLogAdapter(jLogger)
-	jMetricsFactory := prometheus.New()
-	var err error
-	if onWire {
-		wireTracer, _, err = cfg.NewTracer(jaegercfg.Logger(debugLogger))
-	} else {
-		globTracer, _, err = cfg.NewTracer(
-			jaegercfg.Logger(debugLogger),
-			jaegercfg.Metrics(jMetricsFactory),
-		)
-		opentracing.SetGlobalTracer(globTracer)
-	}
-	if err != nil {
-		lg.Println("JaegerTraceInit Failed - %v", err)
-		cfg.Disabled = true
-	} else {
-		lg.Println("JaegerTrace Initialized. Collector Endpoint:", collector_url)
-	}
-}
-
-func initJaeger(lg *log.Logger, onboard *nxthdr.NxtOnboard) {
-	// Tunnels can flap and multiple onboards can in theory happen in parallel
-	// (although should be very rare in practise). Dont mess up trace init in
-	// that scenario
-	traceInitLock.Lock()
-	defer traceInitLock.Unlock()
-
-	if globTracer == nil {
-		initJaegerTrace("nxt-"+regInfo.Tenant+"-trace", lg, onboard, false)
-	}
-	// The below trace is for generating spans for the duration when the packet is on
-	// the wire (From dest.write() to read() from the tunnel on the other end of the tunnel)
-	// Seperate instance of the Jaegertrace with different service name is needed to display
-	// these gap spans in different colors compared to the spans generated from the above instance.
-	if wireTracer == nil {
-		initJaegerTrace("nxt-"+regInfo.Tenant+"-onwire-trace", lg, onboard, true)
 	}
 }
 
