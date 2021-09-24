@@ -26,7 +26,6 @@ use std::net::Ipv4Addr;
 use std::slice;
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, time::Duration};
 use std::{collections::VecDeque, time::Instant};
 use std::{ffi::CStr, usize};
@@ -208,8 +207,6 @@ struct FlowV4 {
     pending_tx: Option<NxtBufs>,
     pending_rx: VecDeque<NxtBufs>,
     creation_instant: Instant,
-    creation_time: SystemTime,
-    first_response: Option<SystemTime>,
     last_rdwr: Instant,
     cleanup_after: usize,
     dead: bool,
@@ -505,8 +502,6 @@ fn flow_new(
         pending_rx: VecDeque::with_capacity(1),
         last_rdwr: Instant::now(),
         creation_instant: Instant::now(),
-        creation_time: SystemTime::now(),
-        first_response: None,
         cleanup_after,
         dead: false,
         pending_tx_qed: false,
@@ -1244,13 +1239,8 @@ fn flow_data_to_external(
                     f.source_agent = reginfo.connect_id.clone();
                     f.dest_agent = flow.dest_agent.clone();
                     if flow.trace_request {
-                        if let Ok(from_epoch) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                            f.wire_span_start_time = from_epoch.as_nanos() as u64;
-                            if let Ok(d) = flow.creation_time.duration_since(UNIX_EPOCH) {
-                                f.processing_time = d.as_nanos() as u64;
-                            }
-                            flow.trace_request = false;
-                        }
+                        f.processing_duration = flow.creation_instant.elapsed().as_nanos() as u32;
+                        flow.trace_request = false;
                     }
                 }
                 _ => {}
@@ -1311,20 +1301,13 @@ fn flow_data_to_external(
     }
 }
 
-fn send_trace_info(flow: &mut FlowV4, hdr: Option<NxtHdr>, tun: &mut Tun) {
+fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
     let mut trace = NxtTrace::default();
     let hdr = hdr.unwrap();
     match hdr.hdr.unwrap() {
         Hdr::Flow(f) => {
             trace.trace_ctx = f.trace_ctx;
-            if let Ok(from_epoch) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                trace.processing_time = from_epoch.as_nanos() as u64;
-            }
-            if let Some(t) = flow.first_response {
-                if let Ok(d) = t.duration_since(UNIX_EPOCH) {
-                    trace.wire_span_start_time = d.as_nanos() as u64;
-                }
-            }
+            trace.processing_duration = rxtime.elapsed().as_nanos() as u32;
         }
         _ => {
             return;
@@ -1369,9 +1352,10 @@ fn flow_data_from_external(
 ) {
     while let Some(mut rx) = flow.pending_rx.pop_front() {
         let hdr = rx.hdr.take();
+        let mut rxtime = None;
         tun.pending_rx -= 1;
-        if hdr.is_some() && flow.first_response.is_none() {
-            flow.first_response = Some(SystemTime::now());
+        if hdr.is_some() && flow.trace_response {
+            rxtime = Some(Instant::now());
         }
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
@@ -1396,8 +1380,10 @@ fn flow_data_from_external(
                 }
                 flow_alive(key, flow);
                 if hdr.is_some() && flow.trace_response {
-                    send_trace_info(flow, hdr, tun);
-                    flow.trace_response = false;
+                    if let Some(rt) = rxtime {
+                        send_trace_info(rt, hdr, tun);
+                        flow.trace_response = false;
+                    }
                 }
             }
         }
