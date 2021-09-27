@@ -1239,7 +1239,7 @@ fn flow_data_to_external(
                     f.source_agent = reginfo.connect_id.clone();
                     f.dest_agent = flow.dest_agent.clone();
                     if flow.trace_request {
-                        f.processing_duration = flow.creation_instant.elapsed().as_nanos() as u32;
+                        f.processing_duration = flow.creation_instant.elapsed().as_nanos() as u64;
                         flow.trace_request = false;
                     }
                 }
@@ -1307,7 +1307,7 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
     match hdr.hdr.unwrap() {
         Hdr::Flow(f) => {
             trace.trace_ctx = f.trace_ctx;
-            trace.processing_duration = rxtime.elapsed().as_nanos() as u32;
+            trace.processing_duration = rxtime.elapsed().as_nanos() as u64;
         }
         _ => {
             return;
