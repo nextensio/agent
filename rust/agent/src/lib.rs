@@ -1308,6 +1308,11 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
         Hdr::Flow(f) => {
             trace.trace_ctx = f.trace_ctx;
             trace.processing_duration = rxtime.elapsed().as_nanos() as u64;
+            trace.source = f.source;
+            trace.dest = f.dest;
+            trace.sport = f.sport;
+            trace.dport = f.dport;
+            trace.proto = f.proto;
         }
         _ => {
             return;
