@@ -94,6 +94,7 @@ func gwToAppClose(tun common.Transport, dest ConnStats) {
 
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
+	var tNow time.Time
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
@@ -106,6 +107,9 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 		case *nxthdr.NxtHdr_Flow:
 			if dest.Conn == nil {
 				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+				if flow.TraceCtx != "" {
+					tNow = time.Now()
+				}
 				key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
 				dest.Conn = flowGet(key, tun)
 				if dest.Conn == nil {
@@ -143,6 +147,11 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 						timeout = UDP_AGER
 					}
 					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
+					if flow.TraceCtx != "" {
+						elapsed := time.Since(tNow)
+						lg.Println("Elapsed:", elapsed)
+						newFlow.ProcessingDuration = uint64(elapsed)
+					}
 				}
 			}
 			e := dest.Conn.Write(hdr, buf)
