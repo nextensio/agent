@@ -11,10 +11,5 @@ replace gvisor.dev/gvisor v0.0.0-20201204040109-0ba39926c86f => github.com/nexte
 
 require (
 	github.com/google/uuid v1.2.0
-	github.com/opentracing/opentracing-go v1.2.0
-	github.com/uber/jaeger-client-go v2.29.1+incompatible
-	github.com/uber/jaeger-lib v2.4.1+incompatible
-	gitlab.com/nextensio/common/go v0.0.0-20210927183553-6a7239a9da4f
-	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
+	gitlab.com/nextensio/common/go v0.0.0-20210928135210-3ec3f7e16fbf
 )

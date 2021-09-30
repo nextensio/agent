@@ -173,6 +173,10 @@ func appToGwClose(src *ConnStats, dest common.Transport, gwRx common.Transport, 
 
 // Data coming back from a tcp/udp socket. Send the data over the gateway
 // stream that initially created the socket
+// NOTE NOTE NOTE: The flow structure here is "pointed to"/referred by every single
+// packet, the assumption is the flow structure doesnt change. So if we suddenly change
+// the flow structure in one packet, it can mess up the previous packets. So if we need
+// to change the flow structure, it has to be a copy first
 func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time.Duration, flow *nxthdr.NxtFlow, gwRx common.Transport) {
 
 	var key *flowKey
@@ -211,11 +215,26 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 		// If hdr is non-nil, that contains details parsed from the packet, so we construct
 		// a flow using those parsed details
 		if hdr == nil {
+			var hdrFlow *nxthdr.NxtFlow
+			if flow.TraceCtx != "" {
+				// Calculate the elapsed time for processing this packet before sending it back to connector
+				start := time.Unix(0, int64(flow.ProcessingDuration))
+				elapsed := time.Since(start).Nanoseconds()
+				// The flow is already being used by previously sent packets which are possibly
+				// queued up to be sent. The flow contents will be used to decide the on-wire
+				// data length etc.. So if we suddenly change that here, the previous packet's
+				// on wire length will get messed up, so create a copy of the flow and change that
+				newFlow := *flow
+				newFlow.ProcessingDuration = uint64(elapsed)
+				hdrFlow = &newFlow
+			} else {
+				hdrFlow = flow
+			}
 			hdr = &nxthdr.NxtHdr{}
-			hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: flow}
+			hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: hdrFlow}
 		} else {
 			// We are saving this flow in the hashtable only in the case of a "connector originated flow",
-			// because when the response comes back from the gateway, we need tp find the socket for the
+			// because when the response comes back from the gateway, we need to find the socket for the
 			// connector origin side of the flow. We could keep this common for connector/gateway originated
 			// and cache the flow all the time, but there is no need as of today and hence why waste memory
 			// since the bulk of the use case will be gateway originated flows
@@ -241,12 +260,6 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 				key = &flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
 				flowAdd(key, src.Conn)
 			}
-		}
-		if flow.TraceCtx != "" {
-			// Calculate the elapsed time for processing this packet before sending it back to connector
-			start := time.Unix(0, int64(flow.ProcessingDuration))
-			elapsed := time.Since(start).Nanoseconds()
-			flow.ProcessingDuration = uint64(elapsed)
 		}
 		e := dest.Write(hdr, buf)
 		if e != nil {
