@@ -77,6 +77,7 @@ const DNS_TTL: u32 = 300; // 5 minutes
 const MONITOR_DNS: u64 = 360; // 6 minutes
 const MONITOR_FLOW_AGE: u64 = 30; // 30 seconds
 const MONITOR_CONNECTIONS: u64 = 2; // 2 seconds
+const MONITOR_PKTS: u64 = 30; // 30 seconds
 const PARSE_MAX: usize = 2048;
 const SERVICE_PARSE_TIMEOUT: u64 = 100; // milliseconds
 const ONBOARD_RETRY: u64 = 500; // milliseconds
@@ -230,6 +231,8 @@ struct Tun {
     tx_ready: bool,
     flows: TunFlow,
     proxy_client: bool,
+    pkts_rx: usize,
+    keepalive: Instant,
 }
 
 impl Default for Tun {
@@ -240,6 +243,8 @@ impl Default for Tun {
             tx_ready: true,
             flows: TunFlow::NoFlow,
             proxy_client: false,
+            pkts_rx: 0,
+            keepalive: Instant::now(),
         }
     }
 }
@@ -432,6 +437,8 @@ fn set_tx_socket(
             tx_ready,
             flows: TunFlow::OneToOne(key.clone()),
             proxy_client: false,
+            pkts_rx: 0,
+            keepalive: Instant::now(),
         };
         match tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
             Err(e) => {
@@ -694,6 +701,7 @@ fn external_sock_rx(
         },
         Ok((stream, data)) => {
             if let Some(hdr) = data.hdr.as_ref() {
+                tun.pkts_rx += 1;
                 match hdr.hdr.as_ref().unwrap() {
                     Hdr::Close(_) => {
                         // The stream close will only provide streamid, none of the other information will be valid
@@ -716,6 +724,7 @@ fn external_sock_rx(
                             "Got onboard response, user {}, uuid {}",
                             onb.userid, onb.uuid
                         );
+                        tun.keepalive = Instant::now();
                         *gw_onboarded = true;
                     }
                     Hdr::Flow(_) => {
@@ -1786,6 +1795,8 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
             tx_ready: false,
             flows: TunFlow::OneToMany(HashMap::new()),
             proxy_client: false,
+            pkts_rx: 0,
+            keepalive: Instant::now(),
         };
 
         match tun.tun.event_register(GWTUN_POLL, poll, RegType::Reg) {
@@ -1814,7 +1825,7 @@ fn monitor_onboard(agent: &mut AgentInfo) {
     agent.gw_onboarded = false;
 }
 
-fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
+fn monitor_gw(now: Instant, agent: &mut AgentInfo, poll: &mut Poll) {
     // If we want the agent to be in all-direct mode, dont bother about gateway
     if DIRECT.load(Relaxed) == 1 {
         return;
@@ -1824,6 +1835,18 @@ fn monitor_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     let gw_tun_info = agent.tuns.remove(&GWTUN_IDX);
     if let Some(mut gw_tun_tun) = gw_tun_info {
         let gw_tun = &mut gw_tun_tun.tun();
+
+        // If we have'nt received any pkts in the last N seconds then close the tunnel, we should
+        // at least be receiving clock sync messages
+        if agent.gw_onboarded && (now > gw_tun.keepalive + Duration::from_secs(MONITOR_PKTS)) {
+            if gw_tun.pkts_rx == 0 {
+                gw_tun.tun.close(0).ok();
+                error!("Tunnel closed, no keepalives");
+            }
+            gw_tun.keepalive = Instant::now();
+            gw_tun.pkts_rx = 0;
+        }
+
         if gw_tun.tun.is_closed(0) {
             STATS_GWUP.store(0, Relaxed);
             STATS_NUMFLAPS.fetch_add(1, Relaxed);
@@ -1965,6 +1988,8 @@ fn monitor_fd_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
             tx_ready: true,
             flows: TunFlow::NoFlow,
             proxy_client: false,
+            pkts_rx: 0,
+            keepalive: Instant::now(),
         };
         match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
             Err(e) => {
@@ -2349,6 +2374,8 @@ fn proxy_listener(
                     tx_ready: true,
                     flows: TunFlow::NoFlow,
                     proxy_client: true,
+                    pkts_rx: 0,
+                    keepalive: Instant::now(),
                 };
                 match tun
                     .tun
@@ -2386,6 +2413,8 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         tx_ready: true,
         flows: TunFlow::NoFlow,
         proxy_client: false,
+        pkts_rx: 0,
+        keepalive: Instant::now(),
     };
     let mut success = false;
     match agent.proxy_tun.tun.listen() {
@@ -2474,6 +2503,8 @@ fn tcp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll) {
         tx_ready: true,
         flows: TunFlow::NoFlow,
         proxy_client: false,
+        pkts_rx: 0,
+        keepalive: Instant::now(),
     };
     match tun.tun.event_register(VPNTUN_POLL, poll, RegType::Reg) {
         Err(e) => {
@@ -2694,7 +2725,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
         // so make sure we monitor only every two secs
         if now > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
             monitor_onboard(&mut agent);
-            monitor_gw(&mut agent, &mut poll);
+            monitor_gw(now, &mut agent, &mut poll);
             monitor_fd_vpn(&mut agent, &mut poll);
             monitor_tcp_vpn(&mut agent, &mut poll);
             monitor_ager = now;
