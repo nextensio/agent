@@ -33,7 +33,7 @@
     <UI>
         <!-- To display the eula, change to WixUI_Minimal -->
         <UIRef Id="WixUI_InstallDir" />
-        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Agent added to the Startup menu, thank you for installing this product." />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Agent short-cut added to the Startup menu, thank you for installing this product." />
         <Publish Dialog="WelcomeDlg"
           Control="Next"
           Event="NewDialog"
