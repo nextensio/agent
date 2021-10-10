@@ -108,10 +108,11 @@ Ref: https://www.packtpub.com/product/wix-3-6-a-developer-s-guide-to-windows-ins
 
 <b> Install Nextensio Agent Console App using MSI </b>
 1. nxt-win.wxs is the XML manifest file to create the agent's MSI package. Its an input to WiX. 
-2. Run: .\build.bat msi, to generate the MSI package: dist\nxt-win-{ARCH}.msi, where {ARCH} is amd64, etc.
+2. Run: .\build.bat msi, to generate the MSI package: dist\nextensio-{ARCH}.msi, where {ARCH} is amd64, etc.
 3. From File Explorer, double clicking nextensio-{ARCH}.wxs. It will install all files into C:\Program Files\Nextensio & its corresponding start menu short-cut 
 4. To update the agent version: Modify .\build.bat ProductVersion defined variable in the compiler 
 5. To generate GUID, use PowerShell "New-Guid": https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/new-guid?view=powershell-7.1
+6. After installation, Nextensio folder will be added as a short-cut to Startup Menu.
 
 <b> Uninstall Nextensio Agent Console App </b>
 1. To uninstall, go to Control Panel -> Programs -> Uninstall a program
