@@ -30,7 +30,35 @@
                Level="1">
       <ComponentGroupRef Id="CMP_NextensioClient" />
     </Feature>
+    <UI>
+        <!-- To display the eula, change to WixUI_Minimal -->
+        <UIRef Id="WixUI_InstallDir" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Agent added to the Startup menu, thank you for installing this product." />
+        <Publish Dialog="WelcomeDlg"
+          Control="Next"
+          Event="NewDialog"
+          Value="VerifyReadyDlg"
+          Order="99">1</Publish>
+        <Publish Dialog="VerifyReadyDlg"
+          Control="Back"
+          Event="NewDialog"
+          Value="WelcomeDlg"
+          Order="99">1</Publish>
+    </UI> 
+    
   </Product>
+
+  <Fragment>
+    <ComponentGroup Id="CMP_NextensioClient" 
+                      Directory="INSTALLFOLDERPLAT">
+      <Component Id="NxtWindowsEXE" 
+                    Guid="$(var.NxtAgentCode)">
+        <File Id="nextensio.exe" Source="$(var.AGENT_PLAT)\nextensio.exe" 
+              KeyPath="yes" />
+      </Component>
+      <ComponentRef Id="ApplicationShortcut" /> 
+    </ComponentGroup>
+  </Fragment>
 
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -61,17 +89,4 @@
       </Component>
     </DirectoryRef>
   </Fragment>
-
-  <Fragment>
-    <ComponentGroup Id="CMP_NextensioClient" 
-                      Directory="INSTALLFOLDERPLAT">
-      <Component Id="NxtWindowsEXE" 
-                    Guid="$(var.NxtAgentCode)">
-        <File Id="nextensio.exe" Source="$(var.AGENT_PLAT)\nextensio.exe" 
-              KeyPath="yes" />
-      </Component>
-      <ComponentRef Id="ApplicationShortcut" /> 
-    </ComponentGroup>
-  </Fragment>
-
 </Wix>
