@@ -127,6 +127,7 @@ func authenticate(IDP string, clientid string, username string, password string)
 		fmt.Println("Authorization request failed: ", err, resp)
 		return nil
 	}
+	defer resp.Body.Close()
 	reg, _ := regexp.Compile("http://localhost:8180/\\?code=(.*)&state=test")
 	match := reg.FindStringSubmatch(resp.Header.Get("Location"))
 	if len(match) != 2 {
@@ -183,6 +184,7 @@ func refreshTokens(IDP string, clientid string, refresh string) *accessIdTokens 
 		fmt.Println("Session token failed: ", err, resp)
 		return nil
 	}
+	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Session token response body read failed", err)
