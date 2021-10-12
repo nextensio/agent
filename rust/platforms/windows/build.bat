@@ -19,10 +19,9 @@ if exist .deps\prepared goto :build
 	rmdir /s /q .deps 2> NUL
 	mkdir .deps || goto :error
 	cd .deps || goto :error
-	call :download wintun.zip https://www.wintun.net/builds/wintun-0.12.zip eba90e26686ed86595ae0a6d4d3f4f022924b1758f5148a32a91c60cc6e604df || goto :error
+	call :download wintun.zip https://www.wintun.net/builds/wintun-0.13.zip 34afe7d0de1fdb781af3defc0a75fd8c97daa756279b42dd6be6a1bd8ccdc7f0 || goto :error
 	copy /y NUL prepared > NUL || goto :error
-	set GOPRIVATE=gitlab.com
-	set GO111MODULE=on
+	go env -w GOPRIVATE=gitlab.com GO111MODULE=on 
 	go get gitlab.com/nextensio/common/go
 
 	cd .. || goto :error
@@ -65,7 +64,7 @@ if exist .deps\prepared goto :build
 	echo [+] Assembling resources %1
 	windres.exe -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
 	echo [+] Building program %1
-	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-H windowsgui -v -linkmode external -extldflags -static" -o "%~1\nextensio.exe" || exit /b 1
+	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nextensio.exe" || exit /b 1
 	goto :eof
 
 :msi

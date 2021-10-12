@@ -574,7 +574,7 @@ func postLogin() {
 	signal.Notify(term, os.Interrupt)
 	signal.Notify(term, syscall.SIGTERM)
 
-	pktserver := websock.NewListener(context.TODO(), lg, nil, nil, PKTTCPPORT, 0, 0)
+	pktserver := websock.NewListener(context.TODO(), lg, nil, nil, PKTTCPPORT, 0, 0, 0)
 	tchan := make(chan common.NxtStream)
 	go pktserver.Listen(tchan)
 	go agentConnection(tchan)
