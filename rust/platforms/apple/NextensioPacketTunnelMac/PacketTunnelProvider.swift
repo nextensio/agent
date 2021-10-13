@@ -238,7 +238,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 if let tokens = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
                     self.conf["access"] = tokens["access_token"] as! NSString
                     self.conf["refresh"] = tokens["refresh_token"] as! NSString
-                    self.force_onboard = true
                     os_log("refresh Success")
                     return
                 }

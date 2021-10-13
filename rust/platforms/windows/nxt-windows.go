@@ -268,8 +268,6 @@ func monitorController(lg *log.Logger) {
 			tokens = refreshTokens(idp, clientid, tokens.Refresh)
 			if tokens != nil {
 				refresh = time.Now()
-				// Send the new tokens to the gateway
-				force_onboard = true
 				regInfoLock.Lock()
 				regInfo.AccessToken = tokens.AccessToken
 				regInfoLock.Unlock()
