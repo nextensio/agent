@@ -291,8 +291,6 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
                 access_token = t.access_token;
                 refresh_token = t.refresh_token;
                 refresh = now;
-                // Send the new tokens to the gateway
-                force_onboard = true;
                 error!("Force onboard");
             } else {
                 error!("Refresh token failed, will retry in 30 seconds")
