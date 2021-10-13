@@ -1838,7 +1838,7 @@ fn monitor_gw(now: Instant, agent: &mut AgentInfo, poll: &mut Poll) {
 
         // If we have'nt received any pkts in the last N seconds then close the tunnel, we should
         // at least be receiving clock sync messages
-        if agent.gw_onboarded && (now > gw_tun.keepalive + Duration::from_secs(MONITOR_PKTS)) {
+        if now > gw_tun.keepalive + Duration::from_secs(MONITOR_PKTS) {
             if gw_tun.pkts_rx == 0 {
                 gw_tun.tun.close(0).ok();
                 error!("Tunnel closed, no keepalives");

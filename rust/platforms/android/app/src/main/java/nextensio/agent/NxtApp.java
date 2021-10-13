@@ -126,7 +126,6 @@ public class NxtApp extends Application {
                 JSONObject response = new JSONObject(res.body().string());
                 accessToken = response.getString("access_token");
                 refreshToken = response.getString("refresh_token");
-                force_onboard = true;
                 Log.i(TAG, "Refresh success");
             }  catch (final JSONException e)  {
                 Log.i(TAG, "Refresh json exception: " + e.getMessage());
