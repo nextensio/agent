@@ -22,7 +22,7 @@ name = "agent"
 version = "0.1.0"
 dependencies = [
  "android_logger",
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "counters",
  "dummy",
  "fd",
@@ -234,12 +234,7 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772edd7415714605817c51cdc1d0c"
-
-[[package]]
-name = "common"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
  "etherparse",
  "httparse",
@@ -250,6 +245,11 @@ dependencies = [
  "prost",
  "prost-build",
 ]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772edd7415714605817c51cdc1d0c"
 
 [[package]]
 name = "cookie"
@@ -389,9 +389,9 @@ checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 [[package]]
 name = "dummy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
 ]
 
 [[package]]
@@ -471,9 +471,9 @@ checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 [[package]]
 name = "fd"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "libc",
  "mio 0.7.11",
  "object-pool",
@@ -801,9 +801,9 @@ dependencies = [
 [[package]]
 name = "l3proxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "managed",
  "object-pool",
  "smoltcp",
@@ -1000,9 +1000,9 @@ dependencies = [
 [[package]]
 name = "netconn"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "mio 0.7.11",
  "object-pool",
 ]
@@ -2164,9 +2164,9 @@ checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 [[package]]
 name = "webproxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "libc",
  "mio 0.7.11",
  "object-pool",
@@ -2175,10 +2175,10 @@ dependencies = [
 [[package]]
 name = "websock"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#6a7239a9da4facee3027ed555e8bbf86efbbb57d"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#5e7b29bcf852774a2e179eb7b0b31aa81c4e2c20"
 dependencies = [
  "bytes 1.0.1",
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "log",
  "mio 0.7.11",
  "native-tls",
