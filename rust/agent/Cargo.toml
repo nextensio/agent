@@ -21,13 +21,13 @@ perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 log = "0.4.14"
 object-pool = { git = "https://github.com/nextensio/object-pool.git", branch = "nextensio-alpha" }
 mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
-common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
-websock = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
-fd = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
-l3proxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
-dummy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
-netconn = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
-webproxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }
+common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+websock = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+fd = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+l3proxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+dummy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+netconn = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
+webproxy = { git = "ssh://git@gitlab.com/nextensio/common", branch = "master" }
 
 [lib]
 name = "nextensio"
