@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	"gitlab.com/nextensio/common/go/transport/netconn"
+	websock "gitlab.com/nextensio/common/go/transport/websocket"
 )
 
 type flowKey struct {
@@ -32,9 +34,9 @@ type flowTuns struct {
 	gwRx common.Transport
 }
 
+var pool common.NxtPool
 var flowLock sync.RWMutex
 var flows map[flowKey]*flowTuns
-
 var gw_onboarded bool
 var onboarded bool
 var uniqueId string
@@ -115,9 +117,9 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 				dest.Conn = flowGet(key, tun)
 				if dest.Conn == nil {
 					if flow.Proto == common.TCP {
-						dest.Conn = netconn.NewClient(mainCtx, lg, "tcp", flow.DestSvc, flow.Dport)
+						dest.Conn = netconn.NewClient(mainCtx, lg, pool, "tcp", flow.DestSvc, flow.Dport)
 					} else {
-						dest.Conn = netconn.NewClient(mainCtx, lg, "udp", flow.DestSvc, flow.Dport)
+						dest.Conn = netconn.NewClient(mainCtx, lg, pool, "udp", flow.DestSvc, flow.Dport)
 					}
 					// the appStreams passed here never gets used
 					e := dest.Conn.Dial(appStreams)
@@ -297,6 +299,51 @@ func monitorController(lg *log.Logger) {
 	}
 }
 
+// Create a websocket session to the gateway
+func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
+	regInfoLock.RLock()
+	req := http.Header{}
+	req.Add("x-nextensio-connect", regInfo.ConnectID)
+	// Ask for a keepalive to be sent once in two seconds
+	wsock := websock.NewClient(ctx, lg, pool, []byte(string(regInfo.CACert)), regInfo.Gateway, regInfo.Gateway, 443, req, 2*1000)
+	regInfoLock.RUnlock()
+	if err := wsock.Dial(c); err != nil {
+		lg.Println("Cannot dial websocket", err, regInfo.ConnectID)
+		return nil
+	}
+
+	return wsock
+}
+
+// Create a tunnel/session to the gateway with the given encap. We can expect
+// more and more encap types to get added here over time (like rsocket for example)
+func DialGateway(ctx context.Context, lg *log.Logger, encap string, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
+	if encap == "websocket" {
+		return dialWebsocket(ctx, lg, regInfo, c)
+	} else {
+		panic(encap)
+	}
+}
+
+// Protobuf encode the device onboard information and send to the gateway
+func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInfo *RegistrationInfo, uuid string) *common.NxtError {
+	regInfoLock.RLock()
+	p := &nxthdr.NxtOnboard{
+		Agent: isAgent, Userid: regInfo.Userid, Uuid: uuid,
+		AccessToken: regInfo.AccessToken, Services: regInfo.Services,
+		Cluster:   regInfo.Cluster,
+		ConnectId: regInfo.ConnectID,
+	}
+	regInfoLock.RUnlock()
+
+	hdr := nxthdr.NxtHdr{Hdr: &nxthdr.NxtHdr_Onboard{p}}
+	err := tunnel.Write(&hdr, &common.NxtBufs{Slices: net.Buffers{}})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
 func monitorGw(lg *log.Logger) {
 	for {
@@ -402,7 +449,7 @@ func svrAccept(lg *log.Logger) {
 }
 
 func main() {
-	common.MAXBUF = (64 * 1024)
+	pool = common.NewPool(64 * 1024)
 	mainCtx = context.Background()
 	unique = uuid.New()
 	gwStreams = make(chan common.NxtStream)
@@ -416,7 +463,7 @@ func main() {
 
 	for _, p := range ports {
 		// Right now we support only tcp
-		conn := netconn.NewClient(mainCtx, lg, "tcp", "", uint32(p))
+		conn := netconn.NewClient(mainCtx, lg, pool, "tcp", "", uint32(p))
 		go svrListen(lg, conn, p)
 	}
 	go svrAccept(lg)
