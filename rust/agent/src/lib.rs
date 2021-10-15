@@ -923,13 +923,13 @@ fn parse_https_and_http(
     return false;
 }
 
+// We try to parse upto a max size (PARSE_MAX), theres no point indefinitely
+// queueing up data to parse.
 fn parse_copy(
-    key: &FlowV4Key,
-    flow: &mut FlowV4,
     pkt_pool: &Arc<Pool<Vec<u8>>>,
     pending: &mut Reusable<Vec<u8>>,
     mut tx: NxtBufs,
-) -> (Vec<Reusable<Vec<u8>>>, Option<NxtHdr>) {
+) -> (Vec<Reusable<Vec<u8>>>, bool) {
     let mut out = vec![];
     let max_copy = std::cmp::min(PARSE_MAX, pending.capacity());
     let mut remaining = max_copy - pending.len();
@@ -940,34 +940,38 @@ fn parse_copy(
         }
         drain += 1;
         let l = b[tx.headroom..].len();
+        // Remember, only the first buffer in the chain has/may have headroom
+        tx.headroom = 0;
         if l > remaining {
             pending.extend_from_slice(&b[tx.headroom..tx.headroom + remaining]);
-            // the first buffer in the chain is the pending buffer, and we dont allow
-            // non-first buffers to have non-zero headroom, so we just copy it if thats
-            // the case
+            // when all parsing is done, the "pending" will be the first buffer
+            // in the chain, and the other buffers are all second and onwards.
+            // And we allow only the first buffer to have a headroom, and hence
+            // having to copy all the other buffers into a new one since now they
+            // have a slice of their initial data already moved to "pending"
             if let Some(mut new) = pool_get(pkt_pool.clone()) {
                 // Clear just to set vector data/len to empty
                 new.clear();
                 new.extend_from_slice(&b[tx.headroom + remaining..]);
                 out.push(new);
             } else {
-                flow_dead(key, flow);
-                return (out, None);
+                return (vec![], true);
             }
             break;
         } else {
             pending.extend_from_slice(&b[tx.headroom..tx.headroom + l]);
             remaining -= l;
         }
-        // Remember, only the first buffer in the chain has/may have headroom
-        tx.headroom = 0;
     }
     tx.bufs.drain(0..drain);
     out.extend(tx.bufs);
 
-    return (out, tx.hdr);
+    return (out, false);
 }
 
+// If we have enough data (PARSE_MAX) and we still cant find what the
+// service is, we give up and use the dest-ip as the service. But if
+// we havent received data upto PARSE_MAX, we wait till we get as much
 fn parse_or_maxlen(
     key: &FlowV4Key,
     flow: &mut FlowV4,
@@ -1048,6 +1052,9 @@ fn parse_or_maxlen(
     return false;
 }
 
+// We first try to see if we have enough data (PARSE_MAX) to parse the service,
+// if we dont then we queue up data till we have enough or we succesfully parsed
+// the service
 fn parse_complete(
     key: &FlowV4Key,
     flow: &mut FlowV4,
@@ -1084,6 +1091,9 @@ fn parse_complete(
         return Some(tx);
     }
 
+    // Ok so we dont have enough data to parse, copy the data into a pending
+    // buffer and keep waiting for more data. The monitor_parse_pending() api
+    // will stop our buffering + parsing efforts after a timeout
     let mut pending;
     if flow.parse_pending.is_some() {
         pending = flow.parse_pending.take().unwrap();
@@ -1097,7 +1107,11 @@ fn parse_complete(
             return None;
         }
     }
-    let (out, hdr) = parse_copy(key, flow, pkt_pool, &mut pending, tx);
+    let (out, err) = parse_copy(pkt_pool, &mut pending, tx);
+    if err {
+        flow_dead(key, flow);
+        return None;
+    }
     if parse_or_maxlen(
         key,
         flow,
@@ -1114,13 +1128,16 @@ fn parse_complete(
         let mut v = vec![pending];
         v.extend(out);
         return Some(NxtBufs {
-            hdr: hdr,
+            hdr: None,
             bufs: v,
             headroom: 0,
         });
     } else {
         // wait for more data or timeout
         flow.parse_pending = Some(pending);
+        // The out should always be empty here because if out is not empty,
+        // that means we have more data than PARSE_MAX, and if we have more
+        // data than PARSE_MAX, parse_or_maxlen() WILL return true
         assert!(out.is_empty());
         return None;
     }
@@ -1175,8 +1192,13 @@ fn flow_handle_dns(
 // Now lets see if the smoltcp FSM deems that we have a payload to
 // be read. Before that see if we had any payload pending to be processed
 // and if so process it. The payload might be sent to the gateway or direct.
-// NOTE: If we profile this api with the perf counters in AgentPerf, the
-// tx_socket.tun.write is the most heavy call in here.
+// NOTE: The tx_socket.tun.write() can (obviously) return EWOULDBLOCK if the data
+// cannot be sent completely. But note that the data might have been sent
+// partially - maybe part of the nxt header has been sent, or all of the header
+// has been sent but part of the data has been sent etc.. So in case of
+// EWOULDBLOCK, the tx_socket.tun.write() will return the unwritten data to us,
+// and its onus on the caller to save the data EXACTLY as returned and retry
+// again with that data when the poller says the socket is ready to send
 fn flow_data_to_external(
     key: &FlowV4Key,
     flow: &mut FlowV4,
@@ -1259,12 +1281,10 @@ fn flow_data_to_external(
             Err((data, e)) => match e.code {
                 EWOULDBLOCK => {
                     tx_socket.tx_ready = false;
-                    if !tx_socket.tx_ready {
-                        tx_socket
-                            .tun
-                            .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
-                            .ok();
-                    }
+                    tx_socket
+                        .tun
+                        .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
+                        .ok();
                     if data.is_some() {
                         flow.pending_tx = data;
                         if !flow.pending_tx_qed {

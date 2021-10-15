@@ -1,18 +1,14 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"time"
 
 	common "gitlab.com/nextensio/common/go"
-	"gitlab.com/nextensio/common/go/messages/nxthdr"
-	websock "gitlab.com/nextensio/common/go/transport/websocket"
 )
 
 const (
@@ -118,49 +114,4 @@ func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, ve
 		lg.Println("Keepalive failed", err, ka)
 	}
 	return false
-}
-
-// Create a websocket session to the gateway
-func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
-	regInfoLock.RLock()
-	req := http.Header{}
-	req.Add("x-nextensio-connect", regInfo.ConnectID)
-	// Ask for a keepalive to be sent once in two seconds
-	wsock := websock.NewClient(ctx, lg, []byte(string(regInfo.CACert)), regInfo.Gateway, regInfo.Gateway, 443, req, 2*1000)
-	regInfoLock.RUnlock()
-	if err := wsock.Dial(c); err != nil {
-		lg.Println("Cannot dial websocket", err, regInfo.ConnectID)
-		return nil
-	}
-
-	return wsock
-}
-
-// Create a tunnel/session to the gateway with the given encap. We can expect
-// more and more encap types to get added here over time (like rsocket for example)
-func DialGateway(ctx context.Context, lg *log.Logger, encap string, regInfo *RegistrationInfo, c chan common.NxtStream) common.Transport {
-	if encap == "websocket" {
-		return dialWebsocket(ctx, lg, regInfo, c)
-	} else {
-		panic(encap)
-	}
-}
-
-// Protobuf encode the device onboard information and send to the gateway
-func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInfo *RegistrationInfo, uuid string) *common.NxtError {
-	regInfoLock.RLock()
-	p := &nxthdr.NxtOnboard{
-		Agent: isAgent, Userid: regInfo.Userid, Uuid: uuid,
-		AccessToken: regInfo.AccessToken, Services: regInfo.Services,
-		Cluster:   regInfo.Cluster,
-		ConnectId: regInfo.ConnectID,
-	}
-	regInfoLock.RUnlock()
-
-	hdr := nxthdr.NxtHdr{Hdr: &nxthdr.NxtHdr_Onboard{p}}
-	err := tunnel.Write(&hdr, net.Buffers{})
-	if err != nil {
-		return err
-	}
-	return nil
 }
