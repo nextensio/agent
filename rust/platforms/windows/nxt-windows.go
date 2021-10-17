@@ -449,19 +449,21 @@ func vpnRoutes() {
 
 	extra := extraRoutes()
 
-	hasDefault := false
+	// NOTE: This decides if we will act as a full tunnel and suck in all traffic or we
+	// will suck in only traffic to specific routes
+	attractAll := !regInfo.SplitTunnel
+
 	for _, d := range regInfo.Domains {
 		if d.Name == "nextensio-default-internet" {
-			hasDefault = true
+			attractAll = true
 		}
 	}
 
 	count := 0
 	for {
 		count += 1
-		if hasDefault {
-			base := []*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd}
-			routes := append(extra, base...)
+		if attractAll {
+			routes := []*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd}
 			err := (*luid).SetRoutes(routes)
 			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 				lg.Printf("Failed to create default RouteData: %v (%d)", err, count)
