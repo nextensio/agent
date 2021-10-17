@@ -37,7 +37,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var uuid = UUID().uuidString
     var stopKeepalive = false
     var domains = [String]()
-    var hasDefault = false
+    var subnets = [String]()
+    var attractAll = false
     
     override init() {
         super.init()
@@ -152,7 +153,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
         // An informative/interesting rant on how mac DNS works is below:
         // https://threadreaderapp.com/thread/1380388035250941957.html
-        if self.hasDefault {
+        if self.attractAll {
             // We want all default traffic to go via nextensio, so we need DNS
             // servers for that. TODO: We can let these dns server IPs be configured
             // via controller
@@ -322,7 +323,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.stopKeepalive = true
         super.stopTunnel(with: reason, completionHandler: completionHandler)
         self.turnOffNextensioAgent()
-        self.hasDefault = false
+        self.attractAll = false
         self.domains = [String]()
     }
 
@@ -392,11 +393,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.cluster = UnsafeMutablePointer<Int8>(mutating: (json["cluster"] as! NSString).utf8String)
         registration.uuid = UnsafeMutablePointer<Int8>(mutating: (uuid as NSString).utf8String)
-        
+
         let dom = json["domains"] as! NSMutableArray
         registration.num_domains = Int32(dom.count)
         self.domains = [String]()
-        self.hasDefault = false
+        self.subnets = [String]()
+        self.attractAll = !(json["splittunnel"] as! Bool)
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
@@ -404,7 +406,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 if d["name"] as! String != "nextensio-default-internet" {
                     self.domains.append((d["name"] as! String))
                 } else {
-                    self.hasDefault = true
+                    self.attractAll = true
                 }
                 registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (d["name"] as! NSString).utf8String)
             }
