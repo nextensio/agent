@@ -20,5 +20,9 @@
         <array>
                 <string>$(TeamIdentifierPrefix)*</string>
         </array>
+        <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+        <array>
+                <string>/private/var/db/mds/</string>
+        </array>
 </dict>
 </plist>

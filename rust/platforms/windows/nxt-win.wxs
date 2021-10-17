@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Copyright (C) 2021 Nextensio. All Rights Reserved.
+-->
+<?if $(var.AGENT_PLAT) = "amd64"?>
+	<?define UpgradeCode = "{e5f3af5e-1394-44ef-a046-09491d9fa0cb}"?>
+  <?define NxtAgentCode = "{fb952a10-ff9c-4594-87b4-18238aba2c9b}"?>
+  <?define ShortCutNxtAgentCode = "{4bd16be1-859c-4ca9-8adc-c19120c1fe66}"?>
+<?else?>
+	<?error Unknown platform ?>
+<?endif?>
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="D0135DCE-8059-4117-8661-32A5CDE4B928" 
+           Name="Nextensio Agent for Windows"
+           Language="1033"
+           Manufacturer="Nextensio"
+           Version="$(var.ProductVersion)" 
+           UpgradeCode="$(var.UpgradeCode)">
+    
+    <Package InstallerVersion="500" 
+               Compressed="yes" 
+               InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" 
+               Title="Nextensio Client" 
+               Level="1">
+      <ComponentGroupRef Id="CMP_NextensioClient" />
+    </Feature>
+    <UI>
+        <!-- To display the eula, change to WixUI_Minimal -->
+        <UIRef Id="WixUI_InstallDir" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Agent short-cut added to the Startup menu, thank you for installing this product." />
+        <Publish Dialog="WelcomeDlg"
+          Control="Next"
+          Event="NewDialog"
+          Value="VerifyReadyDlg"
+          Order="99">1</Publish>
+        <Publish Dialog="VerifyReadyDlg"
+          Control="Back"
+          Event="NewDialog"
+          Value="WelcomeDlg"
+          Order="99">1</Publish>
+    </UI> 
+    
+  </Product>
+
+  <Fragment>
+    <ComponentGroup Id="CMP_NextensioClient" 
+                      Directory="INSTALLFOLDERPLAT">
+      <Component Id="NxtWindowsEXE" 
+                    Guid="$(var.NxtAgentCode)">
+        <File Id="nextensio.exe" Source="$(var.AGENT_PLAT)\nextensio.exe" 
+              KeyPath="yes" />
+      </Component>
+      <ComponentRef Id="ApplicationShortcut" /> 
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" 
+                      Name="Nextensio"/>
+      </Directory>
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" 
+                       Name="Nextensio">
+          <Directory Id="INSTALLFOLDERPLAT"
+                       Name="$(var.AGENT_PLAT)"/>
+        </Directory>
+      </Directory>
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="ApplicationProgramsFolder">
+     <Component Id="ApplicationShortcut" Guid="$(var.ShortCutNxtAgentCode)">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                    Name="nextensio" 
+                    Description="Nextensio Agent"
+                    Target="[!nextensio.exe]"
+                    WorkingDirectory="INSTALLFOLDERPLAT"/>
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\Nextensio\nextensio" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

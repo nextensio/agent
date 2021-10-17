@@ -6,24 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
-
-	common "gitlab.com/nextensio/common/go"
 )
-
-const (
-	UDP_AGER = 5 * time.Minute
-	// Well, for tcp its more granular than this, half closed sessions
-	// have a shorter timeout. Its a TODO to implement that. But then
-	// at the transport layer, we dont have the concept of half closed
-	TCP_AGER = 4 * time.Hour
-)
-
-type ConnStats struct {
-	Conn common.Transport
-	Rx   uint64
-	Tx   uint64
-}
 
 type Domain struct {
 	Name string `json:"name" bson:"name"`
@@ -41,9 +24,10 @@ type RegistrationInfo struct {
 	Services    []string `json:"services"`
 	Version     string   `json:"version"`
 	Keepalive   uint     `json:"keepalive"`
+	SplitTunnel bool     `json:"splittunnel"`
 }
 
-func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool {
+func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bool {
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
 	// should have verifiable certs via a test.nextensio.net domain or something
@@ -53,7 +37,7 @@ func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+sharedKey)
+		req.Header.Add("Authorization", "Bearer "+accessToken)
 		resp, err := client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
@@ -61,10 +45,16 @@ func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool
 			if err == nil {
 				regInfoLock.Lock()
 				err = json.Unmarshal(body, &regInfo)
+				agentOnboard()
 				regInfoLock.Unlock()
 				if err == nil {
+					lg.Println("Agent succesfully onboarded")
 					return true
+				} else {
+					lg.Println("Json unmarshall failed", err)
 				}
+			} else {
+				lg.Println("Onboarding json failed", err)
 			}
 		} else {
 			lg.Println("Onboard request failed", err)
@@ -79,7 +69,7 @@ type KeepaliveResponse struct {
 	Version string `json:"version"`
 }
 
-func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, version string, uuid string) bool {
+func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, version string, uuid string) bool {
 	var ka KeepaliveResponse
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
@@ -90,7 +80,7 @@ func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, ve
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/keepalive/"+version+"/"+uuid, nil)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+sharedKey)
+		req.Header.Add("Authorization", "Bearer "+accessToken)
 		resp, err := client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()

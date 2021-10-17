@@ -8,8 +8,7 @@
 import NetworkExtension
 import os.log
 
-let rxmtu = 1500;
-let txmtu = 1500;
+let mtu = 1500;
 var highmem = 0;
 
 enum IPVersion: UInt8 {
@@ -30,7 +29,15 @@ public enum NextensioGoBridgeLogLevel: Int32 {
 class PacketTunnelProvider: NEPacketTunnelProvider {
     var conf = [String: AnyObject]()
     var pendingStartCompletion: ((NSError?) -> Void)?
-    
+    var onboarded = false
+    var force_onboard = false
+    var keepalive = 30
+    var last_version = ""
+    var uuid = UUID().uuidString
+    var stopKeepalive = false
+    var domains = [String]()
+    var hasDefault = false
+
     override init() {
         super.init()
     }
@@ -56,13 +63,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     os_log("url error %{public}s", error!.localizedDescription)
                 }
                 self.pendingStartCompletion?(NSError(domain:"onboarding url failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
+                self.pendingStartCompletion = nil
                 return
             }
             guard let data = data else {
                 os_log("data error")
                 self.pendingStartCompletion?(NSError(domain:"onboarding data failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
+                self.pendingStartCompletion = nil
                 return 
             }
             do {
@@ -71,19 +78,66 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.onboardNextensioAgent(accessToken: accessToken, json: onboard)
                     self.turnOnNextensioAgent()
                     self.pendingStartCompletion?(nil)
-		    self.pendingStartCompletion = nil
-		    os_log("Successfully onboarded")
-		    return
+                    self.pendingStartCompletion = nil
+                    os_log("Successfully onboarded")
+                    return
                 }
             } catch _ {
                 os_log("error in json serialization")
                 self.pendingStartCompletion?(NSError(domain:"onboarding json failed", code:0, userInfo:nil))
-		self.pendingStartCompletion = nil
-		return 
+                self.pendingStartCompletion = nil
+                return 
             }
         })
         task.resume()
-	return
+        return
+    }
+    
+    private func agentKeepalive(accessToken: String) {
+        //create the url with NSURL
+        let keepURL = String(format:"https://server.nextensio.net:8080/api/v1/global/get/keepalive/%@/%@", last_version, uuid)
+        let url = URL(string: keepURL)!
+        //create the session object
+        let session = URLSession.shared
+        session.configuration.httpMaximumConnectionsPerHost = 1;
+        session.configuration.timeoutIntervalForRequest = 60;
+        session.configuration.timeoutIntervalForResource = 60;
+        //now create the URLRequest object using the url object
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField:"Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField:"Authorization")
+        request.timeoutInterval = 60.0
+
+        //create dataTask using the session object to send data to the server
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            guard error == nil else {
+                if #available(macOS 11.0, *) {
+                    os_log("url error %{public}s", error!.localizedDescription)
+                }
+                return
+            }
+            guard let data = data else {
+                os_log("keepalive: data error")
+                return
+            }
+            do {
+                //create json object from data
+                if let keepalive = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                    if keepalive["version"] as! String != self.last_version {
+                        self.force_onboard = true
+                        os_log("keepalive version mismatch %{public}@, %{public}@", keepalive["version"] as! String, self.last_version)
+                    }
+                    os_log("keepalive: Successful")
+                    return
+                }
+            } catch _ {
+                os_log("keepalive: error in json serialization")
+                return
+            }
+        })
+        task.resume()
+        return
     }
     
     private func setupVPN() {
@@ -94,33 +148,48 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // which can be used as basic whitelist/blacklist routing.
         
         let ipv4Settings = NEIPv4Settings(addresses: ["169.254.2.1"], subnetMasks: ["255.255.255.0"])
+
+        // An informative/interesting rant on how mac DNS works is below:
+        // https://threadreaderapp.com/thread/1380388035250941957.html
+        if self.hasDefault {
+            // We want all default traffic to go via nextensio, so we need DNS
+            // servers for that. TODO: We can let these dns server IPs be configured
+            // via controller
+            let dnsSettings = NEDNSSettings(servers: ["8.8.8.8", "8.8.4.4"])
+            dnsSettings.matchDomains = [""] // match all
+            networkSettings.dnsSettings = dnsSettings
+            ipv4Settings.includedRoutes = [
+                NEIPv4Route.default()
+            ]
+        } else {
+            // Only our private domains need to be dns resolved by us,
+            // the public domains can go to whatever dns server is configured
+            // And for private domains, the dns server IP doesnt really matter,
+            // we parse the dns requests and respond to it ourselves
+            let dnsSettings = NEDNSSettings(servers: ["100.64.1.1"])
+            dnsSettings.matchDomains = self.domains
+            dnsSettings.matchDomainsNoSearch = true
+            networkSettings.dnsSettings = dnsSettings
+            // We advertise IP addresses in the CGNAT range for private services
+            ipv4Settings.includedRoutes = [
+                NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),
+            ]
+        }
         
-        ipv4Settings.includedRoutes = [
-            NEIPv4Route.default()
-        ]
         ipv4Settings.excludedRoutes = [
         ]
         networkSettings.ipv4Settings = ipv4Settings
-        networkSettings.mtu = rxmtu as NSNumber?
-
-        // This overrides system DNS settings. We dont really need
-        // a dns server and it doesnt get used either because we are
-        // not setting any domains to match, but without any dns server,
-        // the vpn interface doesnt seem to get any ip address
-        let dnsSettings = NEDNSSettings(servers: ["8.8.8.8"])
-        dnsSettings.matchDomains = [""]
-        networkSettings.dnsSettings = dnsSettings
+        networkSettings.mtu = mtu as NSNumber?
         
         if (conf["highMem"] as! Bool) == true {
-            highmem = 1; 
+            highmem = 1;
         }
-        let access = (conf["access"] as! String)
-         
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in
-            self.onboardController(accessToken: access)
+            os_log("Network tunnel saved")
         }
     }
+
 
     @objc func runner(sender:Any) {
         let direct = sender as! String
@@ -128,7 +197,96 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             os_log("agent_init %{public}lu", Thread.current)
         }
         Thread.setThreadPriority(1);
-        agent_init(1 /*apple*/, direct == "true" ? 1 : 0, Int32(rxmtu), Int32(txmtu), Int32(highmem))
+        agent_init(1 /*apple*/, direct == "true" ? 1 : 0,  UInt32(mtu), UInt32(highmem), 0)
+    }
+
+    private func refresh(refreshToken: String) {
+        let rUrl =  "https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0q3hn65I4Zkmr5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken
+        let url = URL(string: rUrl)!
+        //create the session object
+        let session = URLSession.shared
+        session.configuration.httpMaximumConnectionsPerHost = 1;
+        session.configuration.timeoutIntervalForRequest = 60;
+        session.configuration.timeoutIntervalForResource = 60;
+        //now create the URLRequest object using the url object
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField:"Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField:"Content-Type")
+        request.setValue("no-cache", forHTTPHeaderField:"cache-control")
+        request.timeoutInterval = 60.0
+        let empty = [String: String]()
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: empty, options: []) else {
+            return
+        }
+        request.httpBody = httpBody
+        
+        //create dataTask using the session object to send data to the server
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            guard error == nil else {
+                if #available(macOS 11.0, *) {
+                    os_log("url error %{public}s", error!.localizedDescription)
+                }
+                return
+            }
+            guard let data = data else {
+                os_log("refresh: data error")
+                return
+            }
+            do {
+                //create json object from data
+                if let tokens = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                    self.conf["access"] = tokens["access_token"] as! NSString
+                    self.conf["refresh"] = tokens["refresh_token"] as! NSString
+                    os_log("refresh Success")
+                    return
+                }
+            } catch _ {
+                os_log("refresh: error in json serialization")
+                return
+            }
+        })
+        task.resume()
+        return
+        
+    }
+    
+    @objc func doOnboard(sender: Any) {
+        if #available(macOS 11.0, *) {
+            os_log("doOnboard %{public}lu", Thread.current)
+        }
+        var last_keepalive = DispatchTime.now()
+        var last_refresh = DispatchTime.now()
+        while true {
+            if stopKeepalive {
+                return
+            }
+            if conf["access"] == nil {
+                // Till user logs in we sleep for less time
+                Thread.sleep(forTimeInterval: 1)
+                continue
+            }
+            let now = DispatchTime.now()
+            if onboarded {
+                let nanoTime = now.uptimeNanoseconds - last_keepalive.uptimeNanoseconds
+                let elapsed = Double(nanoTime) / 1_000_000_000
+                if Int(elapsed) >= keepalive {
+                    agentKeepalive(accessToken: (conf["access"] as! String))
+                    last_keepalive = now
+                }
+            }
+            let nanoTime = now.uptimeNanoseconds - last_refresh.uptimeNanoseconds
+            let elapsed = Double(nanoTime) / 1_000_000_000
+            // Okta tokens expire in one hour, start refreshing them 15 mins before expiry
+            if elapsed >= 45*60 {
+                refresh(refreshToken: conf["refresh"] as! String)
+                last_refresh = now
+            }
+            if !onboarded || force_onboard {
+                self.onboardController(accessToken: (conf["access"] as! String))
+            }
+            Thread.sleep(forTimeInterval:  3)
+        }
     }
     
     func startAgent(direct: String) {
@@ -153,15 +311,19 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             self.startAgent(direct: "false")
         } else {
             os_log("Agent started previously")
-	}
-
+        }
+        let t = Thread(target: self, selector: #selector(doOnboard(sender:)), object: nil)
+        t.start()
         self.pendingStartCompletion = completionHandler
         self.setupVPN()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        self.stopKeepalive = true
         super.stopTunnel(with: reason, completionHandler: completionHandler)
         self.turnOffNextensioAgent()
+        self.hasDefault = false
+        self.domains = [String]()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
@@ -219,31 +381,38 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         os_log("CA cert count %d", (json["cacert"] as! NSMutableArray).count)
         os_log("UserId %{public}@", json["userid"] as! String)
         os_log("cluster %{public}@", json["cluster"] as! String)
-        os_log("UUID %{public}@", UUID().uuidString)
-
+        os_log("UUID %{public}@", uuid)
+        os_log("Version %{public}@", last_version)
+                
         var registration = CRegistrationInfo()
         
-        registration.host = UnsafeMutablePointer<Int8>(mutating: (json["gateway"] as! NSString).utf8String)
+        registration.gateway = UnsafeMutablePointer<Int8>(mutating: (json["gateway"] as! NSString).utf8String)
         registration.access_token = UnsafeMutablePointer<Int8>(mutating: (accessToken as NSString).utf8String)
         registration.connect_id = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
         registration.userid = UnsafeMutablePointer<Int8>(mutating: (json["userid"] as! NSString).utf8String)
         registration.cluster = UnsafeMutablePointer<Int8>(mutating: (json["cluster"] as! NSString).utf8String)
-        registration.uuid = UnsafeMutablePointer<Int8>(mutating: (UUID().uuidString as NSString).utf8String)
-        
+        registration.uuid = UnsafeMutablePointer<Int8>(mutating: (uuid as NSString).utf8String)
+
         let dom = json["domains"] as! NSMutableArray
         registration.num_domains = Int32(dom.count)
+        self.domains = [String]()
+        self.hasDefault = false
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
-                registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (dom[i] as! NSString).utf8String)
+                let d = dom[i] as! NSDictionary
+                if d["name"] as! String != "nextensio-default-internet" {
+                    self.domains.append((d["name"] as! String))
+                } else {
+                    self.hasDefault = true
+                }
+                registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (d["name"] as! NSString).utf8String)
             }
         } else {
             registration.domains = nil
         }
-                
-        registration.num_services = 1
-        registration.services = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
-        registration.services[0] = UnsafeMutablePointer<Int8>(mutating: (json["connectid"] as! NSString).utf8String)
+                    
+        registration.num_services = 0
         
         let cert = (json["cacert"] as! NSMutableArray)
         registration.num_cacert = Int32(cert.count)
@@ -251,24 +420,46 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         for i in 0..<cert.count {
             registration.ca_cert[i] = cert[i] as! Int8
         }
+
+        let processInfo:ProcessInfo = ProcessInfo.processInfo
+
+        // Returns the name of the host system
+        let hostName:String = processInfo.hostName
+        // Returns the version number of the operating system
+        let osVerson:OperatingSystemVersion = processInfo.operatingSystemVersion
+        let majorVersion:Int = osVerson.majorVersion
+        let minorVersion:Int = osVerson.minorVersion
+        let patchVersion:Int = osVerson.patchVersion
+        // return the operating system name
+        let osName:String = processInfo.operatingSystemVersionString
         
+        registration.hostname = UnsafeMutablePointer<Int8>(mutating: (hostName as NSString).utf8String)
+        registration.model = UnsafeMutablePointer<Int8>(mutating: (self.conf["modelName"] as! NSString).utf8String)
+        registration.os_type = UnsafeMutablePointer<Int8>(mutating: ("ios" as NSString).utf8String)
+        registration.os_name = UnsafeMutablePointer<Int8>(mutating: (osName as NSString).utf8String)
+        registration.os_patch = Int32(patchVersion)
+        registration.os_major = Int32(majorVersion)
+        registration.os_minor = Int32(minorVersion)
+
         print("onboarding agent on mac")
         onboard(registration)
                 
         // cleanup
-        //registration.host.deallocate()
-        //registration.access_token.deallocate()
-        //registration.connect_id.deallocate()
-        //registration.userid.deallocate()
-        //registration.uuid.deallocate()
         registration.ca_cert.deallocate()
-        //for i in 0..<dom.count {
-            //registration.domains[i]!.deallocate()
-        //}
-        //registration.domains.deallocate()
-        //registration.services[0]!.deallocate()
-        registration.services.deallocate()
+        registration.domains.deallocate()
+        
+        last_version = json["version"] as! String
+        keepalive = json["keepalive"] as! Int
+        if keepalive == 0 {
+            keepalive = 5*60
+        }
+        onboarded = true
+        force_onboard = false
+        
+        // Update the NEDNS settings if there are new domains added
+        setupVPN()
     }
+    
     
     // turn on NextensioAgent
     private func turnOnNextensioAgent() {
@@ -294,7 +485,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 // Initialize RegistrationInfo
 extension CRegistrationInfo {
     init() {
-        self.init(host: nil,
+        self.init(gateway: nil,
                   access_token: nil,
                   connect_id: nil,
                   cluster: nil,
@@ -305,7 +496,14 @@ extension CRegistrationInfo {
                   userid: nil,
                   uuid: nil,
                   services: nil,
-                  num_services: 0)
+                  num_services: 0,
+                  hostname: nil,
+                  model: nil,
+                  os_type: nil,
+                  os_name: nil,
+                  os_patch: 0,
+                  os_major: 0,
+                  os_minor: 0)
     }
 }
 

@@ -10,8 +10,6 @@ COPY files/ /rust/files
 RUN chmod +x /rust/files/gitlab.sh
 RUN /rust/files/gitlab.sh
 COPY . .
-# This is used inside the platforms/docker to get tokens, once we rewrite
-# it in rust we can get rid of this
 RUN cd platforms/docker; CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --path .
 
 RUN rm /rust/files/gitlab_rsa

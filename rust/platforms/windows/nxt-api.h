@@ -38,6 +38,7 @@ void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highm
 int agent_started(void);
 
 void agent_on(int32_t fd);
+void agent_default_route(uint32_t bindip);
 
 void agent_off(void);
 

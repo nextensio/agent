@@ -1,5 +1,5 @@
 FROM golang:1.15.7-alpine3.12
-RUN apk update && apk add lighttpd && apk add git && apk add openssh
+RUN apk update && apk add lighttpd git openssh curl
 
 # For emulating a private URL webservice
 RUN mkdir /etc/lighttpd/certs
@@ -20,7 +20,6 @@ RUN go env -w GO111MODULE="on"
 COPY . .
 RUN go get -d -v ./... 
 RUN cd connector; go install -v ./...
-RUN cd platforms/docker; go install -v ./...
 RUN rm -r -f /go/src/app/* \
     && \rm -r -f /go/pkg/mod \
     && \rm -r -f /go/pkg/sumdb

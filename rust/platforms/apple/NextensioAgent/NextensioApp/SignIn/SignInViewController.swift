@@ -12,7 +12,7 @@ import NetworkExtension
 
 class SignInViewController: AuthBaseViewController {
 
-    var urlString = "https://dev-24743301.okta.com"
+    var urlString = "https://login.nextensio.net"
 
     
     @IBOutlet private var usernameField: UITextField!
@@ -114,6 +114,7 @@ class SignInViewController: AuthBaseViewController {
                                         "refresh": self.refreshToken as Any,
                                         "id": self.idToken as Any,
                                         "highMem": false,
+                                        "modelName": UIDevice.current.modelName,
                 ]
                 providerProtocol.serverAddress = "127.0.0.1"
                 
@@ -215,3 +216,15 @@ class SignInViewController: AuthBaseViewController {
     }
 }
 
+extension UIDevice {
+    var modelName: String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machineMirror = Mirror(reflecting: systemInfo.machine)
+        let identifier = machineMirror.children.reduce("") { identifier, element in
+            guard let value = element.value as? Int8, value != 0 else { return identifier }
+            return identifier + String(UnicodeScalar(UInt8(value)))
+        }
+        return identifier
+    }
+}

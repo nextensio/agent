@@ -10,13 +10,16 @@ android_logger = "0.10"
 [target.'cfg(target_vendor = "apple")'.dependencies]
 oslog = "0.1.0"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+winlog = "*"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 counters = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 perf = { git = "https://github.com/gopakumarce/R2.git", branch = "master"}
 
 [dependencies]
 log = "0.4.14"
-object-pool = { git = "https://github.com/gopakumarce/object-pool.git", branch = "gopa-objpool" }
+object-pool = { git = "https://github.com/nextensio/object-pool.git", branch = "nextensio-alpha" }
 mio = {version = "0.7", features = ["os-poll", "net", "os-util"]}
 libc = "0.2.97"
 common = { git = "ssh://git@gitlab.com/nextensio/common", branch = "gopa-debug" }

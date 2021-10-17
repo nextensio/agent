@@ -1,21 +1,21 @@
 use clap::{App, Arg};
 use log::error;
-use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistrationInfo};
+use nextensio::{agent_init, agent_on, onboard, CRegistrationInfo};
+use pkce::refresh;
 use regex::Regex;
 use serde::Deserialize;
 use signal_hook::{consts::SIGABRT, consts::SIGINT, consts::SIGTERM, iterator::Signals};
-use std::fmt;
 use std::io::Write;
 use std::os::raw::{c_char, c_int};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use std::{ffi::CString, usize};
+use std::{fmt, time::Instant};
 use uuid::Uuid;
 mod pkce;
 
-const RXMTU: usize = 1500;
-const TXMTU: usize = 1500;
+const MTU: u32 = 1500;
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -26,16 +26,29 @@ const TXMTU: usize = 1500;
 // like eight threads when we open listeners on two ports (4 threads  per port ?)
 
 #[derive(Debug, Deserialize)]
+struct Domain {
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct OnboardInfo {
     Result: String,
     userid: String,
     tenant: String,
     gateway: String,
-    domains: Vec<String>,
+    domains: Vec<Domain>,
     services: Vec<String>,
     connectid: String,
     cluster: String,
     cacert: Vec<u8>,
+    version: String,
+    keepalive: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct KeepaliveResponse {
+    Result: String,
+    version: String,
 }
 
 impl fmt::Display for OnboardInfo {
@@ -47,7 +60,7 @@ impl fmt::Display for OnboardInfo {
         )
         .ok();
         for d in self.domains.iter() {
-            write!(f, " {}", d).ok();
+            write!(f, " {}", d.name).ok();
         }
         Ok(())
     }
@@ -127,7 +140,7 @@ fn is_root() -> bool {
     return !err.contains("denied");
 }
 
-fn config_tun(test: bool, mtu: usize) {
+fn config_tun(test: bool, mtu: u32) {
     cmd("ifconfig tun215 up");
     cmd("ifconfig tun215 169.254.2.1 netmask 255.255.255.0");
     cmd(&format!("ifconfig tun215 mtu {}", mtu));
@@ -163,19 +176,18 @@ fn create_tun() -> Result<i32, std::io::Error> {
     }
 }
 
-fn agent_onboard(onb: &OnboardInfo, access_token: String) {
+fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
     let c_access_token = CString::new(access_token).unwrap();
-    let uuid = Uuid::new_v4();
     let uuid_str = format!("{}", uuid);
     let c_uuid_str = CString::new(uuid_str).unwrap();
     let c_userid = CString::new(onb.userid.clone()).unwrap();
-    let c_host = CString::new(onb.gateway.clone()).unwrap();
+    let c_gateway = CString::new(onb.gateway.clone()).unwrap();
     let c_connectid = CString::new(onb.connectid.clone()).unwrap();
     let c_cluster = CString::new(onb.cluster.clone()).unwrap();
     let mut c_domains: Vec<CString> = Vec::new();
     let mut c_domains_ptr: Vec<*const c_char> = Vec::new();
     for d in &onb.domains {
-        let s = CString::new(d.clone()).unwrap();
+        let s = CString::new(d.name.clone()).unwrap();
         let p = s.as_ptr();
         c_domains.push(s);
         c_domains_ptr.push(p);
@@ -188,9 +200,13 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
         c_services.push(s);
         c_services_ptr.push(p);
     }
-    c_services.push(CString::new("foobar").unwrap());
+    let hostname = CString::new("localhost").unwrap();
+    let model = CString::new("model").unwrap();
+    let os_type = CString::new("linux").unwrap();
+    let os_name = CString::new("linux").unwrap();
+
     let creg = CRegistrationInfo {
-        host: c_host.as_ptr(),
+        gateway: c_gateway.as_ptr(),
         access_token: c_access_token.as_ptr(),
         connect_id: c_connectid.as_ptr(),
         cluster: c_cluster.as_ptr(),
@@ -202,6 +218,13 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
         uuid: c_uuid_str.as_ptr(),
         services: c_services_ptr.as_ptr() as *const *const c_char,
         num_services: c_services_ptr.len() as c_int,
+        hostname: hostname.as_ptr(),
+        model: model.as_ptr(),
+        os_type: os_type.as_ptr(),
+        os_name: os_name.as_ptr(),
+        os_patch: 1,
+        os_major: 10,
+        os_minor: 8,
     };
     unsafe { onboard(creg) };
 }
@@ -209,46 +232,100 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String) {
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
 fn do_onboard(test: bool, controller: String, username: String, password: String) {
-    let mut onboarded = okta_onboard(test, controller.clone(), username.clone(), password.clone());
-    let mut stats = AgentStats::default();
-    let mut gateway_flaps = 0;
-    loop {
-        unsafe {
-            agent_stats(&mut stats);
-        }
-        if !onboarded || stats.gateway_flaps - gateway_flaps >= 3 {
-            error!("Onboarding again");
-            println!("Connected flapped, onboarding again");
-            onboarded = okta_onboard(test, controller.clone(), username.clone(), password.clone());
-        }
-        gateway_flaps = stats.gateway_flaps;
-        thread::sleep(Duration::new(10, 0));
-    }
-}
+    let mut access_token;
+    let mut refresh_token;
+    let mut onboarded = false;
+    let mut version = "".to_string();
+    let mut force_onboard = false;
+    let uuid = Uuid::new_v4();
+    let mut keepalive: usize = 30;
+    let mut last_keepalive = Instant::now();
+    let mut refresh = Instant::now();
 
-fn get_token(test: bool, username: &str, password: &str) -> Option<String> {
-    let out = pkce::authenticate(test, username, password);
-    if let Some(token) = out {
-        return Some(token.access_token);
-    }
-    return None;
-}
-
-fn okta_onboard(test: bool, controller: String, username: String, password: String) -> bool {
-    let token = get_token(test, &username, &password);
-    if token.is_none() {
-        error!("Cannot get access token");
-        println!("Login to nextensio failed (cannot get tokens), will try again");
-        return false;
-    }
-    let access_token = token.unwrap();
     // TODO: Once we start using proper certs for our production clusters, make this
     // accept_invalid_certs true only for test environment. Even test environments ideally
     // should have verifiable certs via a test.nextensio.net domain or something
-    let client = reqwest::Client::builder()
+    let mut ka_client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
         .unwrap();
+    // TODO: Once we start using proper certs for our production clusters, make this
+    // accept_invalid_certs true only for test environment. Even test environments ideally
+    // should have verifiable certs via a test.nextensio.net domain or something
+    let mut onb_client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    loop {
+        let token = pkce::authenticate(test, &username, &password);
+        if let Some(t) = token {
+            access_token = t.access_token;
+            refresh_token = t.refresh_token;
+            break;
+        }
+        error!("Cannot get access token");
+        println!("Login to nextensio failed (cannot get tokens), will try again in 10 seconds");
+        thread::sleep(Duration::new(10, 0));
+    }
+
+    loop {
+        let now = Instant::now();
+        if onboarded {
+            if now > last_keepalive + Duration::from_secs(keepalive as u64) {
+                force_onboard = agent_keepalive(
+                    controller.clone(),
+                    access_token.clone(),
+                    &version,
+                    &uuid,
+                    &mut ka_client,
+                );
+                last_keepalive = now;
+            }
+        }
+        // Okta is configured with one hour as the access token lifetime,
+        // refresh at 45 minutes
+        if now > refresh + Duration::from_secs(45 * 60) {
+            let token = pkce::refresh(test, &refresh_token);
+            if let Some(t) = token {
+                access_token = t.access_token;
+                refresh_token = t.refresh_token;
+                refresh = now;
+                error!("Force onboard");
+            } else {
+                error!("Refresh token failed, will retry in 30 seconds")
+            }
+        }
+        if !onboarded || force_onboard {
+            error!("Onboarding again");
+            println!("Onboarding with nextensio controller");
+            let (o, onb) = okta_onboard(
+                controller.clone(),
+                access_token.clone(),
+                &uuid,
+                &mut onb_client,
+            );
+            if o {
+                let onb = onb.unwrap();
+                version = onb.version.clone();
+                keepalive = onb.keepalive;
+                if keepalive == 0 {
+                    keepalive = 5 * 60;
+                }
+                onboarded = true;
+                force_onboard = false;
+            }
+        }
+        thread::sleep(Duration::from_secs(30));
+    }
+}
+
+fn okta_onboard(
+    controller: String,
+    access_token: String,
+    uuid: &Uuid,
+    client: &mut reqwest::Client,
+) -> (bool, Option<OnboardInfo>) {
     let get_url = format!("https://{}/api/v1/global/get/onboard", controller);
     let bearer = format!("Bearer {}", access_token);
     let resp = client.get(&get_url).header("Authorization", bearer).send();
@@ -261,18 +338,18 @@ fn okta_onboard(test: bool, controller: String, username: String, password: Stri
                         if o.Result != "ok" {
                             error!("Result from controller not ok {}", o.Result);
                             println!("Login to nextensio failed ({}), will try again", o.Result);
-                            return false;
+                            return (false, None);
                         } else {
                             error!("Onboarded {}", o);
                             println!("Login to nextensio successful");
-                            agent_onboard(&o, access_token.clone());
-                            return true;
+                            agent_onboard(&o, access_token.clone(), uuid);
+                            return (true, Some(o));
                         }
                     }
                     Err(e) => {
                         error!("HTTP body failed {:?}", e);
                         println!("Login to nextensio failed ({}), will try again", e);
-                        return false;
+                        return (false, None);
                     }
                 }
             } else {
@@ -281,12 +358,59 @@ fn okta_onboard(test: bool, controller: String, username: String, password: Stri
                     "Login to nextensio failed ({}), will try again",
                     res.status()
                 );
-                return false;
+                return (false, None);
             }
         }
         Err(e) => {
             error!("HTTP Get failed {:?}", e);
             println!("Login to nextensio failed ({}), will try again", e);
+            return (false, None);
+        }
+    }
+}
+
+fn agent_keepalive(
+    controller: String,
+    access_token: String,
+    version: &str,
+    uuid: &Uuid,
+    client: &mut reqwest::Client,
+) -> bool {
+    let get_url = format!(
+        "https://{}/api/v1/global/get/keepalive/{}/{}",
+        controller, version, uuid
+    );
+    let bearer = format!("Bearer {}", access_token);
+    let resp = client.get(&get_url).header("Authorization", bearer).send();
+    match resp {
+        Ok(mut res) => {
+            if res.status().is_success() {
+                let keep_res: Result<KeepaliveResponse, reqwest::Error> = res.json();
+                match keep_res {
+                    Ok(ks) => {
+                        if ks.Result != "ok" {
+                            error!("Keepalive from controller not ok {}", ks.Result);
+                            return false;
+                        } else {
+                            if version != ks.version {
+                                error!("Keepalive version mismatch {}/{}", version, ks.version);
+                                return true;
+                            }
+                            return false;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Keepalive HTTP body failed {:?}", e);
+                        return false;
+                    }
+                }
+            } else {
+                error!("Keepalive HTTP Get result {}, failed", res.status());
+                return false;
+            }
+        }
+        Err(e) => {
+            error!("Keepalive HTTP Get failed {:?}", e);
             return false;
         }
     }
@@ -381,16 +505,14 @@ fn main() {
         println!("Trying to login to nextensio");
     }
 
-    if test {
-        env_logger::init();
-    }
+    env_logger::init();
     let fd = create_tun().unwrap();
-    config_tun(test, RXMTU);
+    config_tun(test, MTU);
 
     thread::spawn(move || do_onboard(test, controller, username, password));
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, RXMTU, TXMTU, 1);
+        agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0);
     }
 }

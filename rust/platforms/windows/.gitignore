@@ -1,0 +1,10 @@
+.deps/
+amd64/
+x86/
+arm/
+arm64/
+dist/
+*.syso
+*.swp
+.vscode
+libnextensio.a

@@ -683,7 +683,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioPacketTunnelMac/NextensioPacketTunnelMac.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3S6YLTX9PM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
@@ -699,7 +699,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -717,7 +717,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioPacketTunnelMac/NextensioPacketTunnelMac.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3S6YLTX9PM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/NextensioRustBridge";
@@ -733,7 +733,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -755,7 +755,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMac/NextensioAppMacDebug.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3S6YLTX9PM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXCLUDED_ARCHS = "";
@@ -768,7 +768,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -796,7 +796,7 @@
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioAppMac/NextensioAppMacRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3S6YLTX9PM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXCLUDED_ARCHS = "";
@@ -809,7 +809,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -959,7 +959,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3S6YLTX9PM;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = NextensioAgent/NextensioApp/Info.plist;
@@ -969,7 +969,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.4;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -995,7 +995,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = NextensioAgent/NextensioApp/NextensioApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3S6YLTX9PM;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = NextensioAgent/NextensioApp/Info.plist;
@@ -1005,7 +1005,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.4;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1042,7 +1042,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.4;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1077,7 +1077,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.4;
+				MARKETING_VERSION = 0.1.12;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";

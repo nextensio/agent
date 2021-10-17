@@ -3,7 +3,7 @@
 
 struct CRegistrationInfo
 {
-    const char *host;
+    const char *gateway;
     const char *access_token;
     const char *connect_id;
     const char *cluster;
@@ -15,6 +15,13 @@ struct CRegistrationInfo
     const char *uuid;
     const char **services;
     int num_services;
+    const char *hostname;
+    const char *model;
+    const char *os_type;
+    const char *os_name;
+    int os_patch;
+    int os_major;
+    int os_minor;
 };
 
 struct AgentStats
@@ -26,21 +33,17 @@ struct AgentStats
     int total_flows;
 };
 
-extern void agent_init(int platform, int direct, int rxmtu, int txmtu, int highmem);
+extern void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
 extern void agent_on(int tun_fd);
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
 extern void agent_stats(struct AgentStats *stats);
 
-// We set the rxmtu size to 64*1024, with txmtu on the tun interface being 32*1024,
-// and with 24 max buffers queued up at any time. Android does not perform well when
-// we send too many packets close to the interface mtu size
-#define RXMTU 1500
-#define TXMTU 1500
+#define MTU 1500
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {
-    agent_init(0 /*android*/, 0 /*direct*/, RXMTU, TXMTU, 0 /* low memory device */);
+    agent_init(0 /*android*/, 0 /*direct*/, MTU, 0 /* low memory device */, 0 /* no tcp port */);
     return 0;
 }
 
@@ -56,14 +59,16 @@ JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgentService_nxtOff(JNIEnv *env, 
     return 0;
 }
 
-JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jclass c, jstring accessToken,
-                                                                jstring uuid, jstring userid, jstring host, jstring connectid,
-                                                                jstring cluster,
-                                                                jbyteArray cacert, jobjectArray domains, jobjectArray services)
+JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclass c, jstring accessToken,
+                                                              jstring uuid, jstring userid, jstring gateway, jstring connectid,
+                                                              jstring cluster,
+                                                              jbyteArray cacert, jobjectArray domains, jobjectArray services,
+                                                              jstring hostname, jstring model, jstring ostype, jstring osname,
+                                                              jint major, jint minor, jint patch)
 {
     struct CRegistrationInfo creg = {};
 
-    creg.host = (*env)->GetStringUTFChars(env, host, NULL);
+    creg.gateway = (*env)->GetStringUTFChars(env, gateway, NULL);
     creg.access_token = (*env)->GetStringUTFChars(env, accessToken, NULL);
     creg.connect_id = (*env)->GetStringUTFChars(env, connectid, NULL);
     creg.cluster = (*env)->GetStringUTFChars(env, cluster, NULL);
@@ -74,26 +79,34 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jcl
     creg.num_cacert = (*env)->GetArrayLength(env, cacert);
 
     creg.num_domains = (*env)->GetArrayLength(env, domains);
-    creg.domains = malloc(creg.num_domains * sizeof(creg.domains));
+    creg.domains = malloc(creg.num_domains * sizeof(char *));
     for (int i = 0; i < creg.num_domains; i++)
     {
-        jstring string = (jstring)((*env)->GetObjectArrayElement(env, domains, i));
-        creg.domains[i] = (*env)->GetStringUTFChars(env, string, 0);
+        jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, domains, i));
+        creg.domains[i] = (*env)->GetStringUTFChars(env, s1, 0);
     }
 
     creg.num_services = (*env)->GetArrayLength(env, services);
-    creg.services = malloc(creg.num_services * sizeof(creg.services));
+    creg.services = malloc(creg.num_services * sizeof(char *));
     for (int i = 0; i < creg.num_services; i++)
     {
-        jstring string = (jstring)((*env)->GetObjectArrayElement(env, services, i));
-        creg.services[i] = (*env)->GetStringUTFChars(env, string, 0);
+        jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, services, i));
+        creg.services[i] = (*env)->GetStringUTFChars(env, s1, 0);
     }
+
+    creg.hostname = (*env)->GetStringUTFChars(env, hostname, NULL);
+    creg.model = (*env)->GetStringUTFChars(env, model, NULL);
+    creg.os_type = (*env)->GetStringUTFChars(env, ostype, NULL);
+    creg.os_name = (*env)->GetStringUTFChars(env, osname, NULL);
+    creg.os_major = major;
+    creg.os_minor = minor;
+    creg.os_patch = patch;
 
     // Call Rust to onboard
     onboard(creg);
 
     // done with the call to rust, release all memory
-    (*env)->ReleaseStringUTFChars(env, host, creg.host);
+    (*env)->ReleaseStringUTFChars(env, gateway, creg.gateway);
     (*env)->ReleaseStringUTFChars(env, accessToken, creg.access_token);
     (*env)->ReleaseStringUTFChars(env, connectid, creg.connect_id);
     (*env)->ReleaseStringUTFChars(env, cluster, creg.cluster);
@@ -104,17 +117,22 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtAgent_nxtOnboard(JNIEnv *env, jcl
 
     for (int i = 0; i < creg.num_domains; i++)
     {
-        jstring string = (jstring)((*env)->GetObjectArrayElement(env, domains, i));
-        (*env)->ReleaseStringUTFChars(env, string, creg.domains[i]);
+        jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, domains, i));
+        (*env)->ReleaseStringUTFChars(env, s1, creg.domains[i]);
     }
     free(creg.domains);
 
     for (int i = 0; i < creg.num_services; i++)
     {
-        jstring string = (jstring)((*env)->GetObjectArrayElement(env, services, i));
-        (*env)->ReleaseStringUTFChars(env, string, creg.services[i]);
+        jstring s1 = (jstring)((*env)->GetObjectArrayElement(env, services, i));
+        (*env)->ReleaseStringUTFChars(env, s1, creg.services[i]);
     }
     free(creg.services);
+
+    (*env)->ReleaseStringUTFChars(env, hostname, creg.hostname);
+    (*env)->ReleaseStringUTFChars(env, model, creg.model);
+    (*env)->ReleaseStringUTFChars(env, ostype, creg.os_type);
+    (*env)->ReleaseStringUTFChars(env, osname, creg.os_name);
 }
 
 JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobject obj)

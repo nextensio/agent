@@ -9,7 +9,7 @@ const TEST_PROFILE: idp_profile = idp_profile {
     client_id: "0oaz5lndczD0DSUeh4x6",
 };
 const PROD_PROFILE: idp_profile = idp_profile {
-    idp: "https://dev-24743301.okta.com/",
+    idp: "https://login.nextensio.net/",
     client_id: "0oav0q3hn65I4Zkmr5d6",
 };
 
@@ -37,6 +37,7 @@ struct sessionToken {
 pub struct AccessIdTokens {
     pub access_token: String,
     pub id_token: String,
+    pub refresh_token: String,
 }
 
 pub fn authenticate(test: bool, username: &str, password: &str) -> Option<AccessIdTokens> {
@@ -78,7 +79,7 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
                     Ok(t) => {
                         let (code_challenge, code_verify) =
                             oauth2::PkceCodeChallenge::new_random_sha256();
-                        let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid&", client_id);
+                        let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
                         queries = format!("{}&state=test&prompt=none&response_mode=query&code_challenge_method=S256", queries);
                         queries = format!(
                             "{}&code_challenge={}&sessionToken={}",
@@ -102,7 +103,7 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
                                         ) {
                                             Some(r) => {
                                                 let code = r.get(1).map_or("", |m| m.as_str());
-                                                let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid", client_id);
+                                                let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
                                                 queries = format!("{}&grant_type=authorization_code&code={}&code_verifier={}", queries, code, code_verify.secret());
                                                 let url = format!(
                                                     "{}/oauth2/default/v1/token?{}",
@@ -177,6 +178,54 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
         }
         Err(e) => {
             error!("HTTP authn failed {:?}", e);
+        }
+    }
+
+    return None;
+}
+
+pub fn refresh(test: bool, refresh: &str) -> Option<AccessIdTokens> {
+    let idp;
+    let client_id;
+    if test {
+        idp = TEST_PROFILE.idp;
+        client_id = TEST_PROFILE.client_id;
+    } else {
+        idp = PROD_PROFILE.idp;
+        client_id = PROD_PROFILE.client_id;
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::RedirectPolicy::none())
+        .build()
+        .unwrap();
+
+    let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
+    queries = format!(
+        "{}&grant_type=refresh_token&refresh_token={}",
+        queries, refresh
+    );
+    let url = format!("{}/oauth2/default/v1/token?{}", idp, queries);
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("cache-control", "no-cache")
+        .send();
+    match resp {
+        Ok(mut res) => {
+            if res.status().is_success() {
+                let token: std::result::Result<AccessIdTokens, reqwest::Error> = res.json();
+                match token {
+                    Ok(t) => return Some(t),
+                    Err(e) => error!("Refresh token fail {}", e),
+                }
+            } else {
+                error!("Refresh token response fail {}", res.status());
+            }
+        }
+        Err(e) => {
+            error!("Refresh token response error {}", e)
         }
     }
 

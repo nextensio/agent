@@ -1,0 +1,12 @@
+Nextensio Agent for Windows
+User Guide
+
+To install on x86 compatible computers
+1. Double click on nx-win-amd64.msi
+
+To run the agent on x86 compatible computers:
+1. Open Powershell as administrator
+2. cd C:\Program Files\nextensio\amd64
+3. .\nxt-windows.exe
+
+
