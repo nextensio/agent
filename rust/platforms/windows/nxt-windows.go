@@ -64,6 +64,7 @@ var luid *winipcfg.LUID
 var loginStatus *widget.Button
 var watcher *interfaceWatcher
 var myApp fyne.App
+var pool common.NxtPool
 
 const MTU = 1500
 
@@ -136,10 +137,10 @@ func agentToVpn(tcpTun *common.Transport) {
 			handshaked = true
 		} else {
 			writeLock.Lock()
-			w, err := (*vpnTun).Write(bufs[0], 0)
+			w, err := (*vpnTun).Write(bufs.Slices[0], 0)
 			writeLock.Unlock()
-			if err != nil || w != len(bufs[0]) {
-				lg.Printf("vpn write failed error %s, w %d, r %d", e, w, len(bufs[0]))
+			if err != nil || w != len(bufs.Slices[0]) {
+				lg.Printf("vpn write failed error %s, w %d, r %d", e, w, len(bufs.Slices[0]))
 				(*vpnTun).Close()
 				return
 			}
@@ -195,7 +196,8 @@ func handleICMP(buf []byte) bool {
 
 func vpnToAgent(tcpTun *common.Transport) {
 	for {
-		buf := make([]byte, MTU)
+		b := common.GetBuf(pool)
+		buf := b.Buf
 		r, e := (*vpnTun).Read(buf[0:MTU], 0)
 		if e != nil {
 			lg.Printf("vpn Read error %s", e)
@@ -208,7 +210,7 @@ func vpnToAgent(tcpTun *common.Transport) {
 		hdr := &nxthdr.NxtHdr{}
 		flow := nxthdr.NxtFlow{}
 		hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: &flow}
-		err := (*tcpTun).Write(hdr, net.Buffers{buf[0:r]})
+		err := (*tcpTun).Write(hdr, &common.NxtBufs{Slices: net.Buffers{buf[0:r]}, Bufs: []*common.NxtBuf{b}})
 		if err != nil {
 			lg.Printf("Pipe write error %s,  r %d", e, r)
 			(*vpnTun).Close()
@@ -276,6 +278,7 @@ func monitorController(lg *log.Logger) {
 			}
 		}
 		if !onboarded || force_onboard {
+			fmt.Println("Forcing onboard")
 			if ControllerOnboard(lg, controller, tokens.AccessToken) {
 				onboarded = true
 				force_onboard = false
@@ -364,6 +367,22 @@ func agentOnboard() {
 	vpnRoutes()
 }
 
+func extraRoutes() []*winipcfg.RouteData {
+	routes := []*winipcfg.RouteData{}
+	for _, a := range regInfo.Domains {
+		_, ipmask, err := net.ParseCIDR(a.Name)
+		if err == nil {
+			toAdd := winipcfg.RouteData{
+				Destination: *ipmask,
+				NextHop:     net.IP{100, 64, 1, 2},
+				Metric:      0,
+			}
+			routes = append(routes, &toAdd)
+		}
+	}
+	return routes
+}
+
 // By default, windows enables "smart dns" - ie it broadcasts the dns
 // request parallely on all interfaces that advertise a dns server -
 // which means even the private domain names dns requests will be broadcast
@@ -428,6 +447,8 @@ func vpnRoutes() {
 		return
 	}
 
+	extra := extraRoutes()
+
 	hasDefault := false
 	for _, d := range regInfo.Domains {
 		if d.Name == "nextensio-default-internet" {
@@ -439,9 +460,11 @@ func vpnRoutes() {
 	for {
 		count += 1
 		if hasDefault {
-			err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
+			base := []*winipcfg.RouteData{&nxtDefaultRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd}
+			routes := append(extra, base...)
+			err := (*luid).SetRoutes(routes)
 			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-				lg.Printf("Failed to create RouteData: %v (%d)", err, count)
+				lg.Printf("Failed to create default RouteData: %v (%d)", err, count)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -452,9 +475,11 @@ func vpnRoutes() {
 				continue
 			}
 		} else {
-			err := (*luid).SetRoutes([]*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd})
+			base := []*winipcfg.RouteData{&nxtSpecificRouteIPv4ToAdd, &nxtDNS1RouteIPv4ToAdd, &nxtDNS2RouteIPv4ToAdd}
+			routes := append(extra, base...)
+			err := (*luid).SetRoutes(routes)
 			if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-				lg.Printf("Failed to create RouteData: %v (%d)", err, count)
+				lg.Printf("Failed to create specific RouteData: %v (%d)", err, count)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -572,7 +597,8 @@ func postLogin() {
 	signal.Notify(term, os.Interrupt)
 	signal.Notify(term, syscall.SIGTERM)
 
-	pktserver := websock.NewListener(context.TODO(), lg, nil, nil, PKTTCPPORT, 0, 0, 0)
+	pool = common.NewPool(MTU)
+	pktserver := websock.NewListener(context.TODO(), lg, pool, nil, nil, PKTTCPPORT, 0, 0, 0)
 	tchan := make(chan common.NxtStream)
 	go pktserver.Listen(tchan)
 	go agentConnection(tchan)
@@ -606,7 +632,6 @@ func postLogin() {
 
 func main() {
 	lg = log.New(os.Stdout, "Nextensio: ", 0)
-	common.MAXBUF = (64 * 1024)
 	unique = uuid.New()
 	uniqueId = unique.String()
 	idp = "https://login.nextensio.net"
