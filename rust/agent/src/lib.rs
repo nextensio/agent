@@ -88,6 +88,8 @@ const FLOW_BUFFER_HOG: u64 = 4; // seconds;
 #[derive(Default, Debug)]
 pub struct Domain {
     pub name: String,
+    ip: u32,
+    mask: u32,
 }
 #[derive(Default, Debug)]
 pub struct RegistrationInfo {
@@ -142,6 +144,46 @@ pub struct AgentStats {
     pub total_flows: c_int,
 }
 
+fn parse_subnet(subnet: &str) -> (u32, u32) {
+    if let Some(index) = subnet.find("/") {
+        let ret_ip: u32;
+        let ret_mask: u32;
+        // there is a / but no mask following it !
+        if index == subnet.len() {
+            return (0, 0);
+        }
+        let ip: Result<Ipv4Addr, _> = subnet[0..index].parse();
+        if let Ok(i) = ip {
+            ret_ip = common::as_u32_be(&i.octets());
+        } else {
+            return (0, 0);
+        }
+        if let Ok(mask) = subnet[index + 1..].parse::<u32>() {
+            ret_mask = mask;
+        } else {
+            return (0, 0);
+        }
+        return (ret_ip, ret_mask);
+    } else {
+        // No /, so take mask as 32
+        let ip: Result<Ipv4Addr, _> = subnet.parse();
+        if let Ok(i) = ip {
+            return (common::as_u32_be(&i.octets()), 32);
+        } else {
+            return (0, 0);
+        }
+    }
+}
+
+fn subnet_equal(ip: u32, mask: u32, d32: u32) -> bool {
+    let m32 = (0xFFFFFFFF << (32 - mask)) & 0xFFFFFFFF;
+    if (d32 & m32) == (ip & m32) {
+        return true;
+    }
+
+    return false;
+}
+
 fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
     let mut reginfo = RegistrationInfo::default();
     unsafe {
@@ -169,8 +211,12 @@ fn creginfo_translate(creg: CRegistrationInfo) -> RegistrationInfo {
             .collect();
         reginfo.domains = Vec::new();
         for i in 0..creg.num_domains as usize {
+            // if the domain name is an ip/mask, convert those to values
+            let (ip, mask) = parse_subnet(&domain_array[i]);
             let d = Domain {
                 name: domain_array[i].clone(),
+                ip,
+                mask,
             };
             reginfo.domains.push(d);
         }
@@ -813,11 +859,25 @@ fn set_dest_agent(
 ) {
     let mut found = false;
     let mut has_default = false;
+    let mut dip: u32 = 0;
+    let d: Result<Ipv4Addr, _> = key.dip.parse();
+    if let Ok(d) = d {
+        dip = common::as_u32_be(&d.octets());
+    }
+
     for d in reginfo.domains.iter() {
-        if flow.service.contains(&d.name) {
-            flow.dest_agent = d.name.clone();
-            found = true;
-            break;
+        if d.ip == 0 {
+            if flow.service.contains(&d.name) {
+                flow.dest_agent = d.name.clone();
+                found = true;
+                break;
+            }
+        } else if dip != 0 {
+            if subnet_equal(d.ip, d.mask, dip) {
+                flow.dest_agent = d.name.clone();
+                found = true;
+                break;
+            }
         }
         if !has_default && "nextensio-default-internet" == d.name {
             has_default = true;
