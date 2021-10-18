@@ -24,6 +24,7 @@ type RegistrationInfo struct {
 	Services    []string `json:"services"`
 	Version     string   `json:"version"`
 	Keepalive   uint     `json:"keepalive"`
+	SplitTunnel bool     `json:"splittunnel"`
 }
 
 func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bool {
