@@ -22,6 +22,7 @@ import android.os.Build;
 import java.lang.reflect.Method;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.commons.net.util.SubnetUtils;
 
 public class NxtApp extends Application {
 
@@ -179,6 +180,15 @@ public class NxtApp extends Application {
         }
     }
 
+    public static boolean isValidSubnet(String subnet) {
+        try {
+            new SubnetUtils(subnet);
+            return true;
+        } catch (IllegalArgumentException iae) {
+             return false;
+        }
+    }
+
     private void agentOnboard(JSONObject onboard) {
         try {
             String result = onboard.getString("Result");
@@ -192,20 +202,27 @@ public class NxtApp extends Application {
             String gateway = onboard.getString("gateway");
             String connectid = onboard.getString("connectid");
             String cluster = onboard.getString("cluster");
+            boolean splitTunnel = onboard.getBoolean("splittunnel");
             JSONArray cert = onboard.getJSONArray("cacert");
             byte[] cacert = new byte[cert.length()];
             for(int i = 0; i < cert.length(); i++) {
                 cacert[i] = (byte)cert.getInt(i);
             }
 
-            boolean hasDefault = false;
+            boolean attractAll = !splitTunnel;
             JSONArray dom = onboard.getJSONArray("domains");
             String[] domains = new String[dom.length()];
+            String[] subnets = new String[dom.length()];
+            int subnetCnt = 0;
             for(int i = 0; i < dom.length(); i++) {
                 JSONObject d = dom.getJSONObject(i);
                 domains[i] = d.getString("name");
                 if (domains[i].equals("nextensio-default-internet")) {
-                    hasDefault = true;
+                    attractAll = true;
+                }
+                if (isValidSubnet(domains[i])) {
+                    subnets[subnetCnt] = domains[i];
+                    subnetCnt++;
                 }
             }
             
@@ -236,7 +253,7 @@ public class NxtApp extends Application {
             }
             onboarded = true;
             force_onboard = false;
-            agentService.start(hasDefault);
+            agentService.start(attractAll, subnets, subnetCnt);
             Log.i(TAG, "nxtOnboard success");
 
         } catch (final JSONException e)  {
