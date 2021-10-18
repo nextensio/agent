@@ -34,9 +34,9 @@ public class NxtAgentService extends VpnService {
         super.onCreate();
     }
 
-    public void start(boolean hasDefault) {
+    public void start(boolean attractAll, String[] subnets, int subnetCnt) {
         stop();
-        setupVPN(hasDefault);
+        setupVPN(attractAll, subnets, subnetCnt);
         try {
             if (vpnFd != 0) {
                 // Call into the golang agent and ask it to start Rx/Tx on this fd
@@ -69,7 +69,7 @@ public class NxtAgentService extends VpnService {
         Log.i(TAG, "Stopping vpn");
     }
 
-    private void setupVPN(boolean hasDefault) {
+    private void setupVPN(boolean attractAll, String[] subnets, int subnetCnt) {
         Builder builder = new Builder();
         builder.setMtu(1500);
         // rust agent works with non-blocking sockets
@@ -101,7 +101,7 @@ public class NxtAgentService extends VpnService {
         builder.addRoute(DNS2_ROUTE, 32);
         builder.addDnsServer(DNS1_ROUTE);
         builder.addDnsServer(DNS2_ROUTE);
-        if (hasDefault == true) {
+        if (attractAll == true) {
             // We are capturing ALL traffic
             builder.addRoute(DEFAULT_ROUTE, 0);
         } else {
@@ -109,7 +109,20 @@ public class NxtAgentService extends VpnService {
             // in the CG-NAT range (100.64.0.0/10). Also we need dns requests to come to us,
             // so we add 
             builder.addRoute(SPECIFIC_ROUTE, 10);
+            for(int i = 0; i < subnetCnt; i++) {
+                String[] parts = subnets[i].split("/");
+                if (parts.length == 2) {
+                    String ip = parts[0];
+                    int masklen = Integer.parseInt(parts[1]);
+                    try {
+                        builder.addRoute(ip, masklen);
+                    } catch (Exception e) {
+                        Log.i(TAG, "Subnet Exception " + e + ", subnet " + parts[0] + ", mask " + parts[1]);
+                    }
+                }
+            }
         }
+
         vpnInterface = builder.setSession(getString(R.string.app_name)).setConfigureIntent(pendingIntent).establish();
         if (vpnInterface != null) {
             vpnFd = vpnInterface.detachFd();

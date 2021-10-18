@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		1B533CB6E05BB6ABF91F793C /* Pods_NextensioApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3E26DE199F62AC7B6B0E43F9 /* Pods_NextensioApp.framework */; };
+		4A37BC68271CD40700E1070A /* IPAddress_v4 in Frameworks */ = {isa = PBXBuildFile; productRef = 4A37BC67271CD40700E1070A /* IPAddress_v4 */; };
+		4A37BC6A271CD4D300E1070A /* IPAddress_v4 in Frameworks */ = {isa = PBXBuildFile; productRef = 4A37BC69271CD4D300E1070A /* IPAddress_v4 */; };
 		4A382124266001F500D99F23 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B94CFC126293D4000D27909 /* NetworkExtension.framework */; };
 		4A382127266001F500D99F23 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A382126266001F500D99F23 /* PacketTunnelProvider.swift */; };
 		4A382129266001F500D99F23 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A382128266001F500D99F23 /* main.swift */; };
@@ -153,6 +155,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4A3821342660055900D99F23 /* libnextensioMacOSX.a in Frameworks */,
+				4A37BC68271CD40700E1070A /* IPAddress_v4 in Frameworks */,
 				4A382124266001F500D99F23 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -180,6 +183,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6B2D6BBC25D114240051991B /* NetworkExtension.framework in Frameworks */,
+				4A37BC6A271CD4D300E1070A /* IPAddress_v4 in Frameworks */,
 				6B15594D2607339D006788D8 /* libnextensioIOS.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -363,6 +367,9 @@
 			dependencies = (
 			);
 			name = NextensioPacketTunnelMac;
+			packageProductDependencies = (
+				4A37BC67271CD40700E1070A /* IPAddress_v4 */,
+			);
 			productName = NextensioPacketTunnelMac;
 			productReference = 4A382123266001F500D99F23 /* io.nextensio.agent1.tunnel.systemextension */;
 			productType = "com.apple.product-type.system-extension";
@@ -424,6 +431,9 @@
 			dependencies = (
 			);
 			name = NextensioPacketTunnel;
+			packageProductDependencies = (
+				4A37BC69271CD4D300E1070A /* IPAddress_v4 */,
+			);
 			productName = NextensioPacketTunnel;
 			productReference = 6B2D6BB925D114240051991B /* NextensioPacketTunnel.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -464,6 +474,9 @@
 				Base,
 			);
 			mainGroup = 6B2D6B9025D113630051991B;
+			packageReferences = (
+				4A37BC66271CD40700E1070A /* XCRemoteSwiftPackageReference "IPAddress_v4" */,
+			);
 			productRefGroup = 6B2D6B9A25D113630051991B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -699,7 +712,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -733,7 +746,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -768,7 +781,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -809,7 +822,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -969,7 +982,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1005,7 +1018,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1042,7 +1055,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1077,7 +1090,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.12;
+				MARKETING_VERSION = 0.1.22;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1211,6 +1224,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4A37BC66271CD40700E1070A /* XCRemoteSwiftPackageReference "IPAddress_v4" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/beatsbears/IPAddress_v4";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4A37BC67271CD40700E1070A /* IPAddress_v4 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A37BC66271CD40700E1070A /* XCRemoteSwiftPackageReference "IPAddress_v4" */;
+			productName = IPAddress_v4;
+		};
+		4A37BC69271CD4D300E1070A /* IPAddress_v4 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A37BC66271CD40700E1070A /* XCRemoteSwiftPackageReference "IPAddress_v4" */;
+			productName = IPAddress_v4;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 6B2D6B9125D113630051991B /* Project object */;
 }
