@@ -8,6 +8,7 @@
 import NetworkExtension
 import os.log
 import IOKit
+import IPAddress_v4
 
 let mtu = 1500;
 var highmem = 0;
@@ -37,7 +38,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var uuid = UUID().uuidString
     var stopKeepalive = false
     var domains = [String]()
-    var subnets = [String]()
+    var subnets = [IPNetwork_v4]()
     var attractAll = false
     
     override init() {
@@ -176,6 +177,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             ipv4Settings.includedRoutes = [
                 NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),
             ]
+            for s in self.subnets {
+                if s.networkAddress != nil && s.networkAddress?.address != nil && s.netMask != nil && s.netMask?.address != nil {
+                    ipv4Settings.includedRoutes?.append(NEIPv4Route(destinationAddress: s.networkAddress!.address!, subnetMask: s.netMask!.address!))
+                }
+            }
         }
         
         ipv4Settings.excludedRoutes = [
@@ -325,6 +331,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.turnOffNextensioAgent()
         self.attractAll = false
         self.domains = [String]()
+        self.subnets = [IPNetwork_v4]()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
@@ -397,8 +404,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let dom = json["domains"] as! NSMutableArray
         registration.num_domains = Int32(dom.count)
         self.domains = [String]()
-        self.subnets = [String]()
+        self.subnets = [IPNetwork_v4]()
         self.attractAll = !(json["splittunnel"] as! Bool)
+        self.attractAll = false
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
@@ -409,6 +417,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.attractAll = true
                 }
                 registration.domains[i] = UnsafeMutablePointer<Int8>(mutating: (d["name"] as! NSString).utf8String)
+                do {
+                    let net = try IPNetwork_v4(d["name"] as! String)
+                    self.subnets.append(net)
+                } catch _ {
+                }
             }
         } else {
             registration.domains = nil
