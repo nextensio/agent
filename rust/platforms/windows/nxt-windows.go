@@ -138,6 +138,7 @@ func agentToVpn(tcpTun *common.Transport) {
 		} else {
 			writeLock.Lock()
 			w, err := (*vpnTun).Write(bufs.Slices[0], 0)
+			common.PutBufs(bufs.Bufs)
 			writeLock.Unlock()
 			if err != nil || w != len(bufs.Slices[0]) {
 				lg.Printf("vpn write failed error %s, w %d, r %d", e, w, len(bufs.Slices[0]))
