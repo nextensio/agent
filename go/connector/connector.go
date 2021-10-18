@@ -455,7 +455,7 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
 	flows = make(map[flowKey]*flowTuns)
-	lg := log.New(os.Stdout, "CNTR: ", 0)
+	lg := log.New(os.Stdout, "CNTR: ", log.Ldate|log.Ltime)
 	args()
 	uniqueId = unique.String()
 	go monitorController(lg)
