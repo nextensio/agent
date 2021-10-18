@@ -22,7 +22,7 @@ name = "agent"
 version = "0.1.0"
 dependencies = [
  "android_logger",
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "counters",
  "dummy",
  "fd",
@@ -235,19 +235,13 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772edd7415714605817c51cdc1d0c"
-
-[[package]]
-name = "common"
-version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
->>>>>>> f73d1d45667556ae338d49e1b1935517f6eecbe5
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
  "etherparse",
  "httparse",
  "log",
  "mio 0.7.11",
- "native-tls 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "native-tls",
  "object-pool",
  "prost",
  "prost-build",
@@ -396,9 +390,9 @@ checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 [[package]]
 name = "dummy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
 ]
 
 [[package]]
@@ -478,9 +472,9 @@ checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 [[package]]
 name = "fd"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "libc",
  "mio 0.7.11",
  "object-pool",
@@ -726,7 +720,7 @@ dependencies = [
  "bytes 0.4.12",
  "futures",
  "hyper",
- "native-tls 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "native-tls",
  "tokio-io",
 ]
 
@@ -808,9 +802,9 @@ dependencies = [
 [[package]]
 name = "l3proxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "managed",
  "object-pool",
  "smoltcp",
@@ -988,25 +982,8 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework 2.2.0",
- "security-framework-sys 2.2.0",
- "tempfile",
-]
-
-[[package]]
-name = "native-tls"
-version = "0.2.7"
-source = "git+https://github.com/gopakumarce/rust-native-tls.git?branch=gopa-native#e5dd939c9b05aa473534fd8a5db82c2558ab64b7"
-dependencies = [
- "lazy_static",
- "libc",
- "log",
- "openssl",
- "openssl-probe",
- "openssl-sys",
- "schannel",
- "security-framework 2.3.1",
- "security-framework-sys 2.3.0",
+ "security-framework",
+ "security-framework-sys",
  "tempfile",
 ]
 
@@ -1024,9 +1001,9 @@ dependencies = [
 [[package]]
 name = "netconn"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "mio 0.7.11",
  "object-pool",
 ]
@@ -1599,7 +1576,7 @@ dependencies = [
  "log",
  "mime",
  "mime_guess",
- "native-tls 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "native-tls",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1671,19 +1648,7 @@ dependencies = [
  "core-foundation",
  "core-foundation-sys",
  "libc",
- "security-framework-sys 2.2.0",
-]
-
-[[package]]
-name = "security-framework"
-version = "2.3.1"
-source = "git+https://github.com/gopakumarce/rust-security-framework.git?branch=gopa-sec#3aed367e9d7c1816a04704abd54ece9c65ad33da"
-dependencies = [
- "bitflags",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys 2.3.0",
+ "security-framework-sys",
 ]
 
 [[package]]
@@ -1691,15 +1656,6 @@ name = "security-framework-sys"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3676258fd3cfe2c9a0ec99ce3038798d847ce3e4bb17746373eb9f0f1ac16339"
-dependencies = [
- "core-foundation-sys",
- "libc",
-]
-
-[[package]]
-name = "security-framework-sys"
-version = "2.3.0"
-source = "git+https://github.com/gopakumarce/rust-security-framework.git?branch=gopa-sec#3aed367e9d7c1816a04704abd54ece9c65ad33da"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -2209,9 +2165,9 @@ checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 [[package]]
 name = "webproxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "libc",
  "mio 0.7.11",
  "object-pool",
@@ -2220,13 +2176,13 @@ dependencies = [
 [[package]]
 name = "websock"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug#a2ecc7a83ccaf7056c472bbc8be950050a8caea0"
 dependencies = [
  "bytes 1.0.1",
- "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
+ "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=gopa-debug)",
  "log",
  "mio 0.7.11",
- "native-tls 0.2.7 (git+https://github.com/gopakumarce/rust-native-tls.git?branch=gopa-native)",
+ "native-tls",
  "object-pool",
  "prost",
  "socket2",
