@@ -406,7 +406,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.domains = [String]()
         self.subnets = [IPNetwork_v4]()
         self.attractAll = !(json["splittunnel"] as! Bool)
-        self.attractAll = false
         if (dom.count > 0) {
             registration.domains = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: dom.count)
             for i in 0..<dom.count {
