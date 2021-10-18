@@ -380,6 +380,7 @@ struct AgentInfo {
     flows_active: HashMap<FlowV4Key, ()>,
     npkts: usize,
     ntcp: usize,
+    tcp_low: usize,
     pkt_pool: Arc<Pool<Vec<u8>>>,
     tcp_pool: Arc<Pool<Vec<u8>>>,
     perf: AgentPerf,
@@ -415,6 +416,7 @@ impl Default for AgentInfo {
             flows_active: HashMap::new(),
             npkts: 0,
             ntcp: 0,
+            tcp_low: 0,
             pkt_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
             tcp_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
             perf: alloc_perf(),
@@ -719,7 +721,17 @@ fn external_sock_rx(
     poll: &mut Poll,
     flows_active: &mut HashMap<FlowV4Key, ()>,
     gw_onboarded: &mut bool,
+    pool_low: bool,
 ) {
+    // Poor mans flow control: we are running low on buffers, mostly because one or few
+    // flows is bursting a lot of download from gateway, hogging up buffers. So we penalize
+    // everyone here by stopping read from the entire tunnel till we get those buffers back
+    if pool_low && tun_idx == Token(GWTUN_IDX) {
+        error!("Pool low, bail out");
+        tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+        return;
+    }
+
     let ret = tun.tun.read();
     match ret {
         Err(x) => match x.code {
@@ -2541,8 +2553,10 @@ fn agent_init_pools(agent: &mut AgentInfo, mtu: u32, highmem: u32) {
     // even lesser, will bring it down after this software gets more runtime on various devices.
     // Note that the npkts usually has to be at least the MAXPAYLOAD/mtu (ie the number of pkts
     // to send one full size tcp payload) for better performance
+    // We also set a low water mark for the tcp pool as 25% of the pool size
     agent.npkts = 64 * (highmem as usize + 1);
     agent.ntcp = 22 * (highmem as usize + 1);
+    agent.tcp_low = agent.ntcp / 4;
     agent.pkt_pool = Arc::new(Pool::new(agent.npkts, || Vec::with_capacity(pktbuf_len)));
     agent.tcp_pool = Arc::new(Pool::new(agent.ntcp, || Vec::with_capacity(MAXPAYLOAD)));
 }
@@ -2763,6 +2777,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                                     &mut poll,
                                     &mut agent.flows_active,
                                     &mut agent.gw_onboarded,
+                                    agent.tcp_pool.len() <= agent.tcp_low,
                                 );
                             }
                             if event.is_writable() {
