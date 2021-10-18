@@ -12,7 +12,7 @@
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="D0135DCE-8059-4117-8661-32A5CDE4B928" 
-           Name="Nextensio Agent for Windows"
+           Name="Nextensio Client for Windows"
            Language="1033"
            Manufacturer="Nextensio"
            Version="$(var.ProductVersion)" 
@@ -33,7 +33,7 @@
     <UI>
         <!-- To display the eula, change to WixUI_Minimal -->
         <UIRef Id="WixUI_InstallDir" />
-        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Agent short-cut added to the Startup menu, thank you for installing this product." />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Client short-cut added to the Startup menu, thank you for installing this product." />
         <Publish Dialog="WelcomeDlg"
           Control="Next"
           Event="NewDialog"
@@ -81,7 +81,7 @@
      <Component Id="ApplicationShortcut" Guid="$(var.ShortCutNxtAgentCode)">
         <Shortcut Id="ApplicationStartMenuShortcut"
                     Name="nextensio" 
-                    Description="Nextensio Agent"
+                    Description="Nextensio Client"
                     Target="[!nextensio.exe]"
                     WorkingDirectory="INSTALLFOLDERPLAT"/>
         <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
