@@ -114,7 +114,11 @@ public class NxtAgentService extends VpnService {
                 if (parts.length == 2) {
                     String ip = parts[0];
                     int masklen = Integer.parseInt(parts[1]);
-                    builder.addRoute(ip, masklen);
+                    try {
+                        builder.addRoute(ip, masklen);
+                    } catch (Exception e) {
+                        Log.i(TAG, "Subnet Exception " + e + ", subnet " + parts[0] + ", mask " + parts[1]);
+                    }
                 }
             }
         }
