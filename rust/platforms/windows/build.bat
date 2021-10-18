@@ -1,5 +1,5 @@
 @echo off
-rem Nextensio Agent Windows
+rem Nextensio Client Windows
 
 setlocal enabledelayedexpansion
 set BUILDDIR=%~dp0
