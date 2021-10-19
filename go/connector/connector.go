@@ -34,6 +34,7 @@ type flowTuns struct {
 	gwRx common.Transport
 }
 
+var Version = "Development"
 var pool common.NxtPool
 var flowLock sync.RWMutex
 var flows map[flowKey]*flowTuns
@@ -389,12 +390,27 @@ func getClusterName(gateway string) string {
 	return gateway[0:end]
 }
 
-func args() {
+func args() (*log.Logger, *os.File) {
+	var fptr *os.File
+	var err error
+
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
 	gateway = flag.String("gateway", "gateway.nextensio.net", "Gateway name")
 	keyFile = flag.String("key", "/opt/nextensio/connector.key", "Secret Key file name")
 	p := flag.String("ports", "", "Ports to listen on, comma seperated")
+	logFile := flag.String("logfile", "/tmp/connector.log", "Log file name")
+	flag.Bool("v[ersion]", false, "Show the Connector version information")
 	flag.Parse()
+
+	if *logFile != "" {
+		fmt.Println("Creating logfile ", *logFile)
+		fptr, err = os.OpenFile(*logFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+	lg := log.New(fptr, "CNTR: ", log.Ldate|log.Ltime)
 	if *p != "" {
 		plist := strings.Split(*p, ",")
 		for _, l := range plist {
@@ -415,7 +431,9 @@ func args() {
 	sharedKey = string(s)
 	sharedKey = strings.TrimSpace(sharedKey)
 	sharedKey = strings.TrimRight(strings.TrimLeft(sharedKey, "\n"), "\n")
-	fmt.Println(*c, *gateway, cluster, ports)
+	lg.Println("Connector version : ", Version)
+	lg.Println(*c, *gateway, cluster, ports)
+	return lg, fptr
 }
 
 func svrListen(lg *log.Logger, conn *netconn.NetConn, port int) {
@@ -455,8 +473,15 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
 	flows = make(map[flowKey]*flowTuns)
-	lg := log.New(os.Stdout, "CNTR: ", log.Ldate|log.Ltime)
-	args()
+	// Check for -v[ersion] flag
+	if (len(os.Args) > 1) && (os.Args[1] == "-v" || os.Args[1] == "-V" || os.Args[1] == "-version") {
+		fmt.Printf("Connector version - %s \n", Version)
+		return
+	}
+	lg, fptr := args()
+	if fptr != nil {
+		defer fptr.Close()
+	}
 	uniqueId = unique.String()
 	go monitorController(lg)
 	go monitorGw(lg)

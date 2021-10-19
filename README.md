@@ -4,6 +4,20 @@ The agent specific code is in nxt_agent.js and connector specific code is in nxt
 Agent and connector does very similar kind of work and so you will find the code flow to be 
 quite similar. The basic theory of operation of this code is as follows
 
+## Building connector with version tag
+By default, the version tag is set to "Development".
+
+Syntax for building connector image with git's latest version tag:
+
+From agent/go/connector directory run:
+
+CGO_ENABLED=0 go build -tags netgo -a -v -ldflags="-X 'main.Version=`git tag -l "ALP*" | sort -r | head  -n 1`'"
+
+For building docker container with version tags:
+
+In Dockerfile.Build file, change the "Development" in main.Version=Development  to the version 
+tag that you want to build with.
+
 ## Usage
 
 ### Basic Agent operation
