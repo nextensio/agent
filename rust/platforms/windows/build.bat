@@ -70,7 +70,7 @@ if exist .deps\prepared goto :build
 :msi
 	if not exist "%~1" mkdir "%~1"
 	echo [+] wix compiling nxt-win.wxs
-	candle %WIX_CANDLE_FLAGS% -dAGENT_PLAT="%~1" -dProductVersion="1.0.0" -ext WixUIExtension -ext WixUtilExtension -o "%~1\nxt-win.wixobj" -arch %~3 nxt-win.wxs || goto :error
+	candle %WIX_CANDLE_FLAGS% -dAGENT_PLAT="%~1" -dProductVersion="ALPHA4_2021_10_18_14_13_57_EDT" -ext WixUIExtension -ext WixUtilExtension -o "%~1\nxt-win.wixobj" -arch %~3 nxt-win.wxs || goto :error
 	echo [+] wix linking nextensio-%~1.msi package
 	light %WIX_LIGHT_FLAGS% -ext WixUIExtension -cultures:en-us -dWixUILicenseRtf=nxtlicense.rtf -ext WixUtilExtension -out "dist\nextensio-%~1.msi" "%~1\nxt-win.wixobj" || goto :error
 	goto :eof
