@@ -54,6 +54,8 @@ var keyFile *string
 var sharedKey string
 var cluster string
 var ports []int = []int{}
+var gatewayIP uint32
+var deviceName string
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -280,7 +282,7 @@ func monitorController(lg *log.Logger) {
 	for {
 		if onboarded {
 			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
-				force_onboard = ControllerKeepalive(lg, controller, sharedKey, regInfo.Version, uniqueId)
+				force_onboard = ControllerKeepalive(lg, controller, sharedKey, regInfo.Version)
 				last_keepalive = time.Now()
 			}
 		}
@@ -466,7 +468,17 @@ func svrAccept(lg *log.Logger) {
 	}
 }
 
+func deviceInfo() {
+	host := "localhost"
+	h, e := os.Hostname()
+	if e == nil {
+		host = h
+	}
+	deviceName = fmt.Sprintf("%s [%d]", host, os.Getpid())
+}
+
 func main() {
+	deviceInfo()
 	pool = common.NewPool(64 * 1024)
 	mainCtx = context.Background()
 	unique = uuid.New()

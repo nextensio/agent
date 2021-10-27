@@ -1,9 +1,8 @@
 use clap::{App, Arg};
 use log::error;
-use nextensio::{agent_init, agent_on, onboard, CRegistrationInfo};
-use pkce::refresh;
+use nextensio::{agent_init, agent_on, agent_stats, onboard, AgentStats, CRegistrationInfo};
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use signal_hook::{consts::SIGABRT, consts::SIGINT, consts::SIGTERM, iterator::Signals};
 use std::io::Write;
 use std::os::raw::{c_char, c_int};
@@ -29,10 +28,10 @@ const MTU: u32 = 1500;
 struct Domain {
     name: String,
 }
-
+#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct OnboardInfo {
-    Result: String,
+    Result: String, // The json response has Caps Result, so we ignore clippy
     userid: String,
     tenant: String,
     gateway: String,
@@ -45,9 +44,17 @@ struct OnboardInfo {
     keepalive: usize,
 }
 
+#[derive(Serialize)]
+struct KeepaliveRequest<'a> {
+    device: &'a str,
+    gateway: u32,
+    version: &'a str,
+}
+
+#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct KeepaliveResponse {
-    Result: String,
+    Result: String, // The json response has Caps Result, so we ignore clippy
     version: String,
 }
 
@@ -77,30 +84,27 @@ fn cmd(cmd: &str) -> (String, String) {
     if let Ok(s) = String::from_utf8(output.stderr) {
         stderr = s;
     }
-    return (stdout, stderr);
+    (stdout, stderr)
 }
 
 fn cleanup_iptables() {
     let (out, _) = cmd("ip rule ls");
     for o in out.lines() {
-        if o != "" {
+        if !o.is_empty() {
             let re = Regex::new(r"([0-9]+):.*0x3a73.*215").unwrap();
-            match re.captures(&o) {
-                Some(r) => {
-                    let s = r.get(1).map_or("", |m| m.as_str());
-                    let c = format!("ip rule del prio {}", s);
-                    cmd(&c);
-                }
-                None => {}
+            if let Some(r) = re.captures(o) {
+                let s = r.get(1).map_or("", |m| m.as_str());
+                let c = format!("ip rule del prio {}", s);
+                cmd(&c);
             }
         }
     }
 
     let (out, _) = cmd("iptables -t mangle -nvL");
     for o in out.lines() {
-        if o != "" {
+        if !o.is_empty() {
             let re = Regex::new(r".*MARK.*set.*0x3a73.*").unwrap();
-            if re.is_match(&o) {
+            if re.is_match(o) {
                 cmd("iptables -D PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
                 cmd("iptables -D OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
             }
@@ -128,16 +132,16 @@ fn kill_agent() {
 fn has_iptables() -> bool {
     let (out1, _) = cmd("which iptables");
     let (out2, _) = cmd("which ip");
-    return out1 != "" && out2 != "";
+    !out1.is_empty() && !out2.is_empty()
 }
 
 fn has_addgroup() -> bool {
-    return std::path::Path::new("/usr/sbin/addgroup").exists();
+    std::path::Path::new("/usr/sbin/addgroup").exists()
 }
 
 fn is_root() -> bool {
     let (_, err) = cmd("iptables -nvL");
-    return !err.contains("denied");
+    !err.contains("denied")
 }
 
 fn config_tun(test: bool, mtu: u32) {
@@ -153,13 +157,13 @@ fn config_tun(test: bool, mtu: u32) {
 
 fn create_tun() -> Result<i32, std::io::Error> {
     let flags: u16 = (libc::IFF_TUN | libc::IFF_NO_PI) as u16;
-    let mut ifr: [u8; libc::IFNAMSIZ + 64] = [0 as u8; libc::IFNAMSIZ + 64];
-    ifr[0] = 't' as u8;
-    ifr[1] = 'u' as u8;
-    ifr[2] = 'n' as u8;
-    ifr[3] = '2' as u8;
-    ifr[4] = '1' as u8;
-    ifr[5] = '5' as u8;
+    let mut ifr: [u8; libc::IFNAMSIZ + 64] = [0_u8; libc::IFNAMSIZ + 64];
+    ifr[0] = b't';
+    ifr[1] = b'u';
+    ifr[2] = b'n';
+    ifr[3] = b'2';
+    ifr[4] = b'1';
+    ifr[5] = b'5';
     ifr[6] = 0;
     ifr[libc::IFNAMSIZ] = (flags & 0xFF) as u8;
     ifr[libc::IFNAMSIZ + 1] = ((flags & 0xFF00) >> 8) as u8;
@@ -271,17 +275,14 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
 
     loop {
         let now = Instant::now();
-        if onboarded {
-            if now > last_keepalive + Duration::from_secs(keepalive as u64) {
-                force_onboard = agent_keepalive(
-                    controller.clone(),
-                    access_token.clone(),
-                    &version,
-                    &uuid,
-                    &mut ka_client,
-                );
-                last_keepalive = now;
-            }
+        if onboarded && now > last_keepalive + Duration::from_secs(keepalive as u64) {
+            force_onboard = agent_keepalive(
+                controller.clone(),
+                access_token.clone(),
+                &version,
+                &mut ka_client,
+            );
+            last_keepalive = now;
         }
         // Okta is configured with one hour as the access token lifetime,
         // refresh at 45 minutes
@@ -338,18 +339,18 @@ fn okta_onboard(
                         if o.Result != "ok" {
                             error!("Result from controller not ok {}", o.Result);
                             println!("Login to nextensio failed ({}), will try again", o.Result);
-                            return (false, None);
+                            (false, None)
                         } else {
                             error!("Onboarded {}", o);
                             println!("Login to nextensio successful");
-                            agent_onboard(&o, access_token.clone(), uuid);
-                            return (true, Some(o));
+                            agent_onboard(&o, access_token, uuid);
+                            (true, Some(o))
                         }
                     }
                     Err(e) => {
                         error!("HTTP body failed {:?}", e);
                         println!("Login to nextensio failed ({}), will try again", e);
-                        return (false, None);
+                        (false, None)
                     }
                 }
             } else {
@@ -358,13 +359,13 @@ fn okta_onboard(
                     "Login to nextensio failed ({}), will try again",
                     res.status()
                 );
-                return (false, None);
+                (false, None)
             }
         }
         Err(e) => {
             error!("HTTP Get failed {:?}", e);
             println!("Login to nextensio failed ({}), will try again", e);
-            return (false, None);
+            (false, None)
         }
     }
 }
@@ -373,15 +374,23 @@ fn agent_keepalive(
     controller: String,
     access_token: String,
     version: &str,
-    uuid: &Uuid,
     client: &mut reqwest::Client,
 ) -> bool {
-    let get_url = format!(
-        "https://{}/api/v1/global/get/keepalive/{}/{}",
-        controller, version, uuid
-    );
+    let mut stats = AgentStats::default();
+    unsafe { agent_stats(&mut stats) };
+    let details = KeepaliveRequest {
+        gateway: stats.gateway_ip,
+        device: "linux localhost",
+        version,
+    };
+    let j = serde_json::to_string(&details).unwrap();
+    let post_url = format!("https://{}/api/v1/global/add/keepaliverequest", controller);
     let bearer = format!("Bearer {}", access_token);
-    let resp = client.get(&get_url).header("Authorization", bearer).send();
+    let resp = client
+        .post(&post_url)
+        .body(j)
+        .header("Authorization", bearer)
+        .send();
     match resp {
         Ok(mut res) => {
             if res.status().is_success() {
@@ -390,28 +399,28 @@ fn agent_keepalive(
                     Ok(ks) => {
                         if ks.Result != "ok" {
                             error!("Keepalive from controller not ok {}", ks.Result);
-                            return false;
+                            false
                         } else {
                             if version != ks.version {
                                 error!("Keepalive version mismatch {}/{}", version, ks.version);
                                 return true;
                             }
-                            return false;
+                            false
                         }
                     }
                     Err(e) => {
                         error!("Keepalive HTTP body failed {:?}", e);
-                        return false;
+                        false
                     }
                 }
             } else {
                 error!("Keepalive HTTP Get result {}, failed", res.status());
-                return false;
+                false
             }
         }
         Err(e) => {
             error!("Keepalive HTTP Get failed {:?}", e);
-            return false;
+            false
         }
     }
 }

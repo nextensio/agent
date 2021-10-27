@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -43,6 +46,13 @@ type RegistrationInfo struct {
 	Keepalive   uint     `json:"keepalive"`
 }
 
+func ip2int(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
 func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool {
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
@@ -63,6 +73,16 @@ func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool
 				err = json.Unmarshal(body, &regInfo)
 				regInfoLock.Unlock()
 				if err == nil {
+					ips, e := net.LookupIP(regInfo.Gateway)
+					if e == nil {
+						for _, ip := range ips {
+							i := ip.To4()
+							if i != nil {
+								gatewayIP = ip2int(i)
+								break
+							}
+						}
+					}
 					return true
 				}
 			}
@@ -74,12 +94,18 @@ func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool
 	return false
 }
 
+type KeepaliveRequest struct {
+	Device  string `json:"device"`
+	Gateway uint32 `json:"gateway"`
+	Version string `json:"version"`
+}
+
 type KeepaliveResponse struct {
 	Result  string `json:"Result"`
 	Version string `json:"version"`
 }
 
-func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, version string, uuid string) bool {
+func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, version string) bool {
 	var ka KeepaliveResponse
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
@@ -87,8 +113,14 @@ func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, ve
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
+	kr := KeepaliveRequest{Device: deviceName, Gateway: gatewayIP, Version: version}
+	body, err := json.Marshal(kr)
+	if err != nil {
+		lg.Println("Unable to make keepalive body")
+		return false
+	}
 	client := &http.Client{Transport: tr}
-	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/keepalive/"+version+"/"+uuid, nil)
+	req, err := http.NewRequest("POST", "https://"+controller+"/api/v1/global/add/keepaliverequest", bytes.NewBuffer(body))
 	if err == nil {
 		req.Header.Add("Authorization", "Bearer "+sharedKey)
 		resp, err := client.Do(req)
