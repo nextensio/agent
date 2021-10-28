@@ -25,6 +25,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.net.util.SubnetUtils;
 
+
+class NxtStats {
+    int gateway_up;
+    int gateway_flaps;
+    int last_gateway_flap;
+    int gateway_flows;
+    int total_flows;
+    int gateway_ip;
+
+    native void nxtStats();
+}
+
 public class NxtApp extends Application {
 
     private String publicIP = "";
@@ -153,11 +165,13 @@ public class NxtApp extends Application {
             getPublicIP();
         }
         keepalivecount += 1;
+        NxtStats stats = new NxtStats();
+        stats.nxtStats();
         MediaType JSON = MediaType.parse("application/json; charset=utf-8");
         JSONObject json = new JSONObject();
         try {
-            json.put("device", "");
-            json.put("gateway", 0);
+            json.put("device", Build.HOST + " " + Build.BRAND + " " + Build.MANUFACTURER + " " + Build.MODEL);
+            json.put("gateway", stats.gateway_ip);
             json.put("version", last_version);
             json.put("source", publicIP);
         }  catch (final JSONException e)  {
