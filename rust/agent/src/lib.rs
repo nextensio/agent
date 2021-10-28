@@ -1592,6 +1592,7 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, p
 }
 
 fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
+    CUR_GATEWAY_IP.store(0, Relaxed);
     if !agent.ext.idp_onboarded {
         return;
     }
