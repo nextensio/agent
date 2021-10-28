@@ -375,14 +375,15 @@ func getGatewayIP(lg *log.Logger) {
 func monitorGw(lg *log.Logger) {
 	for {
 		if onboarded {
+			if gatewayIP == 0 {
+				getGatewayIP(lg)
+			}
 			if gwTun == nil || gwTun.IsClosed() {
 				gw_onboarded = false
+				gatewayIP = 0
 				// Override gateway if one is suppled on command line
 				if regInfo.Gateway == "" || *gateway != "gateway.nextensio.net" {
 					regInfo.Gateway = *gateway
-				}
-				if gatewayIP == 0 {
-					getGatewayIP(lg)
 				}
 				cluster = getClusterName(regInfo.Gateway)
 				gwTun = DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
@@ -403,6 +404,7 @@ func monitorGw(lg *log.Logger) {
 						// all L3 packets
 					} else {
 						gwTun.Close()
+						gatewayIP = 0
 					}
 				}
 			}

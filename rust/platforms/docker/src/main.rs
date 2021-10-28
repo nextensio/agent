@@ -49,6 +49,7 @@ struct KeepaliveRequest<'a> {
     device: &'a str,
     gateway: u32,
     version: &'a str,
+    source: &'a str,
 }
 
 #[allow(non_snake_case)]
@@ -245,6 +246,13 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
     let mut keepalive: usize = 30;
     let mut last_keepalive = Instant::now();
     let mut refresh = Instant::now();
+    let mut keepalivecount = 0;
+    let mut public_ip = "".to_string();
+
+    let mut hostname = "linux_unknown".to_string();
+    if let Ok(h) = gethostname::gethostname().into_string() {
+        hostname = h;
+    }
 
     // TODO: Once we start using proper certs for our production clusters, make this
     // accept_invalid_certs true only for test environment. Even test environments ideally
@@ -276,11 +284,20 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
     loop {
         let now = Instant::now();
         if onboarded && now > last_keepalive + Duration::from_secs(keepalive as u64) {
+            if (keepalivecount % 4) == 0 {
+                let p = get_public_ip();
+                if !p.is_empty() {
+                    public_ip = p;
+                }
+            }
+            keepalivecount += 1;
             force_onboard = agent_keepalive(
                 controller.clone(),
                 access_token.clone(),
                 &version,
                 &mut ka_client,
+                &public_ip,
+                &hostname,
             );
             last_keepalive = now;
         }
@@ -370,18 +387,35 @@ fn okta_onboard(
     }
 }
 
+fn get_public_ip() -> String {
+    if let Ok(client) = reqwest::Client::builder().build() {
+        let resp = client.get("https://api.ipify.org").send();
+        if let Ok(mut res) = resp {
+            if res.status().is_success() {
+                if let Ok(t) = res.text() {
+                    return t;
+                }
+            }
+        }
+    }
+    "".to_string()
+}
+
 fn agent_keepalive(
     controller: String,
     access_token: String,
     version: &str,
     client: &mut reqwest::Client,
+    public_ip: &str,
+    hostname: &str,
 ) -> bool {
     let mut stats = AgentStats::default();
     unsafe { agent_stats(&mut stats) };
     let details = KeepaliveRequest {
         gateway: stats.gateway_ip,
-        device: "linux localhost",
+        device: hostname,
         version,
+        source: public_ip,
     };
     let j = serde_json::to_string(&details).unwrap();
     let post_url = format!("https://{}/api/v1/global/add/keepaliverequest", controller);
