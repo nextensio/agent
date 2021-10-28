@@ -177,7 +177,7 @@ public class NxtApp extends Application {
         }  catch (final JSONException e)  {
         }
         RequestBody reqbody = RequestBody.create(JSON, json.toString());
-        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/global/get/keepaliverequest").newBuilder();
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/global/add/keepaliverequest").newBuilder();
         String url = urlBuilder.build().toString();
         try {
             Request request = new Request.Builder()
