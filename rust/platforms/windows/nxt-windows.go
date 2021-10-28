@@ -35,6 +35,10 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/mem"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	websock "gitlab.com/nextensio/common/go/transport/websocket"
@@ -65,6 +69,18 @@ var loginStatus *widget.Button
 var watcher *interfaceWatcher
 var myApp fyne.App
 var pool common.NxtPool
+var sinfo SysInfo
+
+// SysInfo saves the basic system information
+type SysInfo struct {
+	Hostname      string `bson:hostname`
+	Platform      string `bson:platform`
+	KernelVersion string `bson:kernelversion`
+	HostId        string `bson:hostid`
+	CPU           string `bson:cpu`
+	RAM           uint64 `bson:ram`
+	Disk          uint64 `bson:disk`
+}
 
 const MTU = 1500
 
@@ -330,11 +346,11 @@ func agentOnboard() {
 		uuid:         C.CString(uniqueId),
 		services:     (**C.char)(services),
 		num_services: C.int(len(regInfo.Services)),
-		hostname:     C.CString("localhost"),
-		model:        C.CString("unknown"),
+		hostname:     C.CString(sinfo.Hostname),
+		model:        C.CString(sinfo.HostId),
 		os_type:      C.CString("windows"),
-		os_name:      C.CString("unknown"),
-		os_patch:     0,
+		os_name:      C.CString(sinfo.Platform),
+		os_patch:     0, // TODO: we can parse this info from KernelVersion
 		os_major:     0,
 		os_minor:     0,
 	}
@@ -633,7 +649,40 @@ func postLogin() {
 	myApp.Quit()
 }
 
+func getSysInfo() {
+	hostStat, _ := host.Info()
+	cpuStat, _ := cpu.Info()
+	vmStat, _ := mem.VirtualMemory()
+	diskStat, _ := disk.Usage("\\") // If you're in Unix change this "\\" for "/"
+
+	if hostStat != nil {
+		sinfo.Hostname = hostStat.Hostname
+		sinfo.Platform = hostStat.Platform
+		sinfo.KernelVersion = hostStat.KernelVersion
+		sinfo.HostId = hostStat.HostID
+	} else {
+		sinfo.Hostname = "unknown"
+		sinfo.Platform = "windows"
+	}
+	if cpuStat != nil {
+		sinfo.CPU = cpuStat[0].ModelName
+	}
+	if vmStat != nil {
+		sinfo.RAM = vmStat.Total / 1024 / 1024
+	}
+	if diskStat != nil {
+		sinfo.Disk = diskStat.Total / 1024 / 1024
+	}
+}
+
+func getGatewayIP() uint32 {
+	var stats C.AgentStats
+	C.agent_stats(&stats)
+	return uint32(stats.gateway_ip)
+}
+
 func main() {
+	getSysInfo()
 	lg = log.New(os.Stdout, "Nextensio: ", 0)
 	unique = uuid.New()
 	uniqueId = unique.String()
