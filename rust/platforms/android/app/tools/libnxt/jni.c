@@ -31,6 +31,7 @@ struct AgentStats
     int last_gateway_flap;
     int gateway_flows;
     int total_flows;
+    unsigned int gatweay_ip;
 };
 
 extern void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
@@ -135,7 +136,7 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtOnboard(JNIEnv *env, jclas
     (*env)->ReleaseStringUTFChars(env, osname, creg.os_name);
 }
 
-JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobject obj)
+JNIEXPORT void JNICALL Java_nextensio_agent_NxtApp_nxtStats(JNIEnv *env, jobject obj)
 {
     struct AgentStats stats = {};
     agent_stats(&stats);
@@ -151,6 +152,8 @@ JNIEXPORT void JNICALL Java_nextensio_agent_NxtStats_nxtStats(JNIEnv *env, jobje
     (*env)->SetIntField(env, obj, gateway_flows, stats.gateway_flows);
     jfieldID total_flows = (*env)->GetFieldID(env, thisObj, "total_flows", "I");
     (*env)->SetIntField(env, obj, total_flows, stats.total_flows);
+    jfieldID total_flows = (*env)->GetFieldID(env, thisObj, "gateway_ip", "I");
+    (*env)->SetIntField(env, obj, gateway_ip, stats.gateway_ip);
 }
 
 // These are some symbols that rust is looking for (coming from their math/logarithm lib!), just putting
