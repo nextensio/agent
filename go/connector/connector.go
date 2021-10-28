@@ -375,7 +375,7 @@ func getGatewayIP(lg *log.Logger) {
 func monitorGw(lg *log.Logger) {
 	for {
 		if onboarded {
-			if gatewayIP == 0 {
+			if gw_onboarded && gatewayIP == 0 {
 				getGatewayIP(lg)
 			}
 			if gwTun == nil || gwTun.IsClosed() {
