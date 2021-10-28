@@ -504,6 +504,7 @@ func main() {
 		go svrListen(lg, conn, p)
 	}
 	go svrAccept(lg)
+	go getLocalIP()
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction

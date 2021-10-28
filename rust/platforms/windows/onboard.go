@@ -81,22 +81,23 @@ type KeepaliveResponse struct {
 	Version string `json:"version"`
 }
 
-func getPublicIP() string {
-	url := "https://api.ipify.org?format=text" // we are using a pulib IP API, we're using ipify here, below are some others
+func getPublicIP() {
+	// we are using a pulic IP API, we're using ipify here, below are some others
 	// https://www.ipify.org
 	// http://myexternalip.com
 	// http://api.ident.me
 	// http://whatismyipaddress.com/api
+	url := "https://api.ipify.org?format=text"
 	resp, err := http.Get(url)
 	if err != nil {
-		panic(err)
+		return
 	}
 	defer resp.Body.Close()
 	ip, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return
 	}
-	return fmt.Sprintf("%s", ip)
+	publicIP = fmt.Sprintf("%s", ip)
 }
 
 func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, version string, uuid string) bool {
@@ -109,7 +110,7 @@ func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, 
 	}
 	// Well, I dont know if ipfy will block us if we keep pounding it
 	if (keepcount % 4) == 0 {
-		publicIP = getPublicIP()
+		getPublicIP()
 	}
 	keepcount += 1
 	kr := KeepaliveRequest{Device: sinfo.Hostname + ":" + sinfo.Platform, Gateway: getGatewayIP(), Version: version, Source: publicIP}

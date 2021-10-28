@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -13,6 +14,10 @@ import (
 
 	common "gitlab.com/nextensio/common/go"
 )
+
+var keepcount = 0
+var publicIP = ""
+var localIP = ""
 
 const (
 	UDP_AGER = 5 * time.Minute
@@ -98,11 +103,48 @@ type KeepaliveRequest struct {
 	Device  string `json:"device"`
 	Gateway uint32 `json:"gateway"`
 	Version string `json:"version"`
+	Source  string `json:"source"`
 }
 
 type KeepaliveResponse struct {
 	Result  string `json:"Result"`
 	Version string `json:"version"`
+}
+
+func getPublicIP() {
+	// we are using a pulic IP API, we're using ipify here, below are some others
+	// https://www.ipify.org
+	// http://myexternalip.com
+	// http://api.ident.me
+	// http://whatismyipaddress.com/api
+	url := "https://api.ipify.org?format=text"
+	resp, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	ip, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	publicIP = fmt.Sprintf("%s", ip)
+}
+
+// Get preferred outbound ip of this machine
+func getLocalIP() {
+	var conn net.Conn
+	var err error
+	for {
+		conn, err = net.Dial("udp", "8.8.8.8:80")
+		if err == nil {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	defer conn.Close()
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	localIP = localAddr.IP.String()
 }
 
 func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, version string) bool {
@@ -113,7 +155,13 @@ func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, ve
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	kr := KeepaliveRequest{Device: deviceName, Gateway: gatewayIP, Version: version}
+	// Well, I dont know if ipfy will block us if we keep pounding it, the public
+	// IP for a connector usually doesnt change since its a server instance, so go slow
+	if (keepcount % 100) == 0 {
+		getPublicIP()
+	}
+	keepcount += 1
+	kr := KeepaliveRequest{Device: deviceName, Gateway: gatewayIP, Version: version, Source: publicIP + ":" + localIP}
 	body, err := json.Marshal(kr)
 	if err != nil {
 		lg.Println("Unable to make keepalive body")
