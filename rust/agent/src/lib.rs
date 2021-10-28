@@ -595,7 +595,12 @@ fn dial_gateway(
         Err(e) => match e.code {
             EWOULDBLOCK => Some(websocket),
             _ => {
-                error!("Dial gateway {} failed: {}", &reginfo.gateway, e.detail);
+                error!(
+                    "Dial gateway {} failed: {}, bindip {}",
+                    &reginfo.gateway,
+                    e.detail,
+                    BINDIP.load(Relaxed)
+                );
                 STATS_NUMFLAPS.fetch_add(1, Relaxed);
                 None
             }
