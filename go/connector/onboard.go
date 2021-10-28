@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -51,13 +50,6 @@ type RegistrationInfo struct {
 	Keepalive   uint     `json:"keepalive"`
 }
 
-func ip2int(ip net.IP) uint32 {
-	if len(ip) == 16 {
-		return binary.BigEndian.Uint32(ip[12:16])
-	}
-	return binary.BigEndian.Uint32(ip)
-}
-
 func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool {
 	// TODO: Once we start using proper certs for our production clusters, make this
 	// accept_invalid_certs true only for test environment. Even test environments ideally
@@ -78,16 +70,6 @@ func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool
 				err = json.Unmarshal(body, &regInfo)
 				regInfoLock.Unlock()
 				if err == nil {
-					ips, e := net.LookupIP(regInfo.Gateway)
-					if e == nil {
-						for _, ip := range ips {
-							i := ip.To4()
-							if i != nil {
-								gatewayIP = ip2int(i)
-								break
-							}
-						}
-					}
 					return true
 				}
 			}

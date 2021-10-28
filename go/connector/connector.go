@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -347,6 +348,29 @@ func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInf
 	return nil
 }
 
+func ip2int(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+func getGatewayIP(lg *log.Logger) {
+	ips, e := net.LookupIP(regInfo.Gateway)
+	if e == nil {
+		for _, ip := range ips {
+			i := ip.To4()
+			if i != nil {
+				gatewayIP = ip2int(i)
+				lg.Println("Gateway IP is ", gatewayIP)
+				break
+			}
+		}
+	} else {
+		lg.Println("Cannot find gateway IP: ", e)
+	}
+}
+
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
 func monitorGw(lg *log.Logger) {
 	for {
@@ -356,6 +380,9 @@ func monitorGw(lg *log.Logger) {
 				// Override gateway if one is suppled on command line
 				if regInfo.Gateway == "" || *gateway != "gateway.nextensio.net" {
 					regInfo.Gateway = *gateway
+				}
+				if gatewayIP == 0 {
+					getGatewayIP(lg)
 				}
 				cluster = getClusterName(regInfo.Gateway)
 				gwTun = DialGateway(mainCtx, lg, "websocket", &regInfo, gwStreams)
