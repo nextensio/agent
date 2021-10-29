@@ -260,18 +260,10 @@ func credentials() (string, string) {
 	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
 
-func monitorController(lg *log.Logger) {
+func monitorController(lg *log.Logger, tokens *accessIdTokens) {
 	var keepalive uint = 30
 	force_onboard := false
-	var tokens *accessIdTokens
 
-	for {
-		tokens = authenticate(idp, clientid, username, password)
-		if tokens != nil {
-			break
-		}
-		time.Sleep(10 * time.Second)
-	}
 	refresh := time.Now()
 	last_keepalive := time.Now()
 	for {
@@ -306,7 +298,11 @@ func monitorController(lg *log.Logger) {
 				}
 			}
 		}
-		time.Sleep(30 * time.Second)
+		if !onboarded {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			time.Sleep(30 * time.Second)
+		}
 	}
 }
 
@@ -530,7 +526,7 @@ func UIEventLoop() {
 		if tokens != nil {
 			loginStatus.Text = "Logged in"
 			loginStatus.Disable()
-			go monitorController(lg)
+			go monitorController(lg, tokens)
 		} else {
 			loginStatus.Text = "Login failed, please try again"
 		}
@@ -547,9 +543,10 @@ func UIEventLoop() {
 
 func postLogin() {
 	interfaceName := "nxt0"
+	// Unless onboarding is done, we dont know what vpn routes to add etc..
 	for {
 		if !onboarded {
-			time.Sleep(time.Second)
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 		break

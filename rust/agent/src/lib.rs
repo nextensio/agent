@@ -2381,6 +2381,14 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
             }
         }
 
+        if now > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
+            monitor_onboard(&mut agent);
+            monitor_gw(now, &mut agent, &mut poll);
+            monitor_fd_vpn(&mut agent, &mut poll);
+            monitor_tcp_vpn(&mut agent, &mut poll);
+            monitor_ager = now;
+        }
+
         if !agent.ext.gw_onboarded
             && agent.ext.idp_onboarded
             && now > last_onboard + Duration::from_millis(ONBOARD_RETRY)
@@ -2391,15 +2399,6 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
             }
         }
 
-        // Note that we have a poll timeout of two seconds, but packets can keep the loop busy
-        // so make sure we monitor only every two secs
-        if now > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
-            monitor_onboard(&mut agent);
-            monitor_gw(now, &mut agent, &mut poll);
-            monitor_fd_vpn(&mut agent, &mut poll);
-            monitor_tcp_vpn(&mut agent, &mut poll);
-            monitor_ager = now;
-        }
         if now > service_parse_ager + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
             monitor_parse_pending(&mut agent, &mut poll);
             service_parse_ager = now;
