@@ -39,9 +39,21 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     var domains = [String]()
     var subnets = [IPNetwork_v4]()
     var attractAll = false
+    var publicIP = ""
+    var keepalivecount = 0
 
     override init() {
         super.init()
+    }
+    
+    private func getPublicIP() {
+        let url = URL(string: "https://api.ipify.org")
+        do {
+            if let url = url {
+                self.publicIP = try String(contentsOf: url)
+            }
+        } catch  {
+        }
     }
     
     private func onboardController(accessToken: String) {
@@ -97,7 +109,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     
     private func agentKeepalive(accessToken: String) {
         //create the url with NSURL
-        let keepURL = String(format:"https://server.nextensio.net:8080/api/v1/global/get/keepalive/%@/%@", last_version, uuid)
+        let keepURL = String(format:"https://server.nextensio.net:8080/api/v1/global/add/keepaliverequest")
         let url = URL(string: keepURL)!
         //create the session object
         let session = URLSession.shared
@@ -106,7 +118,21 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         session.configuration.timeoutIntervalForResource = 60;
         //now create the URLRequest object using the url object
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        let processInfo:ProcessInfo = ProcessInfo.processInfo
+        var stats = AgentStats()
+        agent_stats(&stats)
+        if (self.keepalivecount % 4) == 0 {
+            getPublicIP()
+        }
+        self.keepalivecount += 1
+        let parameters: [String: Any] = [
+            "device": processInfo.hostName + ":" + processInfo.operatingSystemVersionString,
+            "gateway": stats.gateway_ip,
+            "version": last_version,
+            "source": self.publicIP
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: parameters)
+        request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField:"Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField:"Authorization")
         request.timeoutInterval = 60.0

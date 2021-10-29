@@ -54,7 +54,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             if let url = url {
                 self.publicIP = try String(contentsOf: url)
             }
-        } catch let error {
+        } catch {
         }
     }
 
@@ -111,7 +111,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     
     private func agentKeepalive(accessToken: String) {
         //create the url with NSURL
-        let keepURL = String(format:"https://server.nextensio.net:8080/api/v1/global/get/keepaliverequest")
+        let keepURL = String(format:"https://server.nextensio.net:8080/api/v1/global/add/keepaliverequest")
         let url = URL(string: keepURL)!
         //create the session object
         let session = URLSession.shared
