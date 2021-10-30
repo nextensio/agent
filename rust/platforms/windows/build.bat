@@ -64,7 +64,7 @@ if exist .deps\prepared goto :build
 	echo [+] Assembling resources %1
 	windres.exe -I ".deps\wintun\bin\%~1" -i resources.rc -o "resources_%~3.syso" -O coff -c 65001 || exit /b %errorlevel%
 	echo [+] Building program %1
-	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-v -linkmode external -extldflags -static" -o "%~1\nextensio.exe" || exit /b 1
+	go build -tags load_wintun_from_rsrc -x -v -trimpath -ldflags "-H windowsgui -v -linkmode external -extldflags -static" -o "%~1\nextensio.exe" || exit /b 1
 	goto :eof
 
 :msi
