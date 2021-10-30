@@ -541,6 +541,35 @@ func UIEventLoop() {
 	w.ShowAndRun()
 }
 
+// For some reason resolving name from within rust in windows seems to take
+// abhorrably long time (like 30 seconds), so resolving it outside the agent
+// and supplying it to agent
+func resolveGateway() {
+	for {
+		addrs, err := net.LookupIP(regInfo.Gateway)
+		if err != nil || len(addrs) == 0 {
+			lg.Printf("Name resolution error %s", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		found := false
+		for _, ip := range addrs {
+			if ipv4 := ip.To4(); ipv4 != nil {
+				ip32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+				lg.Printf("Agent IP is ", ipv4, ip32)
+				C.agent_gateway_ip(C.uint32_t(ip32))
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+		lg.Printf("Name resolution, no ipv4")
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func postLogin() {
 	interfaceName := "nxt0"
 	// Unless onboarding is done, we dont know what vpn routes to add etc..
@@ -551,6 +580,7 @@ func postLogin() {
 		}
 		break
 	}
+	resolveGateway()
 
 	var err error
 	watcher, err = watchInterface()

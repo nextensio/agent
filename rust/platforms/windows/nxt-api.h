@@ -46,6 +46,7 @@ void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highm
 int agent_started(void);
 void agent_on(int32_t fd);
 void agent_default_route(uint32_t bindip);
+void agent_gateway_ip(uint32_t gateway_ip);
 void agent_off(void);
 void onboard(struct CRegistrationInfo info);
 void agent_stats(struct AgentStats *stats);

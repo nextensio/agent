@@ -46,6 +46,7 @@ mod dns;
 // These are atomic because rust will complain loudly about mutable global variables
 static VPNFD: AtomicI32 = AtomicI32::new(0);
 static BINDIP: AtomicU32 = AtomicU32::new(0);
+static GATEWAYIP: AtomicU32 = AtomicU32::new(0);
 static DIRECT: AtomicI32 = AtomicI32::new(0);
 static mut REGINFO: Option<Box<RegistrationInfo>> = None;
 static REGINFO_CHANGED: AtomicUsize = AtomicUsize::new(0);
@@ -590,16 +591,18 @@ fn dial_gateway(
         pkt_pool.clone(),
         tcp_pool.clone(),
         BINDIP.load(Relaxed),
+        GATEWAYIP.load(Relaxed),
     );
     match websocket.dial() {
         Err(e) => match e.code {
             EWOULDBLOCK => Some(websocket),
             _ => {
                 error!(
-                    "Dial gateway {} failed: {}, bindip {}",
+                    "Dial gateway {} failed: {}, bindip {}, gw {}",
                     &reginfo.gateway,
                     e.detail,
-                    BINDIP.load(Relaxed)
+                    BINDIP.load(Relaxed),
+                    GATEWAYIP.load(Relaxed),
                 );
                 STATS_NUMFLAPS.fetch_add(1, Relaxed);
                 None
@@ -2206,6 +2209,7 @@ fn tcp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll) {
         agent.ext.pkt_pool.clone(),
         agent.ext.tcp_pool.clone(),
         0,
+        0,
     );
     loop {
         match vpn_tun.dial() {
@@ -2479,6 +2483,14 @@ pub unsafe extern "C" fn agent_on(fd: i32) {
 #[no_mangle]
 pub unsafe extern "C" fn agent_default_route(bindip: u32) {
     BINDIP.store(bindip, Relaxed);
+}
+
+/// # Safety
+/// This is marked unsafe purely because of extern C, otherwise there
+/// is no memory unsafe operations done in this API
+#[no_mangle]
+pub unsafe extern "C" fn agent_gateway_ip(gatewayip: u32) {
+    GATEWAYIP.store(gatewayip, Relaxed);
 }
 
 /// # Safety
