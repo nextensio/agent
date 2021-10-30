@@ -544,7 +544,7 @@ func UIEventLoop() {
 // For some reason resolving name from within rust in windows seems to take
 // abhorrably long time (like 30 seconds), so resolving it outside the agent
 // and supplying it to agent
-func resolveGateway() {
+func resolveGatewayOnce() {
 	for {
 		addrs, err := net.LookupIP(regInfo.Gateway)
 		if err != nil || len(addrs) == 0 {
@@ -556,7 +556,7 @@ func resolveGateway() {
 		for _, ip := range addrs {
 			if ipv4 := ip.To4(); ipv4 != nil {
 				ip32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
-				lg.Printf("Agent IP is ", ipv4, ip32)
+				lg.Printf("Gateway IP is ", ipv4, ip32)
 				C.agent_gateway_ip(C.uint32_t(ip32))
 				found = true
 				break
@@ -570,6 +570,24 @@ func resolveGateway() {
 	}
 }
 
+// Well, if we take up the responsibility of resolving Gateway IP, we need to
+// check if the IP changes
+func resolveGatewayPeriodic() {
+	for {
+		addrs, err := net.LookupIP(regInfo.Gateway)
+		if err == nil {
+			for _, ip := range addrs {
+				if ipv4 := ip.To4(); ipv4 != nil {
+					ip32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+					C.agent_gateway_ip(C.uint32_t(ip32))
+					break
+				}
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func postLogin() {
 	interfaceName := "nxt0"
 	// Unless onboarding is done, we dont know what vpn routes to add etc..
@@ -580,7 +598,8 @@ func postLogin() {
 		}
 		break
 	}
-	resolveGateway()
+	resolveGatewayOnce()
+	go resolveGatewayPeriodic()
 
 	var err error
 	watcher, err = watchInterface()
