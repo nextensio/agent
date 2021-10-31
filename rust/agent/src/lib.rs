@@ -1808,19 +1808,21 @@ fn monitor_parse_pending(agent: &mut AgentInfo, poll: &mut Poll) {
             if Instant::now() > f.creation_instant + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
                 // We couldnt parse the service, and if we can figure out the service from DNS,
                 // just use dest ip as service
-                if f.service.is_empty() && !parse_dns(k, f, &mut agent.tuns, &mut agent.ext, poll) {
-                    f.service = k.dip.clone();
-                    set_dest_agent(k, f, &mut agent.tuns, &mut agent.ext, poll);
-                }
-                if f.parse_pending.is_none() {
-                    // There are cases (like a mysql Workbench app) where the client
-                    // does a tcp handshake and waits for the server to send data!! So
-                    // in that case the parsing will of course timeout, AND we have to
-                    // send some empty data to trigger the server to send its handshake
-                    if let Some(mut new) = pool_get(agent.ext.pkt_pool.clone()) {
-                        // Clear just to set vector data/len to empty
-                        new.clear();
-                        f.parse_pending = Some(new);
+                if f.service.is_empty() {
+                    if !parse_dns(k, f, &mut agent.tuns, &mut agent.ext, poll) {
+                        f.service = k.dip.clone();
+                        set_dest_agent(k, f, &mut agent.tuns, &mut agent.ext, poll);
+                    }
+                    if f.parse_pending.is_none() {
+                        // There are cases (like a mysql Workbench app) where the client
+                        // does a tcp handshake and waits for the server to send data!! So
+                        // in that case the parsing will of course timeout, AND we have to
+                        // send some empty data to trigger the server to send its handshake
+                        if let Some(mut new) = pool_get(agent.ext.pkt_pool.clone()) {
+                            // Clear just to set vector data/len to empty
+                            new.clear();
+                            f.parse_pending = Some(new);
+                        }
                     }
                 }
                 if let Some(data) = f.parse_pending.take() {
