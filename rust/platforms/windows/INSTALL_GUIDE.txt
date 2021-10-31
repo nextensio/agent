@@ -1,0 +1,26 @@
+Welcome to Nextensio! 
+
+Nextensio Client is a very light weight software that helps secure your enterprise traffic.
+To install the client, please click on "install" Windows batch file found along with this guide. 
+Windows will prompt you asking "do you want to allow this app to make changes to your device",
+please answer yes.
+
+Windows OS can be very finicky when it comes to allowing any security software, so below 
+are a few steps that might be helpful
+
+1. After installation, in the search bar you can search for "nextensio" to find and run the app.
+
+2. When running the app a "Windows defender" screen might pop up asking whether to allow the app to 
+   access public internet. We certainly need internet access :-). So please allow that.
+
+3. VPN agents (like open VPN or Private Internet Access) do not in general play well with other
+   security software. So please ensure you disconnect any VPN before using Nextensio client.
+
+
+Windows has many firewall and app allow/disallow knobs and settings, so in general if the client is
+not working after the above simple steps, please ask your IT administrator to ensure 
+that there is no firewall rules etc.. blocking the app. The app just needs regular SSL traffic to
+standard https port 443, no other special requirements
+
+Re-Installation: Windows requires the existing client to be uninstalled before a new version of 
+client can be installed.
