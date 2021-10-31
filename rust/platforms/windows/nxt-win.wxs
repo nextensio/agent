@@ -32,7 +32,8 @@
     </Feature>
     <UI>
         <!-- To display the eula, change to WixUI_Minimal -->
-        <UIRef Id="WixUI_InstallDir" />
+        <!-- To display no eula, use WixUI_InstallDir -->
+        <UIRef Id="WixUI_Minimal" />
         <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Client short-cut added to the Startup menu, thank you for installing this product." />
         <Publish Dialog="WelcomeDlg"
           Control="Next"
