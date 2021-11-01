@@ -1817,7 +1817,8 @@ fn monitor_parse_pending(agent: &mut AgentInfo, poll: &mut Poll) {
                         // There are cases (like a mysql Workbench app) where the client
                         // does a tcp handshake and waits for the server to send data!! So
                         // in that case the parsing will of course timeout, AND we have to
-                        // send some empty data to trigger the server to send its handshake
+                        // send some empty data to get to the connector and trigger a handshake
+                        // with the server and kickstart the data transfer from the server end
                         if let Some(mut new) = pool_get(agent.ext.pkt_pool.clone()) {
                             // Clear just to set vector data/len to empty
                             new.clear();
