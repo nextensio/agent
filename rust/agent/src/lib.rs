@@ -1806,7 +1806,7 @@ fn monitor_parse_pending(agent: &mut AgentInfo, poll: &mut Poll) {
     for (k, _) in agent.parse_pending.iter_mut() {
         if let Some(f) = agent.flows.get_mut(k) {
             if Instant::now() > f.creation_instant + Duration::from_millis(SERVICE_PARSE_TIMEOUT) {
-                // We couldnt parse the service, and if we can figure out the service from DNS,
+                // We couldnt parse the service, and if we can't figure out the service from DNS,
                 // just use dest ip as service
                 if f.service.is_empty() {
                     if !parse_dns(k, f, &mut agent.tuns, &mut agent.ext, poll) {
