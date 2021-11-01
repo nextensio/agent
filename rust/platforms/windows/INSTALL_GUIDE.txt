@@ -11,7 +11,8 @@ are a few steps that might be helpful
 1. After installation, in the search bar you can search for "nextensio" to find and run the app.
 
 2. When running the app a "Windows defender" screen might pop up asking whether to allow the app to 
-   access public internet. We certainly need internet access :-). So please allow that.
+   access public networks. We certainly need public network/internet access :-). 
+   So please select and allow Public networks. The Private network box can be left un-selected.
 
 3. VPN agents (like open VPN or Private Internet Access) do not in general play well with other
    security software. So please ensure you disconnect any VPN before using Nextensio client.
