@@ -34,6 +34,14 @@
 3. Copy the thumbprint ID to ./sign.bat
 4. Example: https://sectigostore.com/page/how-do-i-generate-a-self-signed-code-signing-certificate/
 
+<b>Sign msi package</b>
+1. Open powershell as administrator. cd to agent\rust\platforms\windows
+2. $rootCert = New-SelfSignedCertificate -DnsName "nextensio.net" -CertStoreLocation cert:\CurrentUser\My -Type CodeSigningCert -Subject 'Nextensio Agent Windows Cert'
+4. $certPath = "Cert:\currentuser\my\$($rootCert.Thumbprint)"
+5. $secPassword = ConvertTo-SecureString -String "Letmein123" -Force -AsPlainText
+6. Export-PfxCertificate -Cert $certPath -FilePath nxtselfcert.pfx -Password $secPassword
+7. SignTool sign /debug /f nxtselfcert.pfx /p Letmein123 /d "nextensio.net" /t http://timestamp.digicert.com /v dist\nextensio-amd64.msi
+
 <b>MS Windows Driver Kit (WDK) Installation</b>
 1. Download WDK for Windows 10
    * https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk

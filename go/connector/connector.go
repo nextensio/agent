@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -54,6 +55,8 @@ var keyFile *string
 var sharedKey string
 var cluster string
 var ports []int = []int{}
+var gatewayIP uint32
+var deviceName string
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -280,7 +283,7 @@ func monitorController(lg *log.Logger) {
 	for {
 		if onboarded {
 			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
-				force_onboard = ControllerKeepalive(lg, controller, sharedKey, regInfo.Version, uniqueId)
+				force_onboard = ControllerKeepalive(lg, controller, sharedKey, regInfo.Version)
 				last_keepalive = time.Now()
 			}
 		}
@@ -345,12 +348,39 @@ func OnboardTunnel(lg *log.Logger, tunnel common.Transport, isAgent bool, regInf
 	return nil
 }
 
+func ip2int(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+func getGatewayIP(lg *log.Logger) {
+	ips, e := net.LookupIP(regInfo.Gateway)
+	if e == nil {
+		for _, ip := range ips {
+			i := ip.To4()
+			if i != nil {
+				gatewayIP = ip2int(i)
+				lg.Println("Gateway IP is ", gatewayIP)
+				break
+			}
+		}
+	} else {
+		lg.Println("Cannot find gateway IP: ", e)
+	}
+}
+
 // If the gateway tunnel goes down for any reason, re-create a new tunnel
 func monitorGw(lg *log.Logger) {
 	for {
 		if onboarded {
+			if gw_onboarded && gatewayIP == 0 {
+				getGatewayIP(lg)
+			}
 			if gwTun == nil || gwTun.IsClosed() {
 				gw_onboarded = false
+				gatewayIP = 0
 				// Override gateway if one is suppled on command line
 				if regInfo.Gateway == "" || *gateway != "gateway.nextensio.net" {
 					regInfo.Gateway = *gateway
@@ -374,6 +404,7 @@ func monitorGw(lg *log.Logger) {
 						// all L3 packets
 					} else {
 						gwTun.Close()
+						gatewayIP = 0
 					}
 				}
 			}
@@ -466,7 +497,17 @@ func svrAccept(lg *log.Logger) {
 	}
 }
 
+func deviceInfo() {
+	host := "localhost"
+	h, e := os.Hostname()
+	if e == nil {
+		host = h
+	}
+	deviceName = fmt.Sprintf("%s [%d]", host, os.Getpid())
+}
+
 func main() {
+	deviceInfo()
 	pool = common.NewPool(64 * 1024)
 	mainCtx = context.Background()
 	unique = uuid.New()
@@ -492,6 +533,7 @@ func main() {
 		go svrListen(lg, conn, p)
 	}
 	go svrAccept(lg)
+	go getLocalIP()
 
 	// Keep monitoring for new streams from either gateway or app direction,
 	// and launch workers that will cross connect them to the other direction

@@ -9,13 +9,14 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import java.time.Instant;
 import java.time.Duration;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
-import com.squareup.okhttp.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.HttpUrl;
+import okhttp3.MultipartBody;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit ;
 import android.os.Build;
@@ -24,8 +25,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.net.util.SubnetUtils;
 
+
+class NxtStats {
+    int gateway_up;
+    int gateway_flaps;
+    int last_gateway_flap;
+    int gateway_flows;
+    int total_flows;
+    int gateway_ip;
+
+    native void nxtStats();
+}
+
 public class NxtApp extends Application {
 
+    private String publicIP = "";
     private String accessToken = "";
     private String refreshToken = "";
     private boolean onboarded = false;
@@ -37,8 +51,13 @@ public class NxtApp extends Application {
     private Instant last_refresh = Instant.now();
     private static final String TAG = "NxtApp";
     private static final int VPN_REQUEST_CODE = 0x0F;
-    private OkHttpClient client = new OkHttpClient();
+    private OkHttpClient client = new OkHttpClient.Builder()
+                                    .connectTimeout(15, TimeUnit.SECONDS)
+                                    .writeTimeout(15, TimeUnit.SECONDS)
+                                    .readTimeout(15, TimeUnit.SECONDS)
+                                    .build();
     private NxtAgentService agentService = null;
+    private int keepalivecount = 0;
 
     public void SetTokens(NxtAgentService service, String access, String refresh) {
         agentService = service;
@@ -81,9 +100,6 @@ public class NxtApp extends Application {
     }
 
     public void onCreate() {
-        client.setConnectTimeout(15, TimeUnit.SECONDS); // connect timeout
-        client.setReadTimeout(15, TimeUnit.SECONDS);    // socket timeout
-        client.setWriteTimeout(15, TimeUnit.SECONDS);    // socket timeout
     }
 
 
@@ -107,6 +123,14 @@ public class NxtApp extends Application {
         
         if ((!onboarded || force_onboard) && (agentService != null)) {
             controllerOnboard();
+        }
+    }
+
+    private void getPublicIP() {
+        try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
+            publicIP = s.next();
+        } catch (java.io.IOException e) {
+            
         }
     }
 
@@ -137,12 +161,29 @@ public class NxtApp extends Application {
     }
 
     private void agentKeepalive()  {
-        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/global/get/keepalive/" + last_version + "/" + uuid).newBuilder();
+        if ((keepalivecount % 4) == 0) {
+            getPublicIP();
+        }
+        keepalivecount += 1;
+        NxtStats stats = new NxtStats();
+        stats.nxtStats();
+        MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+        JSONObject json = new JSONObject();
+        try {
+            json.put("device", Build.HOST + " " + Build.BRAND + " " + Build.MANUFACTURER + " " + Build.MODEL);
+            json.put("gateway", stats.gateway_ip);
+            json.put("version", last_version);
+            json.put("source", publicIP);
+        }  catch (final JSONException e)  {
+        }
+        RequestBody reqbody = RequestBody.create(JSON, json.toString());
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/global/add/keepaliverequest").newBuilder();
         String url = urlBuilder.build().toString();
         try {
             Request request = new Request.Builder()
                                 .header("Authorization", "Bearer " + accessToken)
                                 .url(url)
+                                .method("POST",reqbody)
                                 .build();
             Response res = client.newCall(request).execute();
             try {

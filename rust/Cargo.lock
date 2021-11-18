@@ -239,7 +239,7 @@ source = "git+https://github.com/gopakumarce/R2.git?branch=master#67a5e286bf5772
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "etherparse",
  "httparse",
@@ -389,7 +389,7 @@ checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 [[package]]
 name = "dummy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
 ]
@@ -471,7 +471,7 @@ checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 [[package]]
 name = "fd"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
  "libc",
@@ -573,6 +573,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffdf9f34f1447443d37393cc6c2b8313aebddcd96906caf34e54c68d8e57d7bd"
 dependencies = [
  "typenum",
+]
+
+[[package]]
+name = "gethostname"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e692e296bfac1d2533ef168d0b60ff5897b8b70a4009276834014dd8924cc028"
+dependencies = [
+ "libc",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -801,7 +811,7 @@ dependencies = [
 [[package]]
 name = "l3proxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
  "managed",
@@ -1000,7 +1010,7 @@ dependencies = [
 [[package]]
 name = "netconn"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
  "mio 0.7.11",
@@ -1014,6 +1024,7 @@ dependencies = [
  "agent",
  "clap",
  "env_logger",
+ "gethostname",
  "libc",
  "log",
  "oauth2",
@@ -2164,7 +2175,7 @@ checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 [[package]]
 name = "webproxy"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",
  "libc",
@@ -2175,7 +2186,7 @@ dependencies = [
 [[package]]
 name = "websock"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#3ad8a98d08ed6e6766b78fee8a6e1fb355de98d2"
+source = "git+ssh://git@gitlab.com/nextensio/common?branch=master#72ded9c500f315a145f72b0f91625adbab75ec75"
 dependencies = [
  "bytes 1.0.1",
  "common 0.1.0 (git+ssh://git@gitlab.com/nextensio/common?branch=master)",

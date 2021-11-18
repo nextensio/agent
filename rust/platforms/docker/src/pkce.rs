@@ -1,23 +1,22 @@
-use std::convert::TryInto;
-
 use log::error;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-const TEST_PROFILE: idp_profile = idp_profile {
+const TEST_PROFILE: IdpProfile = IdpProfile {
     idp: "https://dev-635657.okta.com",
     client_id: "0oaz5lndczD0DSUeh4x6",
 };
-const PROD_PROFILE: idp_profile = idp_profile {
+const PROD_PROFILE: IdpProfile = IdpProfile {
     idp: "https://login.nextensio.net/",
     client_id: "0oav0q3hn65I4Zkmr5d6",
 };
 
-struct idp_profile<'a> {
+struct IdpProfile<'a> {
     idp: &'a str,
     client_id: &'a str,
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug, Serialize)]
 struct AuthenticateOpts {
     multiOptionalFactorEnroll: bool,
@@ -29,8 +28,10 @@ struct Authenticate {
     password: String,
     options: AuthenticateOpts,
 }
+
+#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
-struct sessionToken {
+struct SessionToken {
     sessionToken: String,
 }
 #[derive(Debug, Deserialize)]
@@ -74,7 +75,7 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
     match resp {
         Ok(mut res) => {
             if res.status().is_success() {
-                let stoken: std::result::Result<sessionToken, reqwest::Error> = res.json();
+                let stoken: std::result::Result<SessionToken, reqwest::Error> = res.json();
                 match stoken {
                     Ok(t) => {
                         let (code_challenge, code_verify) =
@@ -181,7 +182,7 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
         }
     }
 
-    return None;
+    None
 }
 
 pub fn refresh(test: bool, refresh: &str) -> Option<AccessIdTokens> {
@@ -229,5 +230,5 @@ pub fn refresh(test: bool, refresh: &str) -> Option<AccessIdTokens> {
         }
     }
 
-    return None;
+    None
 }

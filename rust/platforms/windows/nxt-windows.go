@@ -35,6 +35,10 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/mem"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
 	websock "gitlab.com/nextensio/common/go/transport/websocket"
@@ -65,6 +69,18 @@ var loginStatus *widget.Button
 var watcher *interfaceWatcher
 var myApp fyne.App
 var pool common.NxtPool
+var sinfo SysInfo
+
+// SysInfo saves the basic system information
+type SysInfo struct {
+	Hostname      string `bson:hostname`
+	Platform      string `bson:platform`
+	KernelVersion string `bson:kernelversion`
+	HostId        string `bson:hostid`
+	CPU           string `bson:cpu`
+	RAM           uint64 `bson:ram`
+	Disk          uint64 `bson:disk`
+}
 
 const MTU = 1500
 
@@ -244,18 +260,10 @@ func credentials() (string, string) {
 	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
 
-func monitorController(lg *log.Logger) {
+func monitorController(lg *log.Logger, tokens *accessIdTokens) {
 	var keepalive uint = 30
 	force_onboard := false
-	var tokens *accessIdTokens
 
-	for {
-		tokens = authenticate(idp, clientid, username, password)
-		if tokens != nil {
-			break
-		}
-		time.Sleep(10 * time.Second)
-	}
 	refresh := time.Now()
 	last_keepalive := time.Now()
 	for {
@@ -290,7 +298,11 @@ func monitorController(lg *log.Logger) {
 				}
 			}
 		}
-		time.Sleep(30 * time.Second)
+		if !onboarded {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			time.Sleep(30 * time.Second)
+		}
 	}
 }
 
@@ -330,11 +342,11 @@ func agentOnboard() {
 		uuid:         C.CString(uniqueId),
 		services:     (**C.char)(services),
 		num_services: C.int(len(regInfo.Services)),
-		hostname:     C.CString("localhost"),
-		model:        C.CString("unknown"),
+		hostname:     C.CString(sinfo.Hostname),
+		model:        C.CString(sinfo.HostId),
 		os_type:      C.CString("windows"),
-		os_name:      C.CString("unknown"),
-		os_patch:     0,
+		os_name:      C.CString(sinfo.Platform),
+		os_patch:     0, // TODO: we can parse this info from KernelVersion
 		os_major:     0,
 		os_minor:     0,
 	}
@@ -514,7 +526,7 @@ func UIEventLoop() {
 		if tokens != nil {
 			loginStatus.Text = "Logged in"
 			loginStatus.Disable()
-			go monitorController(lg)
+			go monitorController(lg, tokens)
 		} else {
 			loginStatus.Text = "Login failed, please try again"
 		}
@@ -529,15 +541,65 @@ func UIEventLoop() {
 	w.ShowAndRun()
 }
 
+// For some reason resolving name from within rust in windows seems to take
+// abhorrably long time (like 30 seconds), so resolving it outside the agent
+// and supplying it to agent
+func resolveGatewayOnce() {
+	for {
+		addrs, err := net.LookupIP(regInfo.Gateway)
+		if err != nil || len(addrs) == 0 {
+			lg.Printf("Name resolution error %s", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		found := false
+		for _, ip := range addrs {
+			if ipv4 := ip.To4(); ipv4 != nil {
+				ip32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+				lg.Printf("Gateway IP is ", ipv4, ip32)
+				C.agent_gateway_ip(C.uint32_t(ip32))
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+		lg.Printf("Name resolution, no ipv4")
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// Well, if we take up the responsibility of resolving Gateway IP, we need to
+// check if the IP changes
+func resolveGatewayPeriodic() {
+	for {
+		addrs, err := net.LookupIP(regInfo.Gateway)
+		if err == nil {
+			for _, ip := range addrs {
+				if ipv4 := ip.To4(); ipv4 != nil {
+					ip32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+					C.agent_gateway_ip(C.uint32_t(ip32))
+					break
+				}
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func postLogin() {
 	interfaceName := "nxt0"
+	// Unless onboarding is done, we dont know what vpn routes to add etc..
 	for {
 		if !onboarded {
-			time.Sleep(time.Second)
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 		break
 	}
+	resolveGatewayOnce()
+	go resolveGatewayPeriodic()
 
 	var err error
 	watcher, err = watchInterface()
@@ -633,7 +695,40 @@ func postLogin() {
 	myApp.Quit()
 }
 
+func getSysInfo() {
+	hostStat, _ := host.Info()
+	cpuStat, _ := cpu.Info()
+	vmStat, _ := mem.VirtualMemory()
+	diskStat, _ := disk.Usage("\\") // If you're in Unix change this "\\" for "/"
+
+	if hostStat != nil {
+		sinfo.Hostname = hostStat.Hostname
+		sinfo.Platform = hostStat.Platform
+		sinfo.KernelVersion = hostStat.KernelVersion
+		sinfo.HostId = hostStat.HostID
+	} else {
+		sinfo.Hostname = "unknown"
+		sinfo.Platform = "windows"
+	}
+	if cpuStat != nil {
+		sinfo.CPU = cpuStat[0].ModelName
+	}
+	if vmStat != nil {
+		sinfo.RAM = vmStat.Total / 1024 / 1024
+	}
+	if diskStat != nil {
+		sinfo.Disk = diskStat.Total / 1024 / 1024
+	}
+}
+
+func getGatewayIP() uint32 {
+	var stats C.AgentStats
+	C.agent_stats(&stats)
+	return uint32(stats.gateway_ip)
+}
+
 func main() {
+	getSysInfo()
 	lg = log.New(os.Stdout, "Nextensio: ", 0)
 	unique = uuid.New()
 	uniqueId = unique.String()

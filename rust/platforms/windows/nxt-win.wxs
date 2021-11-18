@@ -3,9 +3,9 @@
 	Copyright (C) 2021 Nextensio. All Rights Reserved.
 -->
 <?if $(var.AGENT_PLAT) = "amd64"?>
-	<?define UpgradeCode = "{e5f3af5e-1394-44ef-a046-09491d9fa0cb}"?>
-  <?define NxtAgentCode = "{fb952a10-ff9c-4594-87b4-18238aba2c9b}"?>
-  <?define ShortCutNxtAgentCode = "{4bd16be1-859c-4ca9-8adc-c19120c1fe66}"?>
+	<?define UpgradeCode = "{327fb81b-f8d6-426a-8a48-c19246f3cd6e}"?>
+  <?define NxtAgentCode = "{87753105-d61f-4e3e-abc1-3328dae3feb6}"?>
+  <?define ShortCutNxtAgentCode = "{23e16b47-e133-4ac4-9d06-59e386b58f42}"?>
 <?else?>
 	<?error Unknown platform ?>
 <?endif?>
@@ -32,7 +32,8 @@
     </Feature>
     <UI>
         <!-- To display the eula, change to WixUI_Minimal -->
-        <UIRef Id="WixUI_InstallDir" />
+        <!-- To display no eula, use WixUI_InstallDir -->
+        <UIRef Id="WixUI_Minimal" />
         <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Nextensio Client short-cut added to the Startup menu, thank you for installing this product." />
         <Publish Dialog="WelcomeDlg"
           Control="Next"

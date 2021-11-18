@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/google/uuid v1.2.0
-	gitlab.com/nextensio/common/go v0.0.0-20211019161419-0c58f3db372d
+	gitlab.com/nextensio/common/go v0.0.0-20211027181503-dfc7284e59ff
 )
 
 require (
