@@ -13,6 +13,7 @@ use std::{ffi::CString, usize};
 use std::{fmt, time::Instant};
 use uuid::Uuid;
 mod pkce;
+use pnet::datalink;
 
 const MTU: u32 = 1500;
 
@@ -88,7 +89,7 @@ fn cmd(cmd: &str) -> (String, String) {
     (stdout, stderr)
 }
 
-fn cleanup_iptables() {
+fn cleanup_iptables(interface: String) {
     let (out, _) = cmd("ip rule ls");
     for o in out.lines() {
         if !o.is_empty() {
@@ -106,22 +107,67 @@ fn cleanup_iptables() {
         if !o.is_empty() {
             let re = Regex::new(r".*MARK.*set.*0x3a73.*").unwrap();
             if re.is_match(o) {
-                cmd("iptables -D PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+                if interface != "" {
+                    let c = format!(
+                        "iptables -D PREROUTING -i {} -t mangle -j MARK --set-mark 14963",
+                        interface
+                    );
+                    cmd(&c);
+                }
                 cmd("iptables -D OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
+                iptables_ignore_connected_subnets(false);
             }
         }
     }
+}
+
+// This is required because if we are running inside a linux VM, the default
+// dns server of that VM might be the host. So if we dont add these rules, the
+// dns requests to the host will also be captured and attempt to be sent via
+// the agent tunnel
+fn iptables_ignore_connected_subnets(add: bool) {
+    let mut iptables;
+    if add {
+        iptables = "iptables -A OUTPUT -t mangle -d ".to_owned();
+    } else {
+        iptables = "iptables -D OUTPUT -t mangle -d ".to_owned();
+    }
+    let mut first = true;
+    for iface in datalink::interfaces() {
+        for ip in iface.ips {
+            match ip {
+                pnet::ipnetwork::IpNetwork::V4(x) => {
+                    let ipm;
+                    if first {
+                        ipm = format!("{}/{}", x.ip(), x.prefix());
+                    } else {
+                        ipm = format!(",{}/{}", x.ip(), x.prefix());
+                    }
+                    first = false;
+                    iptables.push_str(&ipm);
+                }
+                _ => {}
+            }
+        }
+    }
+    iptables.push_str(" -j RETURN");
+    cmd(&iptables);
 }
 
 // The numbers 14963, 215 etc.. are chosen to be "random" so that
 // if the user's linux already has other rules, we dont clash with
 // it. Ideally we should probe and find out free numbers to use, this
 // is just a poor man's solution for the time being
-fn add_iptables(test: bool) {
+fn add_iptables(interface: &str) {
     cmd("ip rule add fwmark 14963 table 215");
-    if test {
-        cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+    if interface != "" {
+        let c = format!(
+            "iptables -A PREROUTING -i {} -t mangle -j MARK --set-mark 14963",
+            interface
+        );
+        cmd(&c);
     } else {
+        iptables_ignore_connected_subnets(true);
         cmd("iptables -A OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
     }
 }
@@ -145,7 +191,7 @@ fn is_root() -> bool {
     !err.contains("denied")
 }
 
-fn config_tun(test: bool, mtu: u32) {
+fn config_tun(interface: &str, mtu: u32) {
     cmd("ifconfig tun215 up");
     cmd("ifconfig tun215 169.254.2.1 netmask 255.255.255.0");
     cmd(&format!("ifconfig tun215 mtu {}", mtu));
@@ -153,7 +199,9 @@ fn config_tun(test: bool, mtu: u32) {
         "ip route add default via 169.254.2.1 dev tun215 mtu {} table 215",
         mtu
     ));
-    add_iptables(test);
+    cmd("echo 0 > /proc/sys/net/ipv4/conf/tun215/rp_filter");
+    cmd("echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter");
+    add_iptables(interface);
 }
 
 fn create_tun() -> Result<i32, std::io::Error> {
@@ -473,34 +521,11 @@ fn main() {
         return;
     }
 
-    let matches = App::new("NxtAgent")
-        .arg(
-            Arg::with_name("stop")
-                .long("stop")
-                .help("Disconnect from Nextensio"),
-        )
-        .get_matches();
-
-    if matches.is_present("stop") {
-        kill_agent();
-        cleanup_iptables();
-        return;
-    }
-
-    if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
-        thread::spawn(move || {
-            for sig in signals.forever() {
-                println!("Received signal {:?}, terminating nextensio", sig);
-                cleanup_iptables();
-                std::process::exit(0);
-            }
-        });
-    }
-
     // "test" is true if we are running in a docker container in nextensio testbed
     // Right now this same layer is used for testbed and real agent - not a lot of
     // difference between them, but at some point we might seperate out both
-    let mut test = true;
+    let test;
+    let mut interface = "".to_string();
     let mut found = 0;
     let mut controller = "server.nextensio.net:8080".to_string();
     let mut username = "".to_string();
@@ -516,10 +541,44 @@ fn main() {
         } else if key == "NXT_CONTROLLER" {
             controller = value;
             found += 1;
+        } else if key == "NXT_INTERFACE" {
+            interface = value;
+        }
+    }
+    if found != 3 {
+        test = false;
+    } else {
+        test = true;
+        if interface == "" {
+            interface = "eth0".to_string();
         }
     }
 
-    if found != 3 {
+    let matches = App::new("NxtAgent")
+        .arg(
+            Arg::with_name("stop")
+                .long("stop")
+                .help("Disconnect from Nextensio"),
+        )
+        .get_matches();
+
+    if matches.is_present("stop") {
+        kill_agent();
+        cleanup_iptables(interface);
+        return;
+    }
+
+    if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
+        let intf = interface.clone();
+        thread::spawn(move || {
+            for sig in signals.forever() {
+                println!("Received signal {:?}, terminating nextensio", sig);
+                cleanup_iptables(intf);
+                std::process::exit(0);
+            }
+        });
+    }
+    if !test {
         // Add a group to run this app as, this is all temporary till we
         // figure out a proper installation process on linux for these agents.
         // The 14963 is just some groupid we pick, its not related to the set-mark
@@ -534,23 +593,24 @@ fn main() {
                 return;
             }
         }
-        test = false;
         controller = "server.nextensio.net:8080".to_string();
-        print!("Nextensio Username: ");
-        std::io::stdout().flush().unwrap();
-        std::io::stdin()
-            .read_line(&mut username)
-            .expect("Please enter a username");
-        username = username.trim().to_string();
-        print!("Nextensio Password: ");
-        std::io::stdout().flush().unwrap();
-        password = rpassword::read_password().unwrap_or(password);
+        if username == "" || password == "" {
+            print!("Nextensio Username: ");
+            std::io::stdout().flush().unwrap();
+            std::io::stdin()
+                .read_line(&mut username)
+                .expect("Please enter a username");
+            username = username.trim().to_string();
+            print!("Nextensio Password: ");
+            std::io::stdout().flush().unwrap();
+            password = rpassword::read_password().unwrap_or(password);
+        }
         println!("Trying to login to nextensio");
     }
 
     env_logger::init();
     let fd = create_tun().unwrap();
-    config_tun(test, MTU);
+    config_tun(&interface, MTU);
 
     thread::spawn(move || do_onboard(test, controller, username, password));
 
