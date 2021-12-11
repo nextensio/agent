@@ -6,7 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.1.0
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.3.0
-	gitlab.com/nextensio/common/go v0.0.0-20211015145730-3ad8a98d08ed
+	gitlab.com/nextensio/common/go v0.0.0-20211030183027-72ded9c500f3
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac
 	golang.zx2c4.com/wireguard v0.0.0-20211011205753-982d5d2e8491

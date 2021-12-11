@@ -21,7 +21,7 @@ if exist .deps\prepared goto :build
 	cd .deps || goto :error
 	call :download wintun.zip https://www.wintun.net/builds/wintun-0.13.zip 34afe7d0de1fdb781af3defc0a75fd8c97daa756279b42dd6be6a1bd8ccdc7f0 || goto :error
 	copy /y NUL prepared > NUL || goto :error
-	go env -w GOPRIVATE=gitlab.com GO111MODULE=on 
+	go env -w GOPRIVATE=gitlab.com GO111MODULE=on CGO_ENABLED=1
 	go get gitlab.com/nextensio/common/go
 
 	cd .. || goto :error

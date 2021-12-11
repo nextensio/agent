@@ -81,6 +81,8 @@ gitlab.com/nextensio/common/go v0.0.0-20211012173728-324fdcfecf3f h1:75ztj65/bLM
 gitlab.com/nextensio/common/go v0.0.0-20211012173728-324fdcfecf3f/go.mod h1:shBbYPXdTVrehTyLKhWi3Vo5GxELQkAVdiW8eAzZqBo=
 gitlab.com/nextensio/common/go v0.0.0-20211015145730-3ad8a98d08ed h1:Pvxt+cx9SOZl/58k75lHi53Rm4bnxd1Pj0fz5kAnG10=
 gitlab.com/nextensio/common/go v0.0.0-20211015145730-3ad8a98d08ed/go.mod h1:shBbYPXdTVrehTyLKhWi3Vo5GxELQkAVdiW8eAzZqBo=
+gitlab.com/nextensio/common/go v0.0.0-20211030183027-72ded9c500f3 h1:VIWIjC/3Yhn69RZUgUBWddxVO0dBVUsMrYBMDm/HSgg=
+gitlab.com/nextensio/common/go v0.0.0-20211030183027-72ded9c500f3/go.mod h1:shBbYPXdTVrehTyLKhWi3Vo5GxELQkAVdiW8eAzZqBo=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
 golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
