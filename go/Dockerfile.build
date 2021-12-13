@@ -30,4 +30,4 @@ RUN apk del git && apk del openssh
 
 RUN chmod +x /go/files/run.sh
 EXPOSE 8180/tcp 8081/tcp 8181/tcp
-ENTRYPOINT ["/go/files/run.sh"] 
+CMD /go/files/run.sh

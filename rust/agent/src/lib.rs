@@ -266,7 +266,6 @@ struct FlowV4 {
     dest_agent: String,
     active: bool,
     trace_request: bool,
-    trace_response: bool,
 }
 
 enum TunFlow {
@@ -563,7 +562,6 @@ fn flow_new(
         parse_pending: None,
         active: false,
         trace_request: true,
-        trace_response: true,
     };
     if need_parsing {
         parse_pending.insert(key.clone(), ());
@@ -1212,6 +1210,9 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
     let hdr = hdr.unwrap();
     match hdr.hdr.unwrap() {
         Hdr::Flow(f) => {
+            if f.trace_ctx == "" {
+                return;
+            }
             trace.trace_ctx = f.trace_ctx;
             trace.processing_duration = rxtime.elapsed().as_nanos() as u64;
             trace.source = f.source;
@@ -1259,10 +1260,7 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
 fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun) {
     while let Some(mut rx) = flow.pending_rx.pop_front() {
         let hdr = rx.hdr.take();
-        let mut rxtime = None;
-        if hdr.is_some() && flow.trace_response {
-            rxtime = Some(Instant::now());
-        }
+        let rxtime = Instant::now();
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
                 EWOULDBLOCK => {
@@ -1279,11 +1277,8 @@ fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun) {
             },
             Ok(_) => {
                 flow_alive(key, flow);
-                if hdr.is_some() && flow.trace_response {
-                    if let Some(rt) = rxtime {
-                        send_trace_info(rt, hdr, tun);
-                        flow.trace_response = false;
-                    }
+                if hdr.is_some() {
+                    send_trace_info(rxtime, hdr, tun);
                 }
             }
         }
