@@ -233,6 +233,8 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 				newFlow := *flow
 				newFlow.ProcessingDuration = uint64(elapsed)
 				hdrFlow = &newFlow
+				//Set the flow.TraceCtx to NULL after the first pkt as we dont need to carry the same traceCtx
+				flow.TraceCtx = ""
 			} else {
 				hdrFlow = flow
 			}
