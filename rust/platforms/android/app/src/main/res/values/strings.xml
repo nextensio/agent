@@ -3,6 +3,7 @@
 
     <string name="app_name">Nextensio</string>
     <string name="start_agent">Sign In</string>
-    <string name="stop_agent">Signout</string>
+    <string name="connect_agent">Authenticated, connecting..</string>
+    <string name="stop_agent">Connected, Signout</string>
     <string name="action_settings">Settings</string>
 </resources>

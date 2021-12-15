@@ -13,6 +13,7 @@ import android.os.Bundle;
 import android.os.Debug;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.util.Log;
 import android.net.Uri;
@@ -31,6 +32,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import android.net.VpnService;
 import android.content.Intent;
+import java.util.Timer;
+import java.util.TimerTask;
 
 // This class is an android 'activity' class, ie this is the one that deals
 // with UI and buttons and stuff. Based on all the UI/button activity it will
@@ -43,7 +46,10 @@ public class NxtAgent extends AppCompatActivity {
     private WebAuthClient authClient;
     private SessionClient sessionClient;
     private static final int VPN_REQUEST_CODE = 0x0F;
-    
+    private boolean firstSignin = false;
+    private Timer timer;
+    private TimerTask timerTask;
+
     private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
     .clientId("0oav0rc5g0E3irFto5d6")
     .redirectUri("nextensio.agent:/login")
@@ -59,9 +65,6 @@ public class NxtAgent extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (NxtAgentService.BROADCAST_VPN_STATE.equals(intent.getAction())) {
-                if (agentService != null) {
-                    vpnStatus(agentService.vpnReady);
-                }
                 Log.i(TAG, String.format("Message: VPN status %b, bound %b", 
                                         intent.getBooleanExtra("running", false), (agentService != null)));
             }
@@ -70,10 +73,9 @@ public class NxtAgent extends AppCompatActivity {
 
     private ServiceConnection connection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
-            boolean first = (agentService == null);
             agentService = ((NxtAgentService.NxtAgentServiceBinder)service).getService();
-            vpnStatus(agentService.vpnReady);
-            if (first == true) {
+            if (firstSignin) {
+                firstSignin = false;
                 signin();
             }
             Log.i(TAG, "Agent Bound with service " + String.format("%s, vpn %b", className, agentService.vpnReady));
@@ -92,14 +94,23 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
-    private void vpnStatus(boolean vpnOn) {
+    private void vpnStatus() {
         final Button vpnButton = (Button) findViewById(R.id.vpn);
+        final ProgressBar pbar =(ProgressBar) findViewById(R.id.progress); 
         vpnButton.setEnabled(true);
-        if (vpnOn) {
+        if (agentService == null || !agentService.vpnReady) {
+            vpnButton.setText(R.string.start_agent);
+            pbar.setProgress(0);
+            return;
+        }
+
+        int progress = nxtProgress();
+        if (progress == 3) {
             vpnButton.setText(R.string.stop_agent);
         } else {
-            vpnButton.setText(R.string.start_agent);
+            vpnButton.setText(R.string.connect_agent);
         }
+        pbar.setProgress(progress+1);
     }
 
     @Override
@@ -141,10 +152,12 @@ public class NxtAgent extends AppCompatActivity {
     private void toggleVPN() {
         if (agentService == null) {
             startService();
+            firstSignin = true;
             return;
         }
         if (agentService.vpnReady == true) {
             agentService.stop();
+            authClient.signOut(this, null);
             Log.i(TAG, "Stopped VPN");
         } else {
             signin();
@@ -197,7 +210,6 @@ public class NxtAgent extends AppCompatActivity {
 
         // Setup the button to turn the vpn on/off
         final Button vpnButton = (Button)findViewById(R.id.vpn);
-        vpnButton.setEnabled(true);
         vpnButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -208,6 +220,14 @@ public class NxtAgent extends AppCompatActivity {
         // Register to receive notification from the NxtAgentService class
         LocalBroadcastManager.getInstance(this).registerReceiver(vpnStateReceiver,
                 new IntentFilter(NxtAgentService.BROADCAST_VPN_STATE));
+
+        timer = new Timer();
+        timerTask = new TimerTask() {
+            public void run() {
+                vpnStatus();
+            }
+        };
+        timer.schedule(timerTask, 1000, 1000);
     }
 
     @Override
@@ -219,11 +239,8 @@ public class NxtAgent extends AppCompatActivity {
         // is so that will update the true vpn status - so there can be a momentary
         // (couple seconds at most ?) glitch where the vpn status is incorrect
         if (agentService == null) {
-            vpnStatus(false);
             doBindService();
-        } else {
-            vpnStatus(agentService.vpnReady);
-        }
+        } 
         Log.i(TAG, "Resume");
     }
 
@@ -232,4 +249,6 @@ public class NxtAgent extends AppCompatActivity {
         super.onDestroy();
         unbindService(connection);
     }    
+
+    private static native int nxtProgress();
 }
