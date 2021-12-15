@@ -18,6 +18,7 @@ class SignInViewController: AuthBaseViewController {
     @IBOutlet private var usernameField: UITextField!
     @IBOutlet private var passwordField: UITextField!
     @IBOutlet private var signinButton: UIButton!
+    @IBOutlet private var progressView: UIProgressView!
 
     let tunnelBundleId = "io.nextensio.agent1.tunnel"
     var vpnInited = false 
@@ -26,12 +27,36 @@ class SignInViewController: AuthBaseViewController {
     var accessToken = ""
     var refreshToken = ""
     var idToken = ""
-
+    var progressBarTimer: Timer!
+    var authenticated = false
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
         usernameField.text = "username"
         passwordField.text = ""
+        progressView.progress = 0
+        progressView.progressTintColor = UIColor.blue
+        progressView.progressViewStyle = .bar
+        self.progressBarTimer = Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(SignInViewController.updateProgressView), userInfo: nil, repeats: true)
+    }
+
+    private func updateProgressView() {
+        var progress = 0.0
+        progress = agent_progress()
+        if !authenticated {
+            progressView.progress = 0
+            progressView.setProgress(0, animated: true)
+            signinButton.setTitle("Sign In", for: .normal)
+            return;
+        }
+        if progress == 3 {
+            signinButton.setTitle("Connected, Sign Out", for: .normal)
+        } else {
+            signinButton.setTitle("Authenticated, connecting..", for: .normal)
+        }
+        progressView.progress = (progress + 1)/4
+        progressView.setProgress(progressView.progress, animated: true)
     }
     
     @IBAction private func signInTapped() {
@@ -57,8 +82,7 @@ class SignInViewController: AuthBaseViewController {
             _ = self?.showError(message: error.description)
         }
 
-        let buttonTitle = signinButton.title(for: .normal) ?? ""
-        if buttonTitle == "Sign In" {
+        if !authenticated {
             OktaAuthSdk.authenticate(with: URL(string: urlString)!,
                                     username: username,
                                     password: password,
@@ -66,7 +90,7 @@ class SignInViewController: AuthBaseViewController {
                                     onError: errorBlock)
         } else {
             self.vpnManager.connection.stopVPNTunnel()
-            signinButton.setTitle("Sign In", for: .normal)
+            authenticated = false
             usernameField.isEnabled = true
             passwordField.isEnabled = true
         }
@@ -179,11 +203,11 @@ class SignInViewController: AuthBaseViewController {
         if (status) {
             self.usernameField.isEnabled = false
             self.passwordField.isEnabled = false
-            self.signinButton.setTitle("signout", for: .normal)
+            authenticated = true
         } else {
             self.usernameField.isEnabled = true
             self.passwordField.isEnabled = true
-            self.signinButton.setTitle("Sign In", for: .normal)
+            authenticated = false
         }
     }
 
