@@ -58,6 +58,7 @@ static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
 static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
 static CUR_GATEWAY_IP: AtomicU32 = AtomicU32::new(0);
 static AGENT_STARTED: AtomicUsize = AtomicUsize::new(0);
+static AGENT_PROGRESS: AtomicUsize = AtomicUsize::new(0);
 const NXT_AGENT_PROXY: usize = 8181;
 
 const UNUSED_IDX: usize = 0;
@@ -677,6 +678,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
         },
         Ok(_) => {
             error!("Onboard message sent (ok)");
+            AGENT_PROGRESS.store(2, Relaxed);
         }
     }
 }
@@ -775,6 +777,7 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                         );
                         tun.keepalive = Instant::now();
                         agent.ext.gw_onboarded = true;
+                        AGENT_PROGRESS.store(3, Relaxed);
                     }
                     Hdr::Flow(_) => {
                         let mut found = false;
@@ -1599,6 +1602,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if !agent.ext.idp_onboarded {
         return;
     }
+    AGENT_PROGRESS.store(0, Relaxed);
     if let Some(websocket) =
         dial_gateway(&agent.ext.reginfo, &agent.ext.pkt_pool, &agent.ext.tcp_pool)
     {
@@ -1621,6 +1625,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
             Ok(_) => {
                 error!("Gateway Transport Registered");
                 agent.tuns.insert(GWTUN_IDX, TunInfo::Tun(tun));
+                AGENT_PROGRESS.store(1, Relaxed);
             }
         }
     }
@@ -2473,6 +2478,14 @@ pub unsafe extern "C" fn agent_init(
 #[no_mangle]
 pub unsafe extern "C" fn agent_started() -> usize {
     AGENT_STARTED.load(Relaxed)
+}
+
+/// # Safety
+/// This is marked unsafe purely because of extern C, otherwise there
+/// is no memory unsafe operations done in this API
+#[no_mangle]
+pub unsafe extern "C" fn agent_progress() -> usize {
+    AGENT_PROGRESS.load(Relaxed)
 }
 
 /// # Safety

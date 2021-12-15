@@ -66,10 +66,13 @@ var idp string
 var clientid string
 var luid *winipcfg.LUID
 var loginStatus *widget.Button
+var progress *widget.ProgressBar
 var watcher *interfaceWatcher
 var myApp fyne.App
 var pool common.NxtPool
 var sinfo SysInfo
+var tokens *accessIdTokens
+var authenticated bool
 
 // SysInfo saves the basic system information
 type SysInfo struct {
@@ -260,7 +263,7 @@ func credentials() (string, string) {
 	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
 
-func monitorController(lg *log.Logger, tokens *accessIdTokens) {
+func monitorController(lg *log.Logger, tokens **accessIdTokens) {
 	var keepalive uint = 30
 	force_onboard := false
 
@@ -269,18 +272,18 @@ func monitorController(lg *log.Logger, tokens *accessIdTokens) {
 	for {
 		if onboarded {
 			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
-				force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
+				force_onboard = ControllerKeepalive(lg, controller, (*tokens).AccessToken, regInfo.Version, uniqueId)
 				last_keepalive = time.Now()
 			}
 		}
 		// Okta is configured with one hour as the access token lifetime,
 		// refresh at 45 minutes
 		if time.Since(refresh).Minutes() >= 45 {
-			tokens = refreshTokens(idp, clientid, tokens.Refresh)
+			(*tokens) = refreshTokens(idp, clientid, (*tokens).Refresh)
 			if tokens != nil {
 				refresh = time.Now()
 				regInfoLock.Lock()
-				regInfo.AccessToken = tokens.AccessToken
+				regInfo.AccessToken = (*tokens).AccessToken
 				regInfoLock.Unlock()
 			} else {
 				lg.Println("Token refresh failed, will try again in 30 seconds")
@@ -288,7 +291,7 @@ func monitorController(lg *log.Logger, tokens *accessIdTokens) {
 		}
 		if !onboarded || force_onboard {
 			fmt.Println("Forcing onboard")
-			if ControllerOnboard(lg, controller, tokens.AccessToken) {
+			if ControllerOnboard(lg, controller, (*tokens).AccessToken) {
 				onboarded = true
 				force_onboard = false
 				if regInfo.Keepalive == 0 {
@@ -509,6 +512,19 @@ func vpnRoutes() {
 	}
 }
 
+func monitorProgress(lg *log.Logger) {
+	for {
+		p := C.agent_progress()
+		if p != 3 {
+			loginStatus.Text = "Authenticated, connecting.."
+		} else {
+			loginStatus.Text = "Authenticated, connected"
+		}
+		progress.SetValue(1 + float64(p))
+		time.Sleep(time.Second)
+	}
+}
+
 func UIEventLoop() {
 	myApp = app.New()
 	w := myApp.NewWindow("Login")
@@ -516,19 +532,27 @@ func UIEventLoop() {
 	w.SetOnClosed(func() {
 	})
 
+	progress = widget.NewProgressBar()
+	progress.Min = 0
+	progress.Max = 4
 	u := widget.NewEntry()
 	p := widget.NewPasswordEntry()
 	loginStatus = widget.NewButton("Login", func() {
 		username = u.Text
 		password = p.Text
-		loginStatus.Text = "Logging user in"
+		loginStatus.Text = "Authenticating.."
 		tokens := authenticate(idp, clientid, username, password)
 		if tokens != nil {
-			loginStatus.Text = "Logged in"
-			loginStatus.Disable()
-			go monitorController(lg, tokens)
+			loginStatus.Text = "Authenticated, connecting.."
+			progress.SetValue(1)
+			if !authenticated {
+				authenticated = true
+				go monitorController(lg, &tokens)
+				go monitorProgress(lg)
+			}
 		} else {
-			loginStatus.Text = "Login failed, please try again"
+			progress.SetValue(0)
+			loginStatus.Text = "Authentication failed, please try again"
 		}
 	})
 
@@ -536,6 +560,7 @@ func UIEventLoop() {
 		u,
 		p,
 		loginStatus,
+		progress,
 	))
 
 	w.ShowAndRun()

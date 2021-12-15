@@ -44,6 +44,7 @@ typedef struct AgentStats {
 
 void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
 int agent_started(void);
+int agent_progress(void);
 void agent_on(int32_t fd);
 void agent_default_route(uint32_t bindip);
 void agent_gateway_ip(uint32_t gateway_ip);
