@@ -18,7 +18,8 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
     @IBOutlet weak var usernameField: NSTextField!
     @IBOutlet weak var passwordField: NSSecureTextField!
     @IBOutlet weak var signinButton: NSButton!
-
+    @IBOutlet weak var progressView: NSProgressIndicator!
+    
     let tunnelBundleId = "io.nextensio.agent1.tunnel"
     var vpnInited = false
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
@@ -27,7 +28,10 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
     var accessToken = ""
     var refreshToken = ""
     var idToken = ""
-
+    var progressBarTimer: Timer!
+    var authenticated = 0
+    var progress = 0
+    
     // Get the Bundle of the system extension.
     lazy var extensionBundle: Bundle = {
 
@@ -92,7 +96,56 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
         let activationRequest = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: extensionIdentifier, queue: .main)
         activationRequest.delegate = self
         OSSystemExtensionManager.shared.submitRequest(activationRequest)
-	os_log("system extension activation sent")
+        os_log("system extension activation sent")
+        
+        progressView.doubleValue = 0
+        progressView.minValue = 0
+        progressView.maxValue = 1
+        self.progressBarTimer = Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(SignInViewController.updateProgressView), userInfo: nil, repeats: true)
+    }
+    
+    func getConnectedStatus() {
+        if let session = self.vpnManager.connection as? NETunnelProviderSession,
+           let message = "progress".data(using: String.Encoding.utf8)
+            , self.vpnManager.connection.status != .invalid
+        {
+            do {
+                print("sending message")
+                try session.sendProviderMessage(message) { response in
+                    if response != nil {
+                        let value = response!.withUnsafeBytes {
+                            $0.load(as: Int32.self)
+                        }
+                        self.progress = Int(value)
+                        print("progress ", self.progress)
+                    } else {
+                        print("nil message")
+                    }
+                }
+            } catch {
+            }
+        }
+    }
+    
+    @objc func updateProgressView() {
+        if authenticated == 0 {
+            signinButton.title = "Sign In"
+            progressView.doubleValue = 0
+        } else if authenticated == 1 {
+            signinButton.title = "Authenticating.."
+            progressView.doubleValue = 1/6
+        } else if authenticated == 2 {
+            signinButton.title = "Authenticated, initializing.."
+            progressView.doubleValue = 2/6
+        } else if authenticated == 3 {
+            getConnectedStatus()
+            if self.progress != 3 {
+                signinButton.title = "Connecting.."
+            } else {
+                signinButton.title = "Connected, Sign Out"
+            }
+            progressView.doubleValue = (Double(self.progress) + 3)/6
+        }
     }
     
     @objc func Uninstall() {
@@ -125,9 +178,9 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
         guard let username = usernameField?.stringValue, !username.isEmpty,
               let password = passwordField?.stringValue, !password.isEmpty else { return }
         
-	if !self.sysext {
-	    return
-	}
+        if !self.sysext {
+            return
+        }
 
         let successBlock: (OktaAuthStatus) -> Void = { [weak self] status in
             switch status.statusType {
@@ -147,8 +200,9 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
             _ = self?.showError(message: error.description)
         }
 
-        if signinButton.title == "Sign In" {
+        if authenticated == 0 {
             // Authenticate SesssionToken
+            authenticated = 1
             OktaAuthSdk.authenticate(with: URL(string: urlString)!,
                                      username: username,
                                      password: password,
@@ -159,6 +213,7 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
             signinButton.title = "Sign In"
             usernameField.isEnabled = true
             passwordField.isEnabled = true
+            authenticated = 0
         }
     }
 
@@ -243,38 +298,31 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
         switch status {
         case .connecting:
             print("vpn status connecting...")
+            authenticated = 2
             break
         case .connected:
             print("vpn status connected...")
-            handleSignInButtons(status: true)
+            authenticated = 3
             break
         case .disconnecting:
             print("vpn status disconnecting...")
+            authenticated = 0
             break
         case .disconnected:
             print("vpn status disconnected...")
-            handleSignInButtons(status: false)
+            authenticated = 0
             break
         case .invalid:
             print("vpn status invalid...")
+            authenticated = 0
             break
         case .reasserting:
             print("vpn status reasserting...")
+            authenticated = 0
             break
         @unknown default:
+            authenticated = 0
             break
-        }
-    }
-    
-    func handleSignInButtons(status: Bool) {
-        if (status) {
-            self.usernameField.isEnabled = false
-            self.passwordField.isEnabled = false
-            self.signinButton.title = "signout"
-        } else {
-            self.usernameField.isEnabled = true
-            self.passwordField.isEnabled = true
-            self.signinButton.title = "Sign In"
         }
     }
 
@@ -289,8 +337,6 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
     func oidcAuthenticateUser(status: OktaAuthStatusSuccess) {
         print("AuthFlowCoordinator.oidcAuthenticateUser")
         let successStatus = status
-        var accessToken = false
-        var refreshToken = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             guard let oidcClient = self.createOidcClient() else {
                 return

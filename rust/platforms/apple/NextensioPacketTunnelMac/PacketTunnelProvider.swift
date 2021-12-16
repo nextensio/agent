@@ -361,10 +361,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         self.subnets = [IPNetwork_v4]()
     }
 
-    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
-        os_log("handleAppMessage")
-        if let handler = completionHandler {
-            handler(messageData)
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
+        guard let messageString = NSString(data: messageData, encoding: String.Encoding.utf8.rawValue) else {
+            completionHandler?(nil)
+            return
+        }
+
+        if messageString == "progress" {
+            var progress = agent_progress()
+            completionHandler?(Data(bytes: &progress, count: MemoryLayout.size(ofValue: progress)))
+        } else {
+            completionHandler?(nil)
         }
     }
 
