@@ -18,8 +18,8 @@ class SignInViewController: AuthBaseViewController {
     @IBOutlet private var usernameField: UITextField!
     @IBOutlet private var passwordField: UITextField!
     @IBOutlet private var signinButton: UIButton!
-    @IBOutlet private var progressView: UIProgressView!
-
+    @IBOutlet weak var progressView: UIProgressView!
+    
     let tunnelBundleId = "io.nextensio.agent1.tunnel"
     var vpnInited = false 
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
@@ -28,34 +28,56 @@ class SignInViewController: AuthBaseViewController {
     var refreshToken = ""
     var idToken = ""
     var progressBarTimer: Timer!
-    var authenticated = false
+    var authenticated = 0
+    var progress = 0
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        usernameField.text = "username"
-        passwordField.text = ""
         progressView.progress = 0
         progressView.progressTintColor = UIColor.blue
         progressView.progressViewStyle = .bar
         self.progressBarTimer = Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(SignInViewController.updateProgressView), userInfo: nil, repeats: true)
     }
 
-    private func updateProgressView() {
-        var progress = 0.0
-        progress = agent_progress()
-        if !authenticated {
-            progressView.progress = 0
-            progressView.setProgress(0, animated: true)
+    func getConnectedStatus() {
+        if let session = self.vpnManager.connection as? NETunnelProviderSession,
+           let message = "progress".data(using: String.Encoding.utf8)
+            , self.vpnManager.connection.status != .invalid
+        {
+            do {
+                try session.sendProviderMessage(message) { response in
+                    if response != nil {
+                        let value = response!.withUnsafeBytes {
+                            $0.load(as: Int32.self)
+                        }
+                        self.progress = Int(value)
+                    }
+                }
+            } catch {
+            }
+        }
+    }
+    
+    @objc func updateProgressView() {
+        if authenticated == 0 {
             signinButton.setTitle("Sign In", for: .normal)
-            return;
+            progressView.progress = 0
+        } else if authenticated == 1 {
+            signinButton.setTitle("Authenticating..", for: .normal)
+            progressView.progress = 1/6
+        } else if authenticated == 2 {
+            signinButton.setTitle("Authenticated, initializing..", for: .normal)
+            progressView.progress = 2/6
+        } else if authenticated == 3 {
+            getConnectedStatus()
+            if self.progress != 3 {
+                signinButton.setTitle("Connecting..", for: .normal)
+            } else {
+                signinButton.setTitle("Connected, Sign Out", for: .normal)
+            }
+            progressView.progress = (Float(self.progress) + 3)/6
         }
-        if progress == 3 {
-            signinButton.setTitle("Connected, Sign Out", for: .normal)
-        } else {
-            signinButton.setTitle("Authenticated, connecting..", for: .normal)
-        }
-        progressView.progress = (progress + 1)/4
         progressView.setProgress(progressView.progress, animated: true)
     }
     
@@ -67,11 +89,9 @@ class SignInViewController: AuthBaseViewController {
             switch status.statusType {
             case .success:
                 let state: OktaAuthStatusSuccess = status as! OktaAuthStatusSuccess
-                print("SignInViewController.successBlock")
                 self?.oidcAuthenticateUser(status: state)
                 break
             default:
-                print("Authentication failed")
                 _ = self?.showError(message: "Authentication failed")
                 break
             }
@@ -80,20 +100,19 @@ class SignInViewController: AuthBaseViewController {
         let errorBlock: (OktaError) -> Void = { [weak self] error in
             print("SignInViewController.errorBlock")
             _ = self?.showError(message: error.description)
+            self?.authenticated = 0
         }
 
-        if !authenticated {
-            OktaAuthSdk.authenticate(with: URL(string: urlString)!,
-                                    username: username,
-                                    password: password,
-                                    onStatusChange: successBlock,
-                                    onError: errorBlock)
-        } else {
+        if authenticated != 0 {
             self.vpnManager.connection.stopVPNTunnel()
-            authenticated = false
-            usernameField.isEnabled = true
-            passwordField.isEnabled = true
+            authenticated = 0
         }
+        authenticated = 1
+        OktaAuthSdk.authenticate(with: URL(string: urlString)!,
+                                username: username,
+                                password: password,
+                                onStatusChange: successBlock,
+                                onError: errorBlock)
     }
 
     func loginUserProfile(stateManager: OktaOidcStateManager) {
@@ -115,9 +134,8 @@ class SignInViewController: AuthBaseViewController {
 
     private func initVPNTunnelProviderManager(connect: Bool) {
         NETunnelProviderManager.loadAllFromPreferences { (savedManagers: [NETunnelProviderManager]?, error: Error?) in
-            if let error = error {
-                print(error)
-		_ = self.showError(message: "Cannot load configs, please try again")
+            if let _ = error {
+                self.showError(message: "Cannot load configs, please try again")
             }
             if let savedManagers = savedManagers {
                 if savedManagers.count > 0 {
@@ -126,9 +144,8 @@ class SignInViewController: AuthBaseViewController {
             }
 
             self.vpnManager.loadFromPreferences(completionHandler: { (error:Error?) in
-                if let error = error {
-                    print(error)
-	   	    _ = self.showError(message: "Cannot load configs, please try again")
+                if let _ = error {
+                    self.showError(message: "Cannot load configs, please try again")
                 }
 
                 let providerProtocol = NETunnelProviderProtocol()
@@ -146,17 +163,14 @@ class SignInViewController: AuthBaseViewController {
                 self.vpnManager.localizedDescription = "nextensio"
                 self.vpnManager.isEnabled = true
                 self.vpnManager.saveToPreferences(completionHandler: { (error:Error?) in
-                    if let error = error {
-                        print(error)
-	   	        _ = self.showError(message: "Cannot save configs, please try again")
+                    if let _ = error {
+                        self.showError(message: "Cannot save configs, please try again")
                     } else {
-                        print("Save successfully")
                         if connect {
                             do {
                                 try self.vpnManager.connection.startVPNTunnel()
                             } catch {
-                                print(error)
-				_ = self.showError(message: "Cannot start Nextensio, please try again")
+                                self.showError(message: "Cannot start Nextensio, please try again")
                             }
                         }
                     }
@@ -176,38 +190,31 @@ class SignInViewController: AuthBaseViewController {
         switch status {
         case .connecting:
             print("vpn status connecting...")
+            authenticated = 2
             break
         case .connected:
             print("vpn status connected...")
-            handleSignInButtons(status: true)
+            authenticated = 3
             break
         case .disconnecting:
             print("vpn status disconnecting...")
+            authenticated = 0
             break
         case .disconnected:
             print("vpn status disconnected...")
-            handleSignInButtons(status: false)
+            authenticated = 0
             break
         case .invalid:
             print("vpn status invalid...")
+            authenticated = 0
             break
         case .reasserting:
             print("vpn status reasserting...")
+            authenticated = 0
             break
         @unknown default:
+            authenticated = 0
             break
-        }
-    }
-
-    func handleSignInButtons(status: Bool) {
-        if (status) {
-            self.usernameField.isEnabled = false
-            self.passwordField.isEnabled = false
-            authenticated = true
-        } else {
-            self.usernameField.isEnabled = true
-            self.passwordField.isEnabled = true
-            authenticated = false
         }
     }
 
@@ -220,20 +227,15 @@ class SignInViewController: AuthBaseViewController {
     }
 
     func oidcAuthenticateUser(status: OktaAuthStatusSuccess) {
-        print("AuthFlowCoordinator.oidcAuthenticateUser")
         let successStatus = status
-        var accessToken = false
-        var refreshToken = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             guard let oidcClient = self.createOidcClient() else {
                 return
             }
             oidcClient.authenticate(withSessionToken: successStatus.sessionToken!, callback: { [weak self] stateManager, error in
-                if let error = error {
-                    print("AuthFlowCoordinator.authenticate error", error.localizedDescription)
+                if let _ = error {
                     return
                 }
-                print("AuthFlowCoordinator user authenticated")
                 self?.loginUserProfile(stateManager: stateManager!)
             })
         }
