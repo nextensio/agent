@@ -14,9 +14,6 @@ class SignInViewController: AuthBaseViewController {
 
     var urlString = "https://login.nextensio.net"
 
-    
-    @IBOutlet private var usernameField: UITextField!
-    @IBOutlet private var passwordField: UITextField!
     @IBOutlet private var signinButton: UIButton!
     @IBOutlet weak var progressView: UIProgressView!
     
@@ -24,6 +21,7 @@ class SignInViewController: AuthBaseViewController {
     var vpnInited = false 
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
     var oidcAuth: OktaOidc?
+    var stateManager: OktaOidcStateManager?
     var accessToken = ""
     var refreshToken = ""
     var idToken = ""
@@ -38,6 +36,7 @@ class SignInViewController: AuthBaseViewController {
         progressView.progressTintColor = UIColor.blue
         progressView.progressViewStyle = .bar
         self.progressBarTimer = Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(SignInViewController.updateProgressView), userInfo: nil, repeats: true)
+        createOidcClient()
     }
 
     func getConnectedStatus() {
@@ -64,68 +63,63 @@ class SignInViewController: AuthBaseViewController {
             signinButton.setTitle("Sign In", for: .normal)
             progressView.progress = 0
         } else if authenticated == 1 {
-            signinButton.setTitle("Authenticating..", for: .normal)
-            progressView.progress = 1/6
-        } else if authenticated == 2 {
             signinButton.setTitle("Authenticated, initializing..", for: .normal)
-            progressView.progress = 2/6
-        } else if authenticated == 3 {
+            progressView.progress = 1/5
+        } else if authenticated == 2 {
             getConnectedStatus()
             if self.progress != 3 {
                 signinButton.setTitle("Connecting..", for: .normal)
             } else {
                 signinButton.setTitle("Connected, Sign Out", for: .normal)
             }
-            progressView.progress = (Float(self.progress) + 3)/6
+            progressView.progress = (Float(self.progress) + 2)/5
         }
         progressView.setProgress(progressView.progress, animated: true)
     }
     
     @IBAction private func signInTapped() {
-        guard let username = usernameField.text, !username.isEmpty,
-              let password = passwordField.text, !password.isEmpty else { return }
-        
-        let successBlock: (OktaAuthStatus) -> Void = { [weak self] status in
-            switch status.statusType {
-            case .success:
-                let state: OktaAuthStatusSuccess = status as! OktaAuthStatusSuccess
-                self?.oidcAuthenticateUser(status: state)
-                break
-            default:
-                _ = self?.showError(message: "Authentication failed")
-                break
-            }
-        }
-
-        let errorBlock: (OktaError) -> Void = { [weak self] error in
-            print("SignInViewController.errorBlock")
-            _ = self?.showError(message: error.description)
-            self?.authenticated = 0
-        }
-
         if authenticated != 0 {
+            guard let oktaOidc = self.oidcAuth,
+                  let stateManager = self.stateManager else { return }
+            
+            oktaOidc.signOutOfOkta(stateManager, from: self, callback: { [weak self] error in
+                if let error = error {
+                    let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+                    self?.present(alert, animated: true, completion: nil)
+                    return
+                }
+                
+                self?.stateManager?.clear()
+            })
             self.vpnManager.connection.stopVPNTunnel()
             authenticated = 0
+        } else {
+            oidcAuth?.signInWithBrowser(from: self, callback: { [weak self] stateManager, error in
+                if let error = error {
+                    let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+                    self?.present(alert, animated: true, completion: nil)
+                    return
+                }
+                self?.stateManager?.clear()
+                self?.stateManager = stateManager
+                self?.loginUserProfile()
+            })
         }
-        authenticated = 1
-        OktaAuthSdk.authenticate(with: URL(string: urlString)!,
-                                username: username,
-                                password: password,
-                                onStatusChange: successBlock,
-                                onError: errorBlock)
     }
 
-    func loginUserProfile(stateManager: OktaOidcStateManager) {
+    func loginUserProfile() {
         self.accessToken = ""
         self.refreshToken = ""
         self.idToken = ""
-        if let access = stateManager.accessToken {
+        if let access = self.stateManager?.accessToken {
             self.accessToken = access
         } 
-        if let refresh = stateManager.refreshToken {
+        if let refresh = self.stateManager?.refreshToken {
             self.refreshToken = refresh
         } 
-        if let id = stateManager.idToken {
+        if let id = self.stateManager?.idToken {
             self.idToken = id
         }
         // VPN configuration setup
@@ -190,11 +184,11 @@ class SignInViewController: AuthBaseViewController {
         switch status {
         case .connecting:
             print("vpn status connecting...")
-            authenticated = 2
+            authenticated = 1
             break
         case .connected:
             print("vpn status connected...")
-            authenticated = 3
+            authenticated = 2
             break
         case .disconnecting:
             print("vpn status disconnecting...")
@@ -224,21 +218,6 @@ class SignInViewController: AuthBaseViewController {
         }
         oidcAuth = try! OktaOidc()
         return oidcAuth
-    }
-
-    func oidcAuthenticateUser(status: OktaAuthStatusSuccess) {
-        let successStatus = status
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            guard let oidcClient = self.createOidcClient() else {
-                return
-            }
-            oidcClient.authenticate(withSessionToken: successStatus.sessionToken!, callback: { [weak self] stateManager, error in
-                if let _ = error {
-                    return
-                }
-                self?.loginUserProfile(stateManager: stateManager!)
-            })
-        }
     }
 }
 
