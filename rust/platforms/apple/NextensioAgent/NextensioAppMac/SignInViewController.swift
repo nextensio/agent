@@ -110,17 +110,13 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
             , self.vpnManager.connection.status != .invalid
         {
             do {
-                print("sending message")
                 try session.sendProviderMessage(message) { response in
                     if response != nil {
                         let value = response!.withUnsafeBytes {
                             $0.load(as: Int32.self)
                         }
                         self.progress = Int(value)
-                        print("progress ", self.progress)
-                    } else {
-                        print("nil message")
-                    }
+                    } 
                 }
             } catch {
             }
