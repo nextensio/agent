@@ -521,6 +521,7 @@ func monitorProgress(lg *log.Logger) {
 			loginStatus.Text = "Authenticated, connected"
 		}
 		progress.SetValue(1 + float64(p))
+		loginStatus.Refresh()
 		time.Sleep(time.Second)
 	}
 }
