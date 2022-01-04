@@ -35,6 +35,16 @@ type flowTuns struct {
 	gwRx common.Transport
 }
 
+type latInfo struct {
+	pSentTime  uint64
+	pktLatency uint64
+	ctx        string
+}
+
+type traceInfo struct {
+	latency []*latInfo
+}
+
 var Version = "Development"
 var pool common.NxtPool
 var flowLock sync.RWMutex
@@ -57,6 +67,8 @@ var cluster string
 var ports []int = []int{}
 var gatewayIP uint32
 var deviceName string
+var traceArr map[flowKey]*traceInfo
+var traceArrLock sync.RWMutex
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -112,14 +124,24 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 		case *nxthdr.NxtHdr_Flow:
 			if dest.Conn == nil {
 				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
-				if flow.TraceCtx != "" {
-					// Save the time now for calculating the process elapsed time when sending the packet back to
-					// the connector in appToGw()
-					flow.ProcessingDuration = uint64(time.Now().UnixNano())
-				}
 				key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
 				dest.Conn = flowGet(key, tun)
 				if dest.Conn == nil {
+					if flow.TraceRequestId != "" {
+						// Save the time now for calculating the process elapsed time when sending the packet back to
+						// the connector in appToGw()
+						var traceI traceInfo
+						var latI latInfo
+
+						latI.pSentTime = uint64(time.Now().UnixNano())
+						latI.ctx = flow.TraceCtx
+						latI.pktLatency = flow.PktLatency
+						traceI.latency = make([]*latInfo, 0)
+						traceI.latency = append(traceI.latency, &latI)
+						traceArrLock.Lock()
+						traceArr[key] = &traceI
+						traceArrLock.Unlock()
+					}
 					if flow.Proto == common.TCP {
 						dest.Conn = netconn.NewClient(mainCtx, lg, pool, "tcp", flow.DestSvc, flow.Dport)
 					} else {
@@ -154,6 +176,22 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 						timeout = UDP_AGER
 					}
 					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
+				}
+			} else {
+				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+				// flow.TraceRequestId will be set to non-null when packet tracing is enabled
+				if flow.TraceRequestId != "" {
+					key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
+					var latI latInfo
+					latI.pSentTime = uint64(time.Now().UnixNano())
+					// Store the new trace ctx and flow.PktLatency as this needs to be copied to the flow when sending the packet
+					// back to GW.
+					latI.ctx = flow.TraceCtx
+					latI.pktLatency = flow.PktLatency
+					traceArrLock.Lock()
+					traceI := traceArr[key]
+					traceI.latency = append(traceI.latency, &latI)
+					traceArrLock.Unlock()
 				}
 			}
 			e := dest.Conn.Write(hdr, buf)
@@ -222,22 +260,26 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 		// a flow using those parsed details
 		if hdr == nil {
 			var hdrFlow *nxthdr.NxtFlow
-			if flow.TraceCtx != "" {
-				// Calculate the elapsed time for processing this packet before sending it back to connector
-				start := time.Unix(0, int64(flow.ProcessingDuration))
+			key = &flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
+			traceArrLock.Lock()
+			traceI := traceArr[*key]
+			if flow.TraceRequestId != "" && (len(traceI.latency) > 0) {
+				start := time.Unix(0, int64(traceI.latency[0].pSentTime))
 				elapsed := time.Since(start).Nanoseconds()
-				// The flow is already being used by previously sent packets which are possibly
-				// queued up to be sent. The flow contents will be used to decide the on-wire
-				// data length etc.. So if we suddenly change that here, the previous packet's
-				// on wire length will get messed up, so create a copy of the flow and change that
 				newFlow := *flow
 				newFlow.ProcessingDuration = uint64(elapsed)
+				// Copy the trace ctx and pktLatency to the new flow as its needed for latency calculation.
+				newFlow.TraceCtx = traceI.latency[0].ctx
+				newFlow.PktLatency = traceI.latency[0].pktLatency
 				hdrFlow = &newFlow
-				//Set the flow.TraceCtx to NULL after the first pkt as we dont need to carry the same traceCtx
-				flow.TraceCtx = ""
+				traceI.latency = traceI.latency[1:]
 			} else {
-				hdrFlow = flow
+				newFlow := *flow
+				hdrFlow = &newFlow
+				hdrFlow.TraceCtx = ""
+				hdrFlow.ProcessingDuration = 0
 			}
+			traceArrLock.Unlock()
 			hdr = &nxthdr.NxtHdr{}
 			hdr.Hdr = &nxthdr.NxtHdr_Flow{Flow: hdrFlow}
 		} else {
@@ -516,6 +558,7 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
 	flows = make(map[flowKey]*flowTuns)
+	traceArr = make(map[flowKey]*traceInfo)
 	// Check for -v[ersion] flag
 	if (len(os.Args) > 1) && (os.Args[1] == "-v" || os.Args[1] == "-V" || os.Args[1] == "-version") {
 		fmt.Printf("Connector version - %s \n", Version)
