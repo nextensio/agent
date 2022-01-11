@@ -12,6 +12,7 @@ use std::time::Duration;
 use std::{ffi::CString, usize};
 use std::{fmt, time::Instant};
 use uuid::Uuid;
+mod gui;
 mod pkce;
 use pnet::datalink;
 
@@ -284,9 +285,9 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(test: bool, controller: String, username: String, password: String) {
-    let mut access_token;
-    let mut refresh_token;
+fn do_onboard(test: bool, controller: String, tokens: pkce::AccessIdTokens) {
+    let mut access_token = tokens.access_token;
+    let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
     let mut version = "".to_string();
     let mut force_onboard = false;
@@ -316,18 +317,6 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
         .danger_accept_invalid_certs(true)
         .build()
         .unwrap();
-
-    loop {
-        let token = pkce::authenticate(test, &username, &password);
-        if let Some(t) = token {
-            access_token = t.access_token;
-            refresh_token = t.refresh_token;
-            break;
-        }
-        error!("Cannot get access token");
-        println!("Login to nextensio failed (cannot get tokens), will try again in 10 seconds");
-        thread::sleep(Duration::new(10, 0));
-    }
 
     loop {
         let now = Instant::now();
@@ -560,12 +549,21 @@ fn main() {
                 .long("stop")
                 .help("Disconnect from Nextensio"),
         )
+        .arg(
+            Arg::with_name("text-only")
+                .long("text-only")
+                .help("Text based login"),
+        )
         .get_matches();
 
     if matches.is_present("stop") {
         kill_agent();
         cleanup_iptables(interface);
         return;
+    }
+    let mut text_only = false;
+    if matches.is_present("text-only") {
+        text_only = true;
     }
 
     if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
@@ -594,7 +592,7 @@ fn main() {
             }
         }
         controller = "server.nextensio.net:8080".to_string();
-        if username == "" || password == "" {
+        if text_only && (username == "" || password == "") {
             print!("Nextensio Username: ");
             std::io::stdout().flush().unwrap();
             std::io::stdin()
@@ -612,10 +610,35 @@ fn main() {
     let fd = create_tun().unwrap();
     config_tun(&interface, MTU);
 
-    thread::spawn(move || do_onboard(test, controller, username, password));
-
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0);
+        thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
+    }
+
+    if !test && (username == "" || password == "") {
+        gui::gui_main();
+        cleanup_iptables(interface.clone());
+        std::process::exit(0);
+    } else {
+        loop {
+            let token = pkce::authenticate(test, &username, &password);
+            if let Some(t) = token {
+                thread::spawn(move || do_onboard(test, controller, t));
+                break;
+            } else {
+                if !test {
+                    error!("Login to nextensio failed");
+                    println!("Login to nextensio failed");
+                    cleanup_iptables(interface.clone());
+                    std::process::exit(0);
+                } else {
+                    println!("Retrying after 5 seconds");
+                    thread::sleep(std::time::Duration::from_secs(5));
+                }
+            }
+        }
+        loop {
+            thread::sleep(std::time::Duration::from_secs(5));
+        }
     }
 }

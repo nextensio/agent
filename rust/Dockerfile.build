@@ -1,6 +1,6 @@
 FROM instrumentisto/rust:1.51.0-beta
 
-RUN apt update && apt install -y net-tools iptables
+RUN apt update && apt install -y net-tools iptables libxcb-shape0-dev libxcb-xfixes0-dev
 
 # Now compile the code
 WORKDIR /rust/src/app

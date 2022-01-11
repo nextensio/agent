@@ -65,7 +65,6 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
         .redirect(reqwest::RedirectPolicy::none())
         .build()
         .unwrap();
-
     let resp = client
         .post(&url)
         .body(j)
@@ -181,7 +180,6 @@ pub fn authenticate(test: bool, username: &str, password: &str) -> Option<Access
             error!("HTTP authn failed {:?}", e);
         }
     }
-
     None
 }
 
