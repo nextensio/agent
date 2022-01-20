@@ -176,8 +176,10 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
         if authenticated != 0 {
             guard let oktaOidc = self.oidcAuth,
                   let stateManager = self.stateManager else { return }
-            
-            oktaOidc.signOutOfOkta(authStateManager: stateManager,  callback: { [weak self] error in
+            let serverConfig = OktaRedirectServerConfiguration.default
+            serverConfig.domainName = "localhost"
+            serverConfig.port = 8180
+            oktaOidc.signOutOfOkta(authStateManager: stateManager, redirectServerConfiguration: serverConfig, callback: { [weak self] error in
                 if let error = error {
                     os_log("Error signing out %{PUBLIC}@", String(describing: error))
                     return
