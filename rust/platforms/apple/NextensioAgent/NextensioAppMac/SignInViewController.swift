@@ -24,6 +24,7 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
     var vpnInited = false
     var vpnManager: NETunnelProviderManager = NETunnelProviderManager()
     var oidcAuth: OktaOidc?
+    var stateManager: OktaOidcStateManager?
     var sysext = false
     var accessToken = ""
     var refreshToken = ""
@@ -128,19 +129,19 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
             signinButton.title = "Sign In"
             progressView.doubleValue = 0
         } else if authenticated == 1 {
-            signinButton.title = "Authenticating.."
-            progressView.doubleValue = 1/6
-        } else if authenticated == 2 {
             signinButton.title = "Authenticated, initializing.."
-            progressView.doubleValue = 2/6
-        } else if authenticated == 3 {
+            progressView.doubleValue = 1/5
+        } else if authenticated == 2 {
             getConnectedStatus()
             if self.progress != 3 {
                 signinButton.title = "Connecting.."
             } else {
                 signinButton.title = "Connected, Sign Out"
             }
-            progressView.doubleValue = (Double(self.progress) + 3)/6
+            progressView.doubleValue = (Double(self.progress) + 2)/5
+        } else if authenticated == 3 {
+            signinButton.title = "Error, Sign In Again"
+            progressView.doubleValue = 0
         }
     }
     
@@ -165,51 +166,41 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         print("SignInViewController.viewDidLoad")
-        
-        usernameField.stringValue = "username"
-        passwordField.stringValue = ""
+        createOidcClient()
     }
     
-    @IBAction func signInTapped(_ sender: Any) {
-        guard let username = usernameField?.stringValue, !username.isEmpty,
-              let password = passwordField?.stringValue, !password.isEmpty else { return }
-        
+    @IBAction private func signInTapped(_ sender: Any) {
         if !self.sysext {
             return
         }
-
-        let successBlock: (OktaAuthStatus) -> Void = { [weak self] status in
-            switch status.statusType {
-            case .success:
-                let state: OktaAuthStatusSuccess = status as! OktaAuthStatusSuccess
-                print("SignInViewController.successBlock")
-                self?.oidcAuthenticateUser(status: state)
-                break
-            default:
-                print("Authentication failed")
-                _ = self?.showError(message: "Authentication failed")
-                break
-            }
-        }
-
-        let errorBlock: (OktaError) -> Void = { [weak self] error in
-            _ = self?.showError(message: error.description)
-        }
-
-        if authenticated == 0 {
-            // Authenticate SesssionToken
-            authenticated = 1
-            OktaAuthSdk.authenticate(with: URL(string: urlString)!,
-                                     username: username,
-                                     password: password,
-                                     onStatusChange: successBlock,
-                                     onError: errorBlock)
-        } else {
+        if authenticated != 0 {
+            guard let oktaOidc = self.oidcAuth,
+                  let stateManager = self.stateManager else { return }
+            
+            oktaOidc.signOutOfOkta(authStateManager: stateManager,  callback: { [weak self] error in
+                if let error = error {
+                    os_log("Error signing out %{PUBLIC}@", String(describing: error))
+                    return
+                }
+                
+                self?.stateManager?.clear()
+            })
             self.vpnManager.connection.stopVPNTunnel()
-            signinButton.title = "Sign In"
-            usernameField.isEnabled = true
-            passwordField.isEnabled = true
             authenticated = 0
+        } else {
+            let serverConfig = OktaRedirectServerConfiguration.default
+            serverConfig.domainName = "localhost"
+            serverConfig.port = 8180
+            self.oidcAuth?.signInWithBrowser(redirectServerConfiguration: serverConfig, callback: { [weak self] stateManager, error in
+                if let error = error {
+                    os_log("Error signing in %{PUBLIC}@", String(describing: error))
+                    self?.authenticated = 3
+                    return
+                }
+                self?.stateManager?.clear()
+                self?.stateManager = stateManager
+                self?.loginUserProfile(stateManager: stateManager!)
+            })
         }
     }
 
@@ -244,7 +235,7 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
             
             self.vpnManager.loadFromPreferences(completionHandler: { (error:Error?) in
                 if let error = error {
-		   print(error)
+                    print(error)
                     _ = self.showError(message: "Cannot load configs, please try again")
                 }
                 
@@ -294,11 +285,11 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
         switch status {
         case .connecting:
             print("vpn status connecting...")
-            authenticated = 2
+            authenticated = 1
             break
         case .connected:
             print("vpn status connected...")
-            authenticated = 3
+            authenticated = 2
             break
         case .disconnecting:
             print("vpn status disconnecting...")
@@ -322,30 +313,12 @@ class SignInViewController: NSViewController, OSSystemExtensionRequestDelegate {
         }
     }
 
-    func createOidcClient() -> OktaOidc? {
+    func createOidcClient()  {
         if oidcAuth != nil {
-            return oidcAuth
+            return
         }
         oidcAuth = try! OktaOidc()
-        return oidcAuth
-    }
-
-    func oidcAuthenticateUser(status: OktaAuthStatusSuccess) {
-        print("AuthFlowCoordinator.oidcAuthenticateUser")
-        let successStatus = status
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            guard let oidcClient = self.createOidcClient() else {
-                return
-            }
-            oidcClient.authenticate(withSessionToken: successStatus.sessionToken!, callback: { [weak self] stateManager, error in
-                if let error = error {
-                    print("AuthFlowCoordinator.authenticate error", error.localizedDescription)
-                    return
-                }
-                print("AuthFlowCoordinator user authenticated")
-                self?.loginUserProfile(stateManager: stateManager!)
-            })
-        }
+        return
     }
     
     func showError(message: String) -> Bool {
