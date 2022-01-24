@@ -605,7 +605,7 @@ fn main() {
     let mut uid: u32 = 0;
 
     if !is_testing() {
-        cmd("/usr/sbin/addgroup --gid 14963 ");
+        cmd("/usr/sbin/addgroup --gid 14963 nextensioapp");
         if chgroup("nextensioapp").is_err() {
             println!("Unable to change group of the client to nextensioapp, exiting");
             return;
@@ -641,12 +641,10 @@ fn main() {
     let fd = create_tun().unwrap();
     config_tun(&interface, MTU);
 
-    if uid != 0 {
-        if chuser(uid).is_err() {
-            println!("Unable to drop privileges to uid {}, exiting", uid);
-            cleanup_iptables(interface);
-            return;
-        }
+    if uid != 0 && chuser(uid).is_err() {
+        println!("Unable to drop privileges to uid {}, exiting", uid);
+        cleanup_iptables(interface);
+        return;
     }
 
     unsafe {
