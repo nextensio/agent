@@ -13,6 +13,7 @@ use std::{ffi::CString, usize};
 use std::{fmt, time::Instant};
 use uuid::Uuid;
 mod gui;
+mod html;
 mod pkce;
 use pnet::datalink;
 
@@ -597,6 +598,8 @@ fn main() {
         agent_on(fd);
         thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
     }
+
+    thread::spawn(move || pkce::web_server());
 
     if std::env::var("NXT_TESTING").is_err() && (username.is_empty() || password.is_empty()) {
         gui::gui_main();

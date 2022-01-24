@@ -1,5 +1,6 @@
 use log::error;
 use regex::Regex;
+use rouille::router;
 use serde::{Deserialize, Serialize};
 
 const TEST_PROFILE: IdpProfile = IdpProfile {
@@ -261,4 +262,15 @@ pub fn refresh(refresh: &str) -> Option<AccessIdTokens> {
     }
 
     None
+}
+
+pub fn web_server() {
+    rouille::start_server("localhost:8180", move |request| {
+        router!(request,
+            (GET) (/success) => {
+                rouille::Response::html(super::html::HTML_SUCCESS)
+            },
+            _ => rouille::Response::empty_404()
+        )
+    });
 }
