@@ -108,7 +108,7 @@ fn cleanup_iptables(interface: String) {
         if !o.is_empty() {
             let re = Regex::new(r".*MARK.*set.*0x3a73.*").unwrap();
             if re.is_match(o) {
-                if interface != "" {
+                if !interface.is_empty() {
                     let c = format!(
                         "iptables -D PREROUTING -i {} -t mangle -j MARK --set-mark 14963",
                         interface
@@ -136,18 +136,15 @@ fn iptables_ignore_connected_subnets(add: bool) {
     let mut first = true;
     for iface in datalink::interfaces() {
         for ip in iface.ips {
-            match ip {
-                pnet::ipnetwork::IpNetwork::V4(x) => {
-                    let ipm;
-                    if first {
-                        ipm = format!("{}/{}", x.ip(), x.prefix());
-                    } else {
-                        ipm = format!(",{}/{}", x.ip(), x.prefix());
-                    }
-                    first = false;
-                    iptables.push_str(&ipm);
+            if let pnet::ipnetwork::IpNetwork::V4(x) = ip {
+                let ipm;
+                if first {
+                    ipm = format!("{}/{}", x.ip(), x.prefix());
+                } else {
+                    ipm = format!(",{}/{}", x.ip(), x.prefix());
                 }
-                _ => {}
+                first = false;
+                iptables.push_str(&ipm);
             }
         }
     }
@@ -161,7 +158,7 @@ fn iptables_ignore_connected_subnets(add: bool) {
 // is just a poor man's solution for the time being
 fn add_iptables(interface: &str) {
     cmd("ip rule add fwmark 14963 table 215");
-    if interface != "" {
+    if !interface.is_empty() {
         let c = format!(
             "iptables -A PREROUTING -i {} -t mangle -j MARK --set-mark 14963",
             interface
@@ -285,7 +282,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(test: bool, controller: String, tokens: pkce::AccessIdTokens) {
+fn do_onboard(controller: String, tokens: pkce::AccessIdTokens) {
     let mut access_token = tokens.access_token;
     let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
@@ -303,18 +300,13 @@ fn do_onboard(test: bool, controller: String, tokens: pkce::AccessIdTokens) {
         hostname = h;
     }
 
-    // TODO: Once we start using proper certs for our production clusters, make this
-    // accept_invalid_certs true only for test environment. Even test environments ideally
-    // should have verifiable certs via a test.nextensio.net domain or something
+    let accept_invalid = std::env::var("NXT_TESTING").is_ok();
     let mut ka_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_certs(accept_invalid)
         .build()
         .unwrap();
-    // TODO: Once we start using proper certs for our production clusters, make this
-    // accept_invalid_certs true only for test environment. Even test environments ideally
-    // should have verifiable certs via a test.nextensio.net domain or something
     let mut onb_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_certs(accept_invalid)
         .build()
         .unwrap();
 
@@ -341,7 +333,7 @@ fn do_onboard(test: bool, controller: String, tokens: pkce::AccessIdTokens) {
         // Okta is configured with one hour as the access token lifetime,
         // refresh at 45 minutes
         if now > refresh + Duration::from_secs(45 * 60) {
-            let token = pkce::refresh(test, &refresh_token);
+            let token = pkce::refresh(&refresh_token);
             if let Some(t) = token {
                 access_token = t.access_token;
                 refresh_token = t.refresh_token;
@@ -513,9 +505,7 @@ fn main() {
     // "test" is true if we are running in a docker container in nextensio testbed
     // Right now this same layer is used for testbed and real agent - not a lot of
     // difference between them, but at some point we might seperate out both
-    let test;
     let mut interface = "".to_string();
-    let mut found = 0;
     let mut controller = "server.nextensio.net:8080".to_string();
     let mut username = "".to_string();
     let mut password = "".to_string();
@@ -523,24 +513,17 @@ fn main() {
     for (key, value) in std::env::vars() {
         if key == "NXT_USERNAME" {
             username = value;
-            found += 1;
         } else if key == "NXT_PWD" {
             password = value;
-            found += 1;
         } else if key == "NXT_CONTROLLER" {
             controller = value;
-            found += 1;
         } else if key == "NXT_INTERFACE" {
             interface = value;
         }
     }
-    if found != 3 {
-        test = false;
-    } else {
-        test = true;
-        if interface == "" {
-            interface = "eth0".to_string();
-        }
+
+    if std::env::var("NXT_TESTING").is_ok() && interface.is_empty() {
+        interface = "eth0".to_string();
     }
 
     let matches = App::new("NxtAgent")
@@ -576,7 +559,7 @@ fn main() {
             }
         });
     }
-    if !test {
+    if std::env::var("NXT_TESTING").is_err() {
         // Add a group to run this app as, this is all temporary till we
         // figure out a proper installation process on linux for these agents.
         // The 14963 is just some groupid we pick, its not related to the set-mark
@@ -592,7 +575,7 @@ fn main() {
             }
         }
         controller = "server.nextensio.net:8080".to_string();
-        if text_only && (username == "" || password == "") {
+        if text_only && (username.is_empty() || password.is_empty()) {
             print!("Nextensio Username: ");
             std::io::stdout().flush().unwrap();
             std::io::stdin()
@@ -615,26 +598,22 @@ fn main() {
         thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
     }
 
-    if !test && (username == "" || password == "") {
+    if std::env::var("NXT_TESTING").is_err() && (username.is_empty() || password.is_empty()) {
         gui::gui_main();
-        cleanup_iptables(interface.clone());
+        cleanup_iptables(interface);
         std::process::exit(0);
     } else {
         loop {
-            let token = pkce::authenticate(test, &username, &password);
+            let token = pkce::authenticate(&username, &password);
             if let Some(t) = token {
-                thread::spawn(move || do_onboard(test, controller, t));
+                thread::spawn(move || do_onboard(controller, t));
                 break;
             } else {
-                if !test {
-                    error!("Login to nextensio failed");
-                    println!("Login to nextensio failed");
-                    cleanup_iptables(interface.clone());
-                    std::process::exit(0);
-                } else {
-                    println!("Retrying after 5 seconds");
-                    thread::sleep(std::time::Duration::from_secs(5));
-                }
+                error!("Login to nextensio failed");
+                println!("Login to nextensio failed");
+                error!("Retrying after 5 seconds");
+                println!("Retrying after 5 seconds");
+                thread::sleep(std::time::Duration::from_secs(5));
             }
         }
         loop {

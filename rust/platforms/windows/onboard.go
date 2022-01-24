@@ -35,11 +35,8 @@ type RegistrationInfo struct {
 }
 
 func ControllerOnboard(lg *log.Logger, controller string, accessToken string) bool {
-	// TODO: Once we start using proper certs for our production clusters, make this
-	// accept_invalid_certs true only for test environment. Even test environments ideally
-	// should have verifiable certs via a test.nextensio.net domain or something
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 	}
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)

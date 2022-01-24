@@ -14,7 +14,7 @@ pub fn gui_main() {
     let (s, r) = app::channel::<Message>();
     let mut username = "".to_string();
     let mut password = "".to_string();
-    let mut login = main_panel(&mut col, s.clone());
+    let mut login = main_panel(&mut col, s);
     col.end();
     win.resizable(&col);
     win.set_color(enums::Color::from_rgb(250, 250, 250));
@@ -29,10 +29,10 @@ pub fn gui_main() {
                 Message::Password(p) => password = p,
                 Message::Login => {
                     if !onboarded {
-                        let token = super::pkce::authenticate(false, &username, &password);
+                        let token = super::pkce::authenticate(&username, &password);
                         if let Some(t) = token {
                             std::thread::spawn(move || {
-                                super::do_onboard(false, "server.nextensio.net:8080".to_string(), t)
+                                super::do_onboard("server.nextensio.net:8080".to_string(), t)
                             });
                             onboarded = true;
                             login.set_label("Login Succesful");
@@ -84,7 +84,7 @@ fn buttons_panel(
     {
         frame::Frame::default();
         let mut login = create_button("Login");
-        login.emit(sender.clone(), Message::Login);
+        login.emit(sender, Message::Login);
 
         brow.set_size(&login, 160);
         brow.end();
@@ -102,7 +102,7 @@ fn buttons_panel(
     parent.set_size(&brow, 30);
     parent.set_size(&b, 30);
 
-    return l;
+    l
 }
 
 fn middle_panel(
@@ -122,7 +122,7 @@ fn middle_panel(
     parent.set_size(&spacer, 10);
     parent.set_size(&bp, 300);
 
-    return b;
+    b
 }
 
 fn main_panel(parent: &mut group::Flex, sender: fltk::app::Sender<Message>) -> Box<button::Button> {
@@ -136,7 +136,7 @@ fn main_panel(parent: &mut group::Flex, sender: fltk::app::Sender<Message>) -> B
 
     parent.set_size(&mp, 200);
 
-    return b;
+    b
 }
 
 fn create_button(caption: &str) -> button::Button {
