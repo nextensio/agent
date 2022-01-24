@@ -101,7 +101,7 @@ fn authn_username_pwd(
     None
 }
 
-fn authorize(client: &mut reqwest::Client, t: SessionToken) -> (String, oauth2::PkceCodeVerifier) {
+fn authorize_url(code_challenge: oauth2::PkceCodeChallenge, prompt: bool) -> String {
     let idp;
     let client_id;
     if std::env::var("NXT_TESTING").is_ok() {
@@ -111,20 +111,26 @@ fn authorize(client: &mut reqwest::Client, t: SessionToken) -> (String, oauth2::
         idp = PROD_PROFILE.idp;
         client_id = PROD_PROFILE.client_id;
     }
-    let (code_challenge, code_verify) = oauth2::PkceCodeChallenge::new_random_sha256();
     let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
     queries = format!(
-        "{}&state=test&prompt=none&response_mode=query&code_challenge_method=S256",
+        "{}&state=test&response_mode=query&code_challenge_method=S256",
         queries
     );
-    queries = format!(
-        "{}&code_challenge={}&sessionToken={}",
-        queries,
-        code_challenge.as_str(),
+    if !prompt {
+        queries = format!("{}&prompt=none", queries);
+    }
+    queries = format!("{}&code_challenge={}", queries, code_challenge.as_str(),);
+    format!("{}/oauth2/default/v1/authorize?{}", idp, queries)
+}
+
+fn authorize(client: &mut reqwest::Client, t: SessionToken) -> (String, oauth2::PkceCodeVerifier) {
+    let (code_challenge, code_verify) = oauth2::PkceCodeChallenge::new_random_sha256();
+    let auth_url = format!(
+        "{}&sessionToken={}",
+        authorize_url(code_challenge, false),
         t.sessionToken
     );
-    let authorize = format!("{}/oauth2/default/v1/authorize?{}", idp, queries);
-    let resp = client.get(&authorize).send();
+    let resp = client.get(&auth_url).send();
     match resp {
         Ok(res) => {
             if res.status().is_success() || res.status().as_u16() == 302 {
@@ -269,6 +275,10 @@ pub fn web_server() {
         router!(request,
             (GET) (/success) => {
                 rouille::Response::html(super::html::HTML_SUCCESS)
+            },
+            (GET) (/login) => {
+                let (code_challenge, code_verify) = oauth2::PkceCodeChallenge::new_random_sha256();
+                rouille::Response::redirect_302(authorize_url(code_challenge, true))
             },
             _ => rouille::Response::empty_404()
         )
