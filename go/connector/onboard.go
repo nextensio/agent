@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	common "gitlab.com/nextensio/common/go"
@@ -51,11 +52,12 @@ type RegistrationInfo struct {
 }
 
 func ControllerOnboard(lg *log.Logger, controller string, sharedKey string) bool {
-	// TODO: Once we start using proper certs for our production clusters, make this
-	// accept_invalid_certs true only for test environment. Even test environments ideally
-	// should have verifiable certs via a test.nextensio.net domain or something
+	skipVerify := false
+	if os.Getenv("NXT_TESTING") == "true" {
+		skipVerify = true
+	}
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: skipVerify},
 	}
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/global/get/onboard", nil)
@@ -131,11 +133,12 @@ func getLocalIP() {
 
 func ControllerKeepalive(lg *log.Logger, controller string, sharedKey string, version string) bool {
 	var ka KeepaliveResponse
-	// TODO: Once we start using proper certs for our production clusters, make this
-	// accept_invalid_certs true only for test environment. Even test environments ideally
-	// should have verifiable certs via a test.nextensio.net domain or something
+	skipVerify := false
+	if os.Getenv("NXT_TESTING") == "true" {
+		skipVerify = true
+	}
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: skipVerify},
 	}
 	// Well, I dont know if ipfy will block us if we keep pounding it, the public
 	// IP for a connector usually doesnt change since its a server instance, so go slow

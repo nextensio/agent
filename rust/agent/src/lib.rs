@@ -1213,7 +1213,7 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
     let hdr = hdr.unwrap();
     match hdr.hdr.unwrap() {
         Hdr::Flow(f) => {
-            if f.trace_ctx == "" {
+            if f.trace_ctx.is_empty() {
                 return;
             }
             trace.trace_ctx = f.trace_ctx;
