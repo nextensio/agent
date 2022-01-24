@@ -659,8 +659,12 @@ fn main() {
         cleanup_iptables(interface);
         std::process::exit(0);
     } else {
+        let mut client = reqwest::Client::builder()
+            .redirect(reqwest::RedirectPolicy::none())
+            .build()
+            .unwrap();
         loop {
-            let token = pkce::authenticate(&username, &password);
+            let token = pkce::authenticate(&mut client, &username, &password);
             if let Some(t) = token {
                 thread::spawn(move || do_onboard(controller, t));
                 break;

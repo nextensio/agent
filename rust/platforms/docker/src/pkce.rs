@@ -175,17 +175,17 @@ pub fn get_tokens(
     None
 }
 
-pub fn authenticate(username: &str, password: &str) -> Option<AccessIdTokens> {
-    let mut client = reqwest::Client::builder()
-        .redirect(reqwest::RedirectPolicy::none())
-        .build()
-        .unwrap();
-    if let Some(t) = authn_username_pwd(&mut client, username, password) {
-        let (code, code_verifier) = authorize(&mut client, t);
+pub fn authenticate(
+    client: &mut reqwest::Client,
+    username: &str,
+    password: &str,
+) -> Option<AccessIdTokens> {
+    if let Some(t) = authn_username_pwd(client, username, password) {
+        let (code, code_verifier) = authorize(client, t);
         if code.is_empty() {
             return None;
         }
-        return get_tokens(&mut client, code, Arc::new(Mutex::new(code_verifier)));
+        return get_tokens(client, code, Arc::new(Mutex::new(code_verifier)));
     }
     None
 }
