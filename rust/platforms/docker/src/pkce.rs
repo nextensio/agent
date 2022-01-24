@@ -2,20 +2,8 @@ use log::error;
 use regex::Regex;
 use rouille::router;
 use serde::{Deserialize, Serialize};
-
-const TEST_PROFILE: IdpProfile = IdpProfile {
-    idp: "https://dev-635657.okta.com",
-    client_id: "0oaz5lndczD0DSUeh4x6",
-};
-const PROD_PROFILE: IdpProfile = IdpProfile {
-    idp: "https://login.nextensio.net/",
-    client_id: "0oav0q3hn65I4Zkmr5d6",
-};
-
-struct IdpProfile<'a> {
-    idp: &'a str,
-    client_id: &'a str,
-}
+use std::sync::Arc;
+use std::sync::Mutex;
 
 #[allow(non_snake_case)]
 #[derive(Debug, Serialize)]
@@ -47,12 +35,8 @@ fn authn_username_pwd(
     username: &str,
     password: &str,
 ) -> Option<SessionToken> {
-    let idp;
-    if std::env::var("NXT_TESTING").is_ok() {
-        idp = TEST_PROFILE.idp;
-    } else {
-        idp = PROD_PROFILE.idp;
-    }
+    let (idp, _) = super::idp_client();
+
     let auth = Authenticate {
         username: username.to_string(),
         password: password.to_string(),
@@ -102,15 +86,7 @@ fn authn_username_pwd(
 }
 
 fn authorize_url(code_challenge: oauth2::PkceCodeChallenge, prompt: bool) -> String {
-    let idp;
-    let client_id;
-    if std::env::var("NXT_TESTING").is_ok() {
-        idp = TEST_PROFILE.idp;
-        client_id = TEST_PROFILE.client_id;
-    } else {
-        idp = PROD_PROFILE.idp;
-        client_id = PROD_PROFILE.client_id;
-    }
+    let (idp, client_id) = super::idp_client();
     let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
     queries = format!(
         "{}&state=test&response_mode=query&code_challenge_method=S256",
@@ -163,23 +139,15 @@ fn authorize(client: &mut reqwest::Client, t: SessionToken) -> (String, oauth2::
 pub fn get_tokens(
     client: &mut reqwest::Client,
     code: String,
-    code_verify: oauth2::PkceCodeVerifier,
+    code_verify: Arc<Mutex<oauth2::PkceCodeVerifier>>,
 ) -> Option<AccessIdTokens> {
-    let idp;
-    let client_id;
-    if std::env::var("NXT_TESTING").is_ok() {
-        idp = TEST_PROFILE.idp;
-        client_id = TEST_PROFILE.client_id;
-    } else {
-        idp = PROD_PROFILE.idp;
-        client_id = PROD_PROFILE.client_id;
-    }
+    let (idp, client_id) = super::idp_client();
     let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
     queries = format!(
         "{}&grant_type=authorization_code&code={}&code_verifier={}",
         queries,
         code,
-        code_verify.secret()
+        code_verify.lock().unwrap().secret()
     );
     let url = format!("{}/oauth2/default/v1/token?{}", idp, queries);
     let resp = client
@@ -217,21 +185,13 @@ pub fn authenticate(username: &str, password: &str) -> Option<AccessIdTokens> {
         if code.is_empty() {
             return None;
         }
-        return get_tokens(&mut client, code, code_verifier);
+        return get_tokens(&mut client, code, Arc::new(Mutex::new(code_verifier)));
     }
     None
 }
 
 pub fn refresh(refresh: &str) -> Option<AccessIdTokens> {
-    let idp;
-    let client_id;
-    if std::env::var("NXT_TESTING").is_ok() {
-        idp = TEST_PROFILE.idp;
-        client_id = TEST_PROFILE.client_id;
-    } else {
-        idp = PROD_PROFILE.idp;
-        client_id = PROD_PROFILE.client_id;
-    }
+    let (idp, client_id) = super::idp_client();
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::RedirectPolicy::none())
@@ -270,15 +230,61 @@ pub fn refresh(refresh: &str) -> Option<AccessIdTokens> {
     None
 }
 
-pub fn web_server() {
+pub fn web_server(schan: fltk::app::Sender<super::gui::Message>) {
+    let onboarded = std::sync::atomic::AtomicBool::new(false);
+    let (_, cv) = oauth2::PkceCodeChallenge::new_random_sha256();
+    let code_verify = Arc::new(Mutex::new(cv));
+
     rouille::start_server("localhost:8180", move |request| {
         router!(request,
             (GET) (/success) => {
                 rouille::Response::html(super::html::HTML_SUCCESS)
             },
+
             (GET) (/login) => {
-                let (code_challenge, code_verify) = oauth2::PkceCodeChallenge::new_random_sha256();
-                rouille::Response::redirect_302(authorize_url(code_challenge, true))
+                let (cc, cv) = oauth2::PkceCodeChallenge::new_random_sha256();
+                *code_verify.lock().unwrap() = cv;
+                rouille::Response::redirect_302(authorize_url(cc, true))
+            },
+
+            (GET) (/) => {
+                let mut err = "";
+                let mut code = "";
+                let re = Regex::new(r"code=(.*)&state=test").unwrap();
+                match re.captures(request.raw_query_string()) {
+                    Some(r) => {
+                        code = r.get(1).map_or("", |m| m.as_str());
+                    }
+                    None => {
+                        err = "Bad redirect uri";
+                        error!("{}", err);
+                    }
+                }
+                if err.is_empty() {
+                    let mut client = reqwest::Client::builder()
+                    .redirect(reqwest::RedirectPolicy::none())
+                    .build()
+                    .unwrap();
+                    let tokens = get_tokens(&mut client, code.to_string(), code_verify.clone());
+                    if let Some(t) = tokens {
+                        if !onboarded.load(std::sync::atomic::Ordering::Relaxed) {
+                            std::thread::spawn(move || {
+                               super::do_onboard("server.nextensio.net:8080".to_string(), t)
+                            });
+                            onboarded.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    } else {
+                        err = "Token failure";
+                    }
+                }
+
+                if err.is_empty() {
+                    schan.send(super::gui::Message::LoginStatus("Logged In".to_string()));
+                    rouille::Response::redirect_302("http://localhost:8180/success")
+                } else {
+                    schan.send(super::gui::Message::LoginStatus("Login failed, please try again".to_string()));
+                    rouille::Response::html(super::html::html_error(err))
+                }
             },
             _ => rouille::Response::empty_404()
         )

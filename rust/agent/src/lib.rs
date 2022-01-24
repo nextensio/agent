@@ -325,20 +325,24 @@ impl TunInfo {
 // This actually should be target-os linux AND target-arch x86_64, rdtsc is x86 only
 #[cfg(target_os = "linux")]
 struct AgentPerf {
-    _counters: Counters,
-    _perf_cnt: Perf,
+    _counters: Option<Counters>,
+    _perf_cnt: Option<Perf>,
 }
 
 #[cfg(target_os = "linux")]
 fn alloc_perf() -> AgentPerf {
     // the r2cnt utility expects a counter name of r2cnt, this can be changed later to
-    // pass in some name of our choice
+    // pass in some name of our choice. Also r2cnt needs shared mem access to create 
+    // the counter stats, so run the agent as root and uncomment this when perf measurement
+    // is needed
+    /*
     let mut _counters = Counters::new("r2cnt").unwrap();
     let _perf_cnt = Perf::new("perf_cnt1", &mut _counters);
     AgentPerf {
         _counters,
         _perf_cnt,
-    }
+    }*/
+    AgentPerf {_counters: None, _perf_cnt: None}
 }
 
 #[cfg(not(target_os = "linux"))]

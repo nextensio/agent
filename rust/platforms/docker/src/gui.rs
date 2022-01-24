@@ -2,44 +2,33 @@ use fltk::{prelude::*, *};
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Username(String),
-    Password(String),
+    LoginStatus(String),
     Login,
 }
 
 pub fn gui_main() {
     let a = app::App::default().with_scheme(app::Scheme::Gtk);
-    let mut win = window::Window::default().with_size(400, 200);
+    let mut win = window::Window::default().with_size(400, 100);
     let mut col = group::Flex::default_fill().column();
     let (s, r) = app::channel::<Message>();
-    let mut username = "".to_string();
-    let mut password = "".to_string();
+    let sc = s.clone();
+    std::thread::spawn(|| super::pkce::web_server(sc));
     let mut login = main_panel(&mut col, s);
     col.end();
     win.resizable(&col);
     win.set_color(enums::Color::from_rgb(250, 250, 250));
     win.end();
     win.show();
-    win.size_range(400, 200, 0, 0);
-    let mut onboarded = false;
+    win.size_range(400, 100, 0, 0);
     while a.wait() {
         if let Some(msg) = r.recv() {
             match msg {
-                Message::Username(u) => username = u,
-                Message::Password(p) => password = p,
                 Message::Login => {
-                    if !onboarded {
-                        let token = super::pkce::authenticate(&username, &password);
-                        if let Some(t) = token {
-                            std::thread::spawn(move || {
-                                super::do_onboard("server.nextensio.net:8080".to_string(), t)
-                            });
-                            onboarded = true;
-                            login.set_label("Login Succesful");
-                        } else {
-                            login.set_label("Login failed");
-                        }
-                    }
+                    let err = open::that("http://localhost:8180/login");
+                    println!("{:?}", err);
+                }
+                Message::LoginStatus(status) => {
+                    login.set_label(&status);
                 }
             }
         }
@@ -51,34 +40,8 @@ fn buttons_panel(
     sender: fltk::app::Sender<Message>,
 ) -> Box<button::Button> {
     frame::Frame::default();
-    let w = frame::Frame::default().with_label("Nextensio Login");
+    let w = frame::Frame::default().with_label("");
 
-    let mut urow = group::Flex::default().row();
-    {
-        frame::Frame::default()
-            .with_label("Username:")
-            .with_align(enums::Align::Inside | enums::Align::Right);
-        let mut username = input::Input::default();
-        let s = sender.clone();
-        username.set_callback(move |u| s.send(Message::Username(u.value())));
-        urow.set_size(&username, 180);
-        urow.end();
-    }
-
-    let mut prow = group::Flex::default().row();
-    {
-        frame::Frame::default()
-            .with_label("Password:")
-            .with_align(enums::Align::Inside | enums::Align::Right);
-        let mut password = input::SecretInput::default();
-        let s = sender.clone();
-        password.set_callback(move |p| s.send(Message::Password(p.value())));
-
-        prow.set_size(&password, 180);
-        prow.end();
-    }
-
-    let pad = frame::Frame::default();
     let l: Box<button::Button>;
     let mut brow = group::Flex::default().row();
     {
@@ -86,7 +49,7 @@ fn buttons_panel(
         let mut login = create_button("Login");
         login.emit(sender, Message::Login);
 
-        brow.set_size(&login, 160);
+        brow.set_size(&login, 250);
         brow.end();
         l = Box::new(login);
     }
@@ -96,9 +59,6 @@ fn buttons_panel(
     frame::Frame::default();
 
     parent.set_size(&w, 60);
-    parent.set_size(&urow, 30);
-    parent.set_size(&prow, 30);
-    parent.set_size(&pad, 1);
     parent.set_size(&brow, 30);
     parent.set_size(&b, 30);
 
@@ -119,8 +79,8 @@ fn middle_panel(
 
     frame::Frame::default();
 
-    parent.set_size(&spacer, 10);
-    parent.set_size(&bp, 300);
+    parent.set_size(&spacer, 0);
+    parent.set_size(&bp, 100);
 
     b
 }

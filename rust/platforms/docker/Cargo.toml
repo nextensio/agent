@@ -27,3 +27,5 @@ uuid = { version = "0.8", features = ["v4"] }
 clap = "2.33.3"
 agent = { path = "../../agent" }
 fltk = { version = "^1.2", features = ["fltk-bundled"] }
+open = "2.0.2"
+nix = "0.23.1"

@@ -18,6 +18,19 @@ mod pkce;
 use pnet::datalink;
 
 const MTU: u32 = 1500;
+struct IdpProfile<'a> {
+    idp: &'a str,
+    client_id: &'a str,
+}
+
+const TEST_PROFILE: IdpProfile = IdpProfile {
+    idp: "https://dev-635657.okta.com",
+    client_id: "0oaz5lndczD0DSUeh4x6",
+};
+const PROD_PROFILE: IdpProfile = IdpProfile {
+    idp: "https://login.nextensio.net/",
+    client_id: "0oav0q3hn65I4Zkmr5d6",
+};
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -60,6 +73,17 @@ struct KeepaliveRequest<'a> {
 struct KeepaliveResponse {
     Result: String, // The json response has Caps Result, so we ignore clippy
     version: String,
+}
+
+fn chgroup(name: &str) -> Result<(), nix::Error> {
+    match nix::unistd::Group::from_name(name)? {
+        Some(group) => nix::unistd::setgid(group.gid),
+        None => Err(nix::Error::last()),
+    }
+}
+
+fn chuser(uid: u32) -> Result<(), nix::Error> {
+    nix::unistd::setuid(nix::unistd::Uid::from_raw(uid))
 }
 
 impl fmt::Display for OnboardInfo {
@@ -301,13 +325,12 @@ fn do_onboard(controller: String, tokens: pkce::AccessIdTokens) {
         hostname = h;
     }
 
-    let accept_invalid = std::env::var("NXT_TESTING").is_ok();
     let mut ka_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(accept_invalid)
+        .danger_accept_invalid_certs(is_testing())
         .build()
         .unwrap();
     let mut onb_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(accept_invalid)
+        .danger_accept_invalid_certs(is_testing())
         .build()
         .unwrap();
 
@@ -341,7 +364,7 @@ fn do_onboard(controller: String, tokens: pkce::AccessIdTokens) {
                 refresh = now;
                 error!("Force onboard");
             } else {
-                error!("Refresh token failed, will retry in 30 seconds")
+                error!("Refresh token failed, will retry in 30 seconds");
             }
         }
         if !onboarded || force_onboard {
@@ -489,6 +512,24 @@ fn agent_keepalive(
     }
 }
 
+fn is_testing() -> bool {
+    std::env::var("NXT_TESTING").is_ok()
+}
+
+fn idp_client() -> (String, String) {
+    let idp;
+    let client_id;
+    if is_testing() {
+        idp = TEST_PROFILE.idp;
+        client_id = TEST_PROFILE.client_id;
+    } else {
+        idp = PROD_PROFILE.idp;
+        client_id = PROD_PROFILE.client_id;
+    }
+
+    (idp.to_string(), client_id.to_string())
+}
+
 fn main() {
     if !has_iptables() {
         println!("Need iptables and iproute2 packages: sudo apt-install iptables iproute2");
@@ -499,7 +540,7 @@ fn main() {
         return;
     }
     if !is_root() {
-        println!("Need to run as sudo: sudo nextensio");
+        println!("Need to run as sudo (for adding iptable mangle rule): \"sudo nextensio\"");
         return;
     }
 
@@ -523,7 +564,7 @@ fn main() {
         }
     }
 
-    if std::env::var("NXT_TESTING").is_ok() && interface.is_empty() {
+    if is_testing() && interface.is_empty() {
         interface = "eth0".to_string();
     }
 
@@ -560,21 +601,27 @@ fn main() {
             }
         });
     }
-    if std::env::var("NXT_TESTING").is_err() {
-        // Add a group to run this app as, this is all temporary till we
-        // figure out a proper installation process on linux for these agents.
-        // The 14963 is just some groupid we pick, its not related to the set-mark
-        cmd("/usr/sbin/addgroup --gid 14963 nextensioapp");
-        unsafe {
-            let ret = libc::setgid(14963);
-            if ret != 0 {
-                println!(
-                    "Unexpected error: Unable to move nextensio app to group nextensioapp {}",
-                    ret
-                );
+
+    let mut uid: u32 = 0;
+
+    if !is_testing() {
+        cmd("/usr/sbin/addgroup --gid 14963 ");
+        if chgroup("nextensioapp").is_err() {
+            println!("Unable to change group of the client to nextensioapp, exiting");
+            return;
+        }
+        if let Ok(uid_str) = std::env::var("SUDO_UID") {
+            if let Ok(u) = uid_str.parse::<u32>() {
+                uid = u;
+            } else {
+                println!("Unable to parse uid {}, exiting", uid_str);
                 return;
             }
+        } else {
+            println!("Unable to get userid (uid), exiting");
+            return;
         }
+
         controller = "server.nextensio.net:8080".to_string();
         if text_only && (username.is_empty() || password.is_empty()) {
             print!("Nextensio Username: ");
@@ -594,14 +641,20 @@ fn main() {
     let fd = create_tun().unwrap();
     config_tun(&interface, MTU);
 
+    if uid != 0 {
+        if chuser(uid).is_err() {
+            println!("Unable to drop privileges to uid {}, exiting", uid);
+            cleanup_iptables(interface);
+            return;
+        }
+    }
+
     unsafe {
         agent_on(fd);
         thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
     }
 
-    thread::spawn(move || pkce::web_server());
-
-    if std::env::var("NXT_TESTING").is_err() && (username.is_empty() || password.is_empty()) {
+    if !is_testing() && (username.is_empty() || password.is_empty()) {
         gui::gui_main();
         cleanup_iptables(interface);
         std::process::exit(0);
