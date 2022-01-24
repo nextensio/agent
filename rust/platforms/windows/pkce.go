@@ -114,7 +114,7 @@ func refreshTokens(ISSUER string, CLIENT_ID string, refresh string) *accessIdTok
 func handleLogin() {
 
 	http.HandleFunc("/", AuthCodeCallbackHandler)
-	http.HandleFunc("/success", HomeHandler)
+	http.HandleFunc("/success", SuccessHandler)
 	http.HandleFunc("/login", LoginHandler)
 	http.HandleFunc("/logout", LogoutHandler)
 
@@ -125,8 +125,18 @@ func handleLogin() {
 	}
 }
 
-func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	tpl.ExecuteTemplate(w, "home.gohtml", nil)
+func SuccessHandler(w http.ResponseWriter, r *http.Request) {
+	tpl.ExecuteTemplate(w, "success.gohtml", nil)
+}
+
+func ErrorHandler(w http.ResponseWriter, err string) {
+	type Info struct {
+		Error string
+	}
+	e := Info{
+		Error: err,
+	}
+	tpl.ExecuteTemplate(w, "error.gohtml", e)
 }
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -156,19 +166,19 @@ func AuthCodeCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// Check the state that was returned in the query string is the same as the above state
 	s := r.URL.Query().Get("state")
 	if s != state {
-		fmt.Fprintln(w, "The state was not as expected: ", s, state)
+		ErrorHandler(w, "state error")
 		return
 	}
 	// Make sure the code was provided
 	if r.URL.Query().Get("code") == "" {
-		fmt.Fprintln(w, "The code was not returned or is not accessible")
+		ErrorHandler(w, "code error")
 		return
 	}
 
 	exchange := exchangeCode(r.URL.Query().Get("code"), r)
 	verificationError := verifyToken(&exchange)
 	if verificationError != nil {
-		fmt.Fprintln(w, verificationError)
+		ErrorHandler(w, fmt.Sprintf("%s", verificationError))
 		return
 	}
 
