@@ -6,8 +6,3 @@ sudo apt-get install libx11-dev libxext-dev libxft-dev libxinerama-dev libxcurso
 
 The machine on which you RUN the agent doesnt need it, we need it only when compiling
 
-Also you need to manually install the latest cmake from https://cmake.org/download/ - untar the code and run the below to install
-./bootstrap
-make -j$(nproc)
-sudo make install
-
