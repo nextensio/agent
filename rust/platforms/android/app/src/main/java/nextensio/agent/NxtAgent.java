@@ -51,7 +51,7 @@ public class NxtAgent extends AppCompatActivity {
     private TimerTask timerTask;
 
     private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
-    .clientId("0oav0rc5g0E3irFto5d6")
+    .clientId("0oav0q3hn65I4Zkmr5d6")
     .redirectUri("nextensio.agent:/login")
     .endSessionRedirectUri("nextensio.agent:/logout")
     .scopes("openid", "email", "profile", "offline_access")

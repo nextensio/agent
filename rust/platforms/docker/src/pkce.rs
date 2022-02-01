@@ -35,7 +35,7 @@ fn authn_username_pwd(
     username: &str,
     password: &str,
 ) -> Option<SessionToken> {
-    let (idp, _) = super::idp_client();
+    let idp = super::get_idp();
 
     let auth = Authenticate {
         username: username.to_string(),
@@ -85,8 +85,12 @@ fn authn_username_pwd(
     None
 }
 
-fn authorize_url(code_challenge: oauth2::PkceCodeChallenge, prompt: bool) -> String {
-    let (idp, client_id) = super::idp_client();
+fn authorize_url(
+    client_id: &str,
+    code_challenge: oauth2::PkceCodeChallenge,
+    prompt: bool,
+) -> String {
+    let idp = super::get_idp();
     let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
     queries = format!(
         "{}&state=test&response_mode=query&code_challenge_method=S256",
@@ -99,11 +103,15 @@ fn authorize_url(code_challenge: oauth2::PkceCodeChallenge, prompt: bool) -> Str
     format!("{}/oauth2/default/v1/authorize?{}", idp, queries)
 }
 
-fn authorize(client: &mut reqwest::Client, t: SessionToken) -> (String, oauth2::PkceCodeVerifier) {
+fn authorize(
+    client_id: &str,
+    client: &mut reqwest::Client,
+    t: SessionToken,
+) -> (String, oauth2::PkceCodeVerifier) {
     let (code_challenge, code_verify) = oauth2::PkceCodeChallenge::new_random_sha256();
     let auth_url = format!(
         "{}&sessionToken={}",
-        authorize_url(code_challenge, false),
+        authorize_url(client_id, code_challenge, false),
         t.sessionToken
     );
     let resp = client.get(&auth_url).send();
@@ -137,11 +145,12 @@ fn authorize(client: &mut reqwest::Client, t: SessionToken) -> (String, oauth2::
 }
 
 pub fn get_tokens(
+    client_id: &str,
     client: &mut reqwest::Client,
     code: String,
     code_verify: Arc<Mutex<oauth2::PkceCodeVerifier>>,
 ) -> Option<AccessIdTokens> {
-    let (idp, client_id) = super::idp_client();
+    let idp = super::get_idp();
     let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
     queries = format!(
         "{}&grant_type=authorization_code&code={}&code_verifier={}",
@@ -176,22 +185,23 @@ pub fn get_tokens(
 }
 
 pub fn authenticate(
+    client_id: &str,
     client: &mut reqwest::Client,
     username: &str,
     password: &str,
 ) -> Option<AccessIdTokens> {
     if let Some(t) = authn_username_pwd(client, username, password) {
-        let (code, code_verifier) = authorize(client, t);
+        let (code, code_verifier) = authorize(client_id, client, t);
         if code.is_empty() {
             return None;
         }
-        return get_tokens(client, code, Arc::new(Mutex::new(code_verifier)));
+        return get_tokens(client_id, client, code, Arc::new(Mutex::new(code_verifier)));
     }
     None
 }
 
-pub fn refresh(refresh: &str) -> Option<AccessIdTokens> {
-    let (idp, client_id) = super::idp_client();
+pub fn refresh(client_id: &str, refresh: &str) -> Option<AccessIdTokens> {
+    let idp = super::get_idp();
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::RedirectPolicy::none())
@@ -230,7 +240,7 @@ pub fn refresh(refresh: &str) -> Option<AccessIdTokens> {
     None
 }
 
-pub fn web_server(schan: fltk::app::Sender<super::gui::Message>) {
+pub fn web_server(client_id: String, schan: fltk::app::Sender<super::gui::Message>) {
     let onboarded = std::sync::atomic::AtomicBool::new(false);
     let (_, cv) = oauth2::PkceCodeChallenge::new_random_sha256();
     let code_verify = Arc::new(Mutex::new(cv));
@@ -244,7 +254,7 @@ pub fn web_server(schan: fltk::app::Sender<super::gui::Message>) {
             (GET) (/login) => {
                 let (cc, cv) = oauth2::PkceCodeChallenge::new_random_sha256();
                 *code_verify.lock().unwrap() = cv;
-                rouille::Response::redirect_302(authorize_url(cc, true))
+                rouille::Response::redirect_302(authorize_url(&client_id, cc, true))
             },
 
             (GET) (/) => {
@@ -265,11 +275,12 @@ pub fn web_server(schan: fltk::app::Sender<super::gui::Message>) {
                     .redirect(reqwest::RedirectPolicy::none())
                     .build()
                     .unwrap();
-                    let tokens = get_tokens(&mut client, code.to_string(), code_verify.clone());
+                    let tokens = get_tokens(&client_id, &mut client, code.to_string(), code_verify.clone());
                     if let Some(t) = tokens {
                         if !onboarded.load(std::sync::atomic::Ordering::Relaxed) {
+                            let cid = client_id.clone();
                             std::thread::spawn(move || {
-                               super::do_onboard("server.nextensio.net:8080".to_string(), t)
+                               super::do_onboard(cid, "server.nextensio.net:8080".to_string(), t)
                             });
                             onboarded.store(true, std::sync::atomic::Ordering::Relaxed);
                         }

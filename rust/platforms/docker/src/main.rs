@@ -18,19 +18,6 @@ mod pkce;
 use pnet::datalink;
 
 const MTU: u32 = 1500;
-struct IdpProfile<'a> {
-    idp: &'a str,
-    client_id: &'a str,
-}
-
-const TEST_PROFILE: IdpProfile = IdpProfile {
-    idp: "https://dev-635657.okta.com",
-    client_id: "0oaz5lndczD0DSUeh4x6",
-};
-const PROD_PROFILE: IdpProfile = IdpProfile {
-    idp: "https://login.nextensio.net/",
-    client_id: "0oav0q3hn65I4Zkmr5d6",
-};
 
 // TODO: The rouille and reqwest libs are very heavy duty ones, we just need some
 // basic simple web server and a simple http client - we can use ureq for http client,
@@ -58,6 +45,13 @@ struct OnboardInfo {
     cacert: Vec<u8>,
     version: String,
     keepalive: usize,
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, Deserialize)]
+struct ClientId {
+    Result: String, // The json response has Caps Result, so we ignore clippy
+    clientid: String,
 }
 
 #[derive(Serialize)]
@@ -307,7 +301,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(controller: String, tokens: pkce::AccessIdTokens) {
+fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
     let mut access_token = tokens.access_token;
     let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
@@ -357,7 +351,7 @@ fn do_onboard(controller: String, tokens: pkce::AccessIdTokens) {
         // Okta is configured with one hour as the access token lifetime,
         // refresh at 45 minutes
         if now > refresh + Duration::from_secs(45 * 60) {
-            let token = pkce::refresh(&refresh_token);
+            let token = pkce::refresh(&client_id, &refresh_token);
             if let Some(t) = token {
                 access_token = t.access_token;
                 refresh_token = t.refresh_token;
@@ -516,18 +510,52 @@ fn is_testing() -> bool {
     std::env::var("NXT_TESTING").is_ok()
 }
 
-fn idp_client() -> (String, String) {
-    let idp;
-    let client_id;
-    if is_testing() {
-        idp = TEST_PROFILE.idp;
-        client_id = TEST_PROFILE.client_id;
-    } else {
-        idp = PROD_PROFILE.idp;
-        client_id = PROD_PROFILE.client_id;
+fn okta_clientid(controller: &str, client: &mut reqwest::Client) -> String {
+    let get_url = format!(
+        "https://{}/api/v1/global/get/clientid/09876432087648932147823456123768",
+        controller
+    );
+    let resp = client.get(&get_url).send();
+    match resp {
+        Ok(mut res) => {
+            if res.status().is_success() {
+                let onb: Result<ClientId, reqwest::Error> = res.json();
+                match onb {
+                    Ok(o) => {
+                        if o.Result != "ok" {
+                            error!("Clientid: Result from controller not ok {}", o.Result);
+                            println!("Clientid get failed ({}), will try again", o.Result);
+                            "".to_string()
+                        } else {
+                            o.clientid
+                        }
+                    }
+                    Err(e) => {
+                        error!("Clientid: HTTP body failed {:?}", e);
+                        println!("Clientid get  failed ({}), will try again", e);
+                        "".to_string()
+                    }
+                }
+            } else {
+                error!("Clientid: HTTP Get result {}, failed", res.status());
+                println!("Clientid get failed ({}), will try again", res.status());
+                "".to_string()
+            }
+        }
+        Err(e) => {
+            error!("HTTP Get failed {:?}", e);
+            println!("Login to nextensio failed ({}), will try again", e);
+            "".to_string()
+        }
     }
+}
 
-    (idp.to_string(), client_id.to_string())
+fn get_idp() -> String {
+    if let Ok(nxtidp) = std::env::var("NXT_IDP") {
+        nxtidp
+    } else {
+        "login.nextensio.net".to_string()
+    }
 }
 
 fn main() {
@@ -652,8 +680,25 @@ fn main() {
         thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
     }
 
+    let mut client_id;
+    let mut client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(is_testing())
+        .redirect(reqwest::RedirectPolicy::none())
+        .build()
+        .unwrap();
+    loop {
+        client_id = okta_clientid(&controller, &mut client);
+        println!("Okta clientid is {}", client_id);
+        if client_id.is_empty() {
+            thread::sleep(std::time::Duration::from_secs(5));
+        } else {
+            break;
+        }
+    }
+    drop(client);
+
     if !is_testing() && (username.is_empty() || password.is_empty()) {
-        gui::gui_main();
+        gui::gui_main(client_id);
         cleanup_iptables(interface);
         std::process::exit(0);
     } else {
@@ -662,9 +707,9 @@ fn main() {
             .build()
             .unwrap();
         loop {
-            let token = pkce::authenticate(&mut client, &username, &password);
+            let token = pkce::authenticate(&client_id, &mut client, &username, &password);
             if let Some(t) = token {
-                thread::spawn(move || do_onboard(controller, t));
+                thread::spawn(move || do_onboard(client_id.clone(), controller, t));
                 break;
             } else {
                 error!("Login to nextensio failed");
@@ -674,6 +719,7 @@ fn main() {
                 thread::sleep(std::time::Duration::from_secs(5));
             }
         }
+        drop(client);
         loop {
             thread::sleep(std::time::Duration::from_secs(5));
         }

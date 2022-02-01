@@ -135,7 +135,7 @@ public class NxtApp extends Application {
     }
 
     private void refresh() {
-        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0rc5g0E3irFto5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0q3hn65I4Zkmr5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
         String url = urlBuilder.build().toString();
         RequestBody reqbody = RequestBody.create(null, new byte[0]);  
         try {
