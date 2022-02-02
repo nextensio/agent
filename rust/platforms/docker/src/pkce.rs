@@ -240,10 +240,16 @@ pub fn refresh(client_id: &str, refresh: &str) -> Option<AccessIdTokens> {
     None
 }
 
-pub fn web_server(client_id: String, schan: fltk::app::Sender<super::gui::Message>) {
+pub fn web_server(controller: String, schan: fltk::app::Sender<super::gui::Message>) {
     let onboarded = std::sync::atomic::AtomicBool::new(false);
     let (_, cv) = oauth2::PkceCodeChallenge::new_random_sha256();
+    // The Arc<Mutex<>> stuff is needed here because these entities are shared
+    // from calls to localhost::/login and callback with code to localhost::/?code=...
+    // So we need to save state across these different events in time, and putting
+    // this inside rouille::start_server doesnt seem to retain state, I guess rouille
+    // might be dispatching multiple threads for different callbacks
     let code_verify = Arc::new(Mutex::new(cv));
+    let client_id = Arc::new(Mutex::new("".to_string()));
 
     rouille::start_server("localhost:8180", move |request| {
         router!(request,
@@ -252,9 +258,14 @@ pub fn web_server(client_id: String, schan: fltk::app::Sender<super::gui::Messag
             },
 
             (GET) (/login) => {
+                let mut client = reqwest::Client::builder()
+                .redirect(reqwest::RedirectPolicy::none())
+                .build()
+                .unwrap();
+                *client_id.lock().unwrap() = super::okta_clientid(&controller, &mut client);
                 let (cc, cv) = oauth2::PkceCodeChallenge::new_random_sha256();
                 *code_verify.lock().unwrap() = cv;
-                rouille::Response::redirect_302(authorize_url(&client_id, cc, true))
+                rouille::Response::redirect_302(authorize_url(&client_id.lock().unwrap(), cc, true))
             },
 
             (GET) (/) => {
@@ -275,10 +286,10 @@ pub fn web_server(client_id: String, schan: fltk::app::Sender<super::gui::Messag
                     .redirect(reqwest::RedirectPolicy::none())
                     .build()
                     .unwrap();
-                    let tokens = get_tokens(&client_id, &mut client, code.to_string(), code_verify.clone());
+                    let tokens = get_tokens(&client_id.lock().unwrap(), &mut client, code.to_string(), code_verify.clone());
                     if let Some(t) = tokens {
                         if !onboarded.load(std::sync::atomic::Ordering::Relaxed) {
-                            let cid = client_id.clone();
+                            let cid = client_id.lock().unwrap().to_owned();
                             std::thread::spawn(move || {
                                super::do_onboard(cid, "server.nextensio.net:8080".to_string(), t)
                             });

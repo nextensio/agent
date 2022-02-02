@@ -6,13 +6,13 @@ pub enum Message {
     Login,
 }
 
-pub fn gui_main(client_id: String) {
+pub fn gui_main(controller: String) {
     let a = app::App::default().with_scheme(app::Scheme::Gtk);
     let mut win = window::Window::default().with_size(400, 100);
     let mut col = group::Flex::default_fill().column();
     let (s, r) = app::channel::<Message>();
     let sc = s.clone();
-    std::thread::spawn(|| super::pkce::web_server(client_id, sc));
+    std::thread::spawn(|| super::pkce::web_server(controller, sc));
     let mut login = main_panel(&mut col, s);
     col.end();
     win.resizable(&col);

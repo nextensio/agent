@@ -67,6 +67,7 @@ struct KeepaliveRequest<'a> {
 struct KeepaliveResponse {
     Result: String, // The json response has Caps Result, so we ignore clippy
     version: String,
+    clientid: String,
 }
 
 fn chgroup(name: &str) -> Result<(), nix::Error> {
@@ -301,7 +302,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
+fn do_onboard(mut client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
     let mut access_token = tokens.access_token;
     let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
@@ -320,11 +321,11 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
     }
 
     let mut ka_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(is_testing())
+        .danger_accept_invalid_certs(is_test_mode())
         .build()
         .unwrap();
     let mut onb_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(is_testing())
+        .danger_accept_invalid_certs(is_test_mode())
         .build()
         .unwrap();
 
@@ -338,7 +339,7 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
                 }
             }
             keepalivecount += 1;
-            force_onboard = agent_keepalive(
+            let (force, cid) = agent_keepalive(
                 controller.clone(),
                 access_token.clone(),
                 &version,
@@ -346,6 +347,15 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
                 &public_ip,
                 &hostname,
             );
+            force_onboard = force;
+            if let Some(c) = cid {
+                // If clientid changes while users are connected, this will ensure users will
+                // have minimal impact, the next keepalive will restore sanity, otherwise we
+                // will have to call them up on phone and ask them to restart the agent etc..
+                if !c.is_empty() {
+                    client_id = c;
+                }
+            }
             last_keepalive = now;
         }
         // Okta is configured with one hour as the access token lifetime,
@@ -455,7 +465,7 @@ fn agent_keepalive(
     client: &mut reqwest::Client,
     public_ip: &str,
     hostname: &str,
-) -> bool {
+) -> (bool, Option<String>) {
     let mut stats = AgentStats::default();
     unsafe { agent_stats(&mut stats) };
     let details = KeepaliveRequest {
@@ -480,33 +490,32 @@ fn agent_keepalive(
                     Ok(ks) => {
                         if ks.Result != "ok" {
                             error!("Keepalive from controller not ok {}", ks.Result);
-                            false
+                            (false, None)
+                        } else if version != ks.version {
+                            error!("Keepalive version mismatch {}/{}", version, ks.version);
+                            (true, Some(ks.clientid))
                         } else {
-                            if version != ks.version {
-                                error!("Keepalive version mismatch {}/{}", version, ks.version);
-                                return true;
-                            }
-                            false
+                            (false, Some(ks.clientid))
                         }
                     }
                     Err(e) => {
                         error!("Keepalive HTTP body failed {:?}", e);
-                        false
+                        (false, None)
                     }
                 }
             } else {
                 error!("Keepalive HTTP Get result {}, failed", res.status());
-                false
+                (false, None)
             }
         }
         Err(e) => {
             error!("Keepalive HTTP Get failed {:?}", e);
-            false
+            (false, None)
         }
     }
 }
 
-fn is_testing() -> bool {
+fn is_test_mode() -> bool {
     std::env::var("NXT_TESTING").is_ok()
 }
 
@@ -592,7 +601,7 @@ fn main() {
         }
     }
 
-    if is_testing() && interface.is_empty() {
+    if is_test_mode() && interface.is_empty() {
         interface = "eth0".to_string();
     }
 
@@ -632,7 +641,7 @@ fn main() {
 
     let mut uid: u32 = 0;
 
-    if !is_testing() {
+    if !is_test_mode() {
         cmd("/usr/sbin/addgroup --gid 14963 nextensioapp");
         if chgroup("nextensioapp").is_err() {
             println!("Unable to change group of the client to nextensioapp, exiting");
@@ -680,36 +689,21 @@ fn main() {
         thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
     }
 
-    let mut client_id;
-    let mut client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(is_testing())
-        .redirect(reqwest::RedirectPolicy::none())
-        .build()
-        .unwrap();
-    loop {
-        client_id = okta_clientid(&controller, &mut client);
-        println!("Okta clientid is {}", client_id);
-        if client_id.is_empty() {
-            thread::sleep(std::time::Duration::from_secs(5));
-        } else {
-            break;
-        }
-    }
-    drop(client);
-
-    if !is_testing() && (username.is_empty() || password.is_empty()) {
-        gui::gui_main(client_id);
+    if !is_test_mode() && (username.is_empty() || password.is_empty()) {
+        gui::gui_main(controller);
         cleanup_iptables(interface);
         std::process::exit(0);
     } else {
         let mut client = reqwest::Client::builder()
             .redirect(reqwest::RedirectPolicy::none())
+            .danger_accept_invalid_certs(is_test_mode())
             .build()
             .unwrap();
         loop {
+            let client_id = okta_clientid(&controller, &mut client);
             let token = pkce::authenticate(&client_id, &mut client, &username, &password);
             if let Some(t) = token {
-                thread::spawn(move || do_onboard(client_id.clone(), controller, t));
+                thread::spawn(move || do_onboard(client_id, controller, t));
                 break;
             } else {
                 error!("Login to nextensio failed");
@@ -719,7 +713,6 @@ fn main() {
                 thread::sleep(std::time::Duration::from_secs(5));
             }
         }
-        drop(client);
         loop {
             thread::sleep(std::time::Duration::from_secs(5));
         }
