@@ -12,7 +12,10 @@ use std::time::Duration;
 use std::{ffi::CString, usize};
 use std::{fmt, time::Instant};
 use uuid::Uuid;
+mod gui;
+mod html;
 mod pkce;
+use pnet::datalink;
 
 const MTU: u32 = 1500;
 
@@ -44,6 +47,13 @@ struct OnboardInfo {
     keepalive: usize,
 }
 
+#[allow(non_snake_case)]
+#[derive(Debug, Deserialize)]
+struct ClientId {
+    Result: String, // The json response has Caps Result, so we ignore clippy
+    clientid: String,
+}
+
 #[derive(Serialize)]
 struct KeepaliveRequest<'a> {
     device: &'a str,
@@ -57,6 +67,18 @@ struct KeepaliveRequest<'a> {
 struct KeepaliveResponse {
     Result: String, // The json response has Caps Result, so we ignore clippy
     version: String,
+    clientid: String,
+}
+
+fn chgroup(name: &str) -> Result<(), nix::Error> {
+    match nix::unistd::Group::from_name(name)? {
+        Some(group) => nix::unistd::setgid(group.gid),
+        None => Err(nix::Error::last()),
+    }
+}
+
+fn chuser(uid: u32) -> Result<(), nix::Error> {
+    nix::unistd::setuid(nix::unistd::Uid::from_raw(uid))
 }
 
 impl fmt::Display for OnboardInfo {
@@ -88,7 +110,7 @@ fn cmd(cmd: &str) -> (String, String) {
     (stdout, stderr)
 }
 
-fn cleanup_iptables() {
+fn cleanup_iptables(interface: String) {
     let (out, _) = cmd("ip rule ls");
     for o in out.lines() {
         if !o.is_empty() {
@@ -106,22 +128,64 @@ fn cleanup_iptables() {
         if !o.is_empty() {
             let re = Regex::new(r".*MARK.*set.*0x3a73.*").unwrap();
             if re.is_match(o) {
-                cmd("iptables -D PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+                if !interface.is_empty() {
+                    let c = format!(
+                        "iptables -D PREROUTING -i {} -t mangle -j MARK --set-mark 14963",
+                        interface
+                    );
+                    cmd(&c);
+                }
                 cmd("iptables -D OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
+                iptables_ignore_connected_subnets(false);
             }
         }
     }
+}
+
+// This is required because if we are running inside a linux VM, the default
+// dns server of that VM might be the host. So if we dont add these rules, the
+// dns requests to the host will also be captured and attempt to be sent via
+// the agent tunnel
+fn iptables_ignore_connected_subnets(add: bool) {
+    let mut iptables;
+    if add {
+        iptables = "iptables -A OUTPUT -t mangle -d ".to_owned();
+    } else {
+        iptables = "iptables -D OUTPUT -t mangle -d ".to_owned();
+    }
+    let mut first = true;
+    for iface in datalink::interfaces() {
+        for ip in iface.ips {
+            if let pnet::ipnetwork::IpNetwork::V4(x) = ip {
+                let ipm;
+                if first {
+                    ipm = format!("{}/{}", x.ip(), x.prefix());
+                } else {
+                    ipm = format!(",{}/{}", x.ip(), x.prefix());
+                }
+                first = false;
+                iptables.push_str(&ipm);
+            }
+        }
+    }
+    iptables.push_str(" -j RETURN");
+    cmd(&iptables);
 }
 
 // The numbers 14963, 215 etc.. are chosen to be "random" so that
 // if the user's linux already has other rules, we dont clash with
 // it. Ideally we should probe and find out free numbers to use, this
 // is just a poor man's solution for the time being
-fn add_iptables(test: bool) {
+fn add_iptables(interface: &str) {
     cmd("ip rule add fwmark 14963 table 215");
-    if test {
-        cmd("iptables -A PREROUTING -i eth0 -t mangle -j MARK --set-mark 14963");
+    if !interface.is_empty() {
+        let c = format!(
+            "iptables -A PREROUTING -i {} -t mangle -j MARK --set-mark 14963",
+            interface
+        );
+        cmd(&c);
     } else {
+        iptables_ignore_connected_subnets(true);
         cmd("iptables -A OUTPUT -t mangle -m owner ! --gid-owner nextensioapp -j MARK --set-mark 14963");
     }
 }
@@ -145,7 +209,7 @@ fn is_root() -> bool {
     !err.contains("denied")
 }
 
-fn config_tun(test: bool, mtu: u32) {
+fn config_tun(interface: &str, mtu: u32) {
     cmd("ifconfig tun215 up");
     cmd("ifconfig tun215 169.254.2.1 netmask 255.255.255.0");
     cmd(&format!("ifconfig tun215 mtu {}", mtu));
@@ -153,7 +217,9 @@ fn config_tun(test: bool, mtu: u32) {
         "ip route add default via 169.254.2.1 dev tun215 mtu {} table 215",
         mtu
     ));
-    add_iptables(test);
+    cmd("echo 0 > /proc/sys/net/ipv4/conf/tun215/rp_filter");
+    cmd("echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter");
+    add_iptables(interface);
 }
 
 fn create_tun() -> Result<i32, std::io::Error> {
@@ -236,9 +302,9 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(test: bool, controller: String, username: String, password: String) {
-    let mut access_token;
-    let mut refresh_token;
+fn do_onboard(mut client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
+    let mut access_token = tokens.access_token;
+    let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
     let mut version = "".to_string();
     let mut force_onboard = false;
@@ -254,32 +320,14 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
         hostname = h;
     }
 
-    // TODO: Once we start using proper certs for our production clusters, make this
-    // accept_invalid_certs true only for test environment. Even test environments ideally
-    // should have verifiable certs via a test.nextensio.net domain or something
     let mut ka_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_certs(is_test_mode())
         .build()
         .unwrap();
-    // TODO: Once we start using proper certs for our production clusters, make this
-    // accept_invalid_certs true only for test environment. Even test environments ideally
-    // should have verifiable certs via a test.nextensio.net domain or something
     let mut onb_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_certs(is_test_mode())
         .build()
         .unwrap();
-
-    loop {
-        let token = pkce::authenticate(test, &username, &password);
-        if let Some(t) = token {
-            access_token = t.access_token;
-            refresh_token = t.refresh_token;
-            break;
-        }
-        error!("Cannot get access token");
-        println!("Login to nextensio failed (cannot get tokens), will try again in 10 seconds");
-        thread::sleep(Duration::new(10, 0));
-    }
 
     loop {
         let now = Instant::now();
@@ -291,7 +339,7 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
                 }
             }
             keepalivecount += 1;
-            force_onboard = agent_keepalive(
+            let (force, cid) = agent_keepalive(
                 controller.clone(),
                 access_token.clone(),
                 &version,
@@ -299,19 +347,28 @@ fn do_onboard(test: bool, controller: String, username: String, password: String
                 &public_ip,
                 &hostname,
             );
+            force_onboard = force;
+            if let Some(c) = cid {
+                // If clientid changes while users are connected, this will ensure users will
+                // have minimal impact, the next keepalive will restore sanity, otherwise we
+                // will have to call them up on phone and ask them to restart the agent etc..
+                if !c.is_empty() {
+                    client_id = c;
+                }
+            }
             last_keepalive = now;
         }
         // Okta is configured with one hour as the access token lifetime,
         // refresh at 45 minutes
         if now > refresh + Duration::from_secs(45 * 60) {
-            let token = pkce::refresh(test, &refresh_token);
+            let token = pkce::refresh(&client_id, &refresh_token);
             if let Some(t) = token {
                 access_token = t.access_token;
                 refresh_token = t.refresh_token;
                 refresh = now;
                 error!("Force onboard");
             } else {
-                error!("Refresh token failed, will retry in 30 seconds")
+                error!("Refresh token failed, will retry in 30 seconds");
             }
         }
         if !onboarded || force_onboard {
@@ -408,7 +465,7 @@ fn agent_keepalive(
     client: &mut reqwest::Client,
     public_ip: &str,
     hostname: &str,
-) -> bool {
+) -> (bool, Option<String>) {
     let mut stats = AgentStats::default();
     unsafe { agent_stats(&mut stats) };
     let details = KeepaliveRequest {
@@ -433,29 +490,80 @@ fn agent_keepalive(
                     Ok(ks) => {
                         if ks.Result != "ok" {
                             error!("Keepalive from controller not ok {}", ks.Result);
-                            false
+                            (false, None)
+                        } else if version != ks.version {
+                            error!("Keepalive version mismatch {}/{}", version, ks.version);
+                            (true, Some(ks.clientid))
                         } else {
-                            if version != ks.version {
-                                error!("Keepalive version mismatch {}/{}", version, ks.version);
-                                return true;
-                            }
-                            false
+                            (false, Some(ks.clientid))
                         }
                     }
                     Err(e) => {
                         error!("Keepalive HTTP body failed {:?}", e);
-                        false
+                        (false, None)
                     }
                 }
             } else {
                 error!("Keepalive HTTP Get result {}, failed", res.status());
-                false
+                (false, None)
             }
         }
         Err(e) => {
             error!("Keepalive HTTP Get failed {:?}", e);
-            false
+            (false, None)
         }
+    }
+}
+
+fn is_test_mode() -> bool {
+    std::env::var("NXT_TESTING").is_ok()
+}
+
+fn okta_clientid(controller: &str, client: &mut reqwest::Client) -> String {
+    let get_url = format!(
+        "https://{}/api/v1/global/get/clientid/09876432087648932147823456123768",
+        controller
+    );
+    let resp = client.get(&get_url).send();
+    match resp {
+        Ok(mut res) => {
+            if res.status().is_success() {
+                let onb: Result<ClientId, reqwest::Error> = res.json();
+                match onb {
+                    Ok(o) => {
+                        if o.Result != "ok" {
+                            error!("Clientid: Result from controller not ok {}", o.Result);
+                            println!("Clientid get failed ({}), will try again", o.Result);
+                            "".to_string()
+                        } else {
+                            o.clientid
+                        }
+                    }
+                    Err(e) => {
+                        error!("Clientid: HTTP body failed {:?}", e);
+                        println!("Clientid get  failed ({}), will try again", e);
+                        "".to_string()
+                    }
+                }
+            } else {
+                error!("Clientid: HTTP Get result {}, failed", res.status());
+                println!("Clientid get failed ({}), will try again", res.status());
+                "".to_string()
+            }
+        }
+        Err(e) => {
+            error!("HTTP Get failed {:?}", e);
+            println!("Login to nextensio failed ({}), will try again", e);
+            "".to_string()
+        }
+    }
+}
+
+fn get_idp() -> String {
+    if let Ok(nxtidp) = std::env::var("NXT_IDP") {
+        nxtidp
+    } else {
+        "login.nextensio.net".to_string()
     }
 }
 
@@ -469,8 +577,32 @@ fn main() {
         return;
     }
     if !is_root() {
-        println!("Need to run as sudo: sudo nextensio");
+        println!("Need to run as sudo (for adding iptable mangle rule): \"sudo nextensio\"");
         return;
+    }
+
+    // "test" is true if we are running in a docker container in nextensio testbed
+    // Right now this same layer is used for testbed and real agent - not a lot of
+    // difference between them, but at some point we might seperate out both
+    let mut interface = "".to_string();
+    let mut controller = "server.nextensio.net:8080".to_string();
+    let mut username = "".to_string();
+    let mut password = "".to_string();
+
+    for (key, value) in std::env::vars() {
+        if key == "NXT_USERNAME" {
+            username = value;
+        } else if key == "NXT_PWD" {
+            password = value;
+        } else if key == "NXT_CONTROLLER" {
+            controller = value;
+        } else if key == "NXT_INTERFACE" {
+            interface = value;
+        }
+    }
+
+    if is_test_mode() && interface.is_empty() {
+        interface = "eth0".to_string();
     }
 
     let matches = App::new("NxtAgent")
@@ -479,83 +611,110 @@ fn main() {
                 .long("stop")
                 .help("Disconnect from Nextensio"),
         )
+        .arg(
+            Arg::with_name("text-only")
+                .long("text-only")
+                .help("Text based login"),
+        )
         .get_matches();
 
     if matches.is_present("stop") {
         kill_agent();
-        cleanup_iptables();
+        cleanup_iptables(interface);
         return;
+    }
+    let mut text_only = false;
+    if matches.is_present("text-only") {
+        text_only = true;
     }
 
     if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
+        let intf = interface.clone();
         thread::spawn(move || {
             for sig in signals.forever() {
                 println!("Received signal {:?}, terminating nextensio", sig);
-                cleanup_iptables();
+                cleanup_iptables(intf);
                 std::process::exit(0);
             }
         });
     }
 
-    // "test" is true if we are running in a docker container in nextensio testbed
-    // Right now this same layer is used for testbed and real agent - not a lot of
-    // difference between them, but at some point we might seperate out both
-    let mut test = true;
-    let mut found = 0;
-    let mut controller = "server.nextensio.net:8080".to_string();
-    let mut username = "".to_string();
-    let mut password = "".to_string();
+    let mut uid: u32 = 0;
 
-    for (key, value) in std::env::vars() {
-        if key == "NXT_USERNAME" {
-            username = value;
-            found += 1;
-        } else if key == "NXT_PWD" {
-            password = value;
-            found += 1;
-        } else if key == "NXT_CONTROLLER" {
-            controller = value;
-            found += 1;
-        }
-    }
-
-    if found != 3 {
-        // Add a group to run this app as, this is all temporary till we
-        // figure out a proper installation process on linux for these agents.
-        // The 14963 is just some groupid we pick, its not related to the set-mark
+    if !is_test_mode() {
         cmd("/usr/sbin/addgroup --gid 14963 nextensioapp");
-        unsafe {
-            let ret = libc::setgid(14963);
-            if ret != 0 {
-                println!(
-                    "Unexpected error: Unable to move nextensio app to group nextensioapp {}",
-                    ret
-                );
+        if chgroup("nextensioapp").is_err() {
+            println!("Unable to change group of the client to nextensioapp, exiting");
+            return;
+        }
+        if let Ok(uid_str) = std::env::var("SUDO_UID") {
+            if let Ok(u) = uid_str.parse::<u32>() {
+                uid = u;
+            } else {
+                println!("Unable to parse uid {}, exiting", uid_str);
                 return;
             }
+        } else {
+            println!("Unable to get userid (uid), exiting");
+            return;
         }
-        test = false;
+
         controller = "server.nextensio.net:8080".to_string();
-        print!("Nextensio Username: ");
-        std::io::stdout().flush().unwrap();
-        std::io::stdin()
-            .read_line(&mut username)
-            .expect("Please enter a username");
-        username = username.trim().to_string();
-        print!("Nextensio Password: ");
-        std::io::stdout().flush().unwrap();
-        password = rpassword::read_password().unwrap_or(password);
+        if text_only && (username.is_empty() || password.is_empty()) {
+            print!("Nextensio Username: ");
+            std::io::stdout().flush().unwrap();
+            std::io::stdin()
+                .read_line(&mut username)
+                .expect("Please enter a username");
+            username = username.trim().to_string();
+            print!("Nextensio Password: ");
+            std::io::stdout().flush().unwrap();
+            password = rpassword::read_password().unwrap_or(password);
+        }
         println!("Trying to login to nextensio");
     }
 
     env_logger::init();
     let fd = create_tun().unwrap();
-    config_tun(test, MTU);
+    config_tun(&interface, MTU);
 
-    thread::spawn(move || do_onboard(test, controller, username, password));
+    if uid != 0 && chuser(uid).is_err() {
+        println!("Unable to drop privileges to uid {}, exiting", uid);
+        cleanup_iptables(interface);
+        return;
+    }
 
     unsafe {
         agent_on(fd);
-        agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0);
+        thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
+    }
+
+    if !is_test_mode() && (username.is_empty() || password.is_empty()) {
+        gui::gui_main(controller);
+        cleanup_iptables(interface);
+        std::process::exit(0);
+    } else {
+        let mut client = reqwest::Client::builder()
+            .redirect(reqwest::RedirectPolicy::none())
+            .danger_accept_invalid_certs(is_test_mode())
+            .build()
+            .unwrap();
+        loop {
+            let client_id = okta_clientid(&controller, &mut client);
+            let token = pkce::authenticate(&client_id, &mut client, &username, &password);
+            if let Some(t) = token {
+                thread::spawn(move || do_onboard(client_id, controller, t));
+                break;
+            } else {
+                error!("Login to nextensio failed");
+                println!("Login to nextensio failed");
+                error!("Retrying after 5 seconds");
+                println!("Retrying after 5 seconds");
+                thread::sleep(std::time::Duration::from_secs(5));
+            }
+        }
+        loop {
+            thread::sleep(std::time::Duration::from_secs(5));
+        }
     }
 }

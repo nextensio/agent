@@ -135,7 +135,7 @@ public class NxtApp extends Application {
     }
 
     private void refresh() {
-        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0rc5g0E3irFto5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0q3hn65I4Zkmr5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
         String url = urlBuilder.build().toString();
         RequestBody reqbody = RequestBody.create(null, new byte[0]);  
         try {
@@ -171,7 +171,12 @@ public class NxtApp extends Application {
         JSONObject json = new JSONObject();
         try {
             json.put("device", Build.HOST + " " + Build.BRAND + " " + Build.MANUFACTURER + " " + Build.MODEL);
-            json.put("gateway", stats.gateway_ip);
+            if (stats.gateway_ip < 0) {
+                long g = stats.gateway_ip & 0x00000000ffffffffL;
+                json.put("gateway", g);
+            } else {
+                json.put("gateway", stats.gateway_ip);
+            }
             json.put("version", last_version);
             json.put("source", publicIP);
         }  catch (final JSONException e)  {
@@ -188,10 +193,15 @@ public class NxtApp extends Application {
             Response res = client.newCall(request).execute();
             try {
                 JSONObject response = new JSONObject(res.body().string());
+                String result = response.getString("Result");
                 String version = response.getString("version");
-                if (!version.equals(last_version)) {
-                    Log.i(TAG, "Version mismatch: " + version + ":" + last_version);
-                    force_onboard = true;
+                if (result.equals("ok")) {
+                    if (!version.equals(last_version)) {
+                        Log.i(TAG, "Version mismatch: " + version + ":" + last_version );
+                        force_onboard = true;
+                    }
+                } else {
+                    Log.i(TAG, "Result: " + "[" + result + "]" + " json: " + json);
                 }
             } catch (final JSONException e)  {
                 Log.i(TAG, "Keepalive json exception: " + e.getMessage());
@@ -212,6 +222,7 @@ public class NxtApp extends Application {
             Response res = client.newCall(request).execute();
             try {
                 JSONObject response = new JSONObject(res.body().string());
+                Log.i(TAG, "Onboard response: " + response);
                 agentOnboard(response);
             } catch (final JSONException e)  {
                 Log.i(TAG, "Onboard json exception: " + e.getMessage());

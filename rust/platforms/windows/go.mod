@@ -6,7 +6,10 @@ require (
 	fyne.io/fyne/v2 v2.1.0
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.3.0
-	gitlab.com/nextensio/common/go v0.0.0-20211015145730-3ad8a98d08ed
+	github.com/okta/okta-jwt-verifier-golang v1.1.2
+	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
+	github.com/shirou/gopsutil v3.21.9+incompatible
+	gitlab.com/nextensio/common/go v0.0.0-20211030183027-72ded9c500f3
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac
 	golang.zx2c4.com/wireguard v0.0.0-20211011205753-982d5d2e8491
@@ -21,11 +24,18 @@ require (
 	github.com/go-gl/gl v0.0.0-20210813123233-e4099ee2221f // indirect
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20210410170116-ea3d685f79fb // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
+	github.com/goccy/go-json v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/goki/freetype v0.0.0-20181231101311-fa8a33aabaff // indirect
+	github.com/lestrrat-go/backoff/v2 v2.0.7 // indirect
+	github.com/lestrrat-go/httpcc v1.0.0 // indirect
+	github.com/lestrrat-go/iter v1.0.0 // indirect
+	github.com/lestrrat-go/jwx v1.1.1 // indirect
+	github.com/lestrrat-go/option v1.0.0 // indirect
+	github.com/patrickmn/go-cache v0.0.0-20180815053127-5633e0862627 // indirect
 	github.com/pion/dtls/v2 v2.0.4 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/shirou/gopsutil v3.21.9+incompatible // indirect
 	github.com/srwiley/oksvg v0.0.0-20200311192757-870daf9aa564 // indirect
 	github.com/srwiley/rasterx v0.0.0-20200120212402-85cb7272f5e9 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect

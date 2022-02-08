@@ -4,7 +4,14 @@ version = "0.1.0"
 authors = ["Nextensio <team@nextensio.net>"]
 edition = "2018"
 
+# fltk introduces a wierd issue with openssl, see https://github.com/fltk-rs/fltk-rs/issues/1102
+# To workaround that we use vendored native-tls. Plus its probably a good idea to do that anyways
+# because we dont want to rely on the target system having openssl installed etc..
+
 [dependencies]
+native-tls = {version = "0.2", features = ["vendored"]}
+reqwest = { version = "0.9.24", features = ["native-tls"]}
+rouille = "3.5.0"
 log = "0.4.14"
 env_logger = "0.8.3"
 libc = "0.2.86"
@@ -15,7 +22,10 @@ oauth2 = "3.0"
 rpassword = "5.0"
 signal-hook = "0.3.9"
 gethostname = "0.2.1"
-reqwest = { version = "0.9.24", features = ["tls"]}
+pnet = "0.26.0"
 uuid = { version = "0.8", features = ["v4"] }
 clap = "2.33.3"
 agent = { path = "../../agent" }
+fltk = { version = "^1.2", features = ["fltk-bundled"] }
+open = "2.0.2"
+nix = "0.23.1"

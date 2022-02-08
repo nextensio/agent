@@ -36,11 +36,17 @@ struct AgentStats
 
 extern void agent_init(uint32_t platform, uint32_t direct, uint32_t mtu, uint32_t highmem, uint32_t tcp_port);
 extern void agent_on(int tun_fd);
+extern int agent_progress();
 extern void agent_off();
 extern void onboard(struct CRegistrationInfo reginfo);
 extern void agent_stats(struct AgentStats *stats);
 
 #define MTU 1500
+
+JNIEXPORT jint JNICALL Java_nextensio_agent_NxtAgent_nxtProgress(JNIEnv *env, jclass c, jint direct)
+{
+    return agent_progress();
+}
 
 JNIEXPORT jint JNICALL Java_nextensio_agent_NxtApp_nxtInit(JNIEnv *env, jclass c, jint direct)
 {

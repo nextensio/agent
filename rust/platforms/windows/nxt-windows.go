@@ -13,8 +13,10 @@ import "C"
 import (
 	"bufio"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net"
 	"os"
@@ -35,6 +37,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	"github.com/pkg/browser"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/host"
@@ -47,6 +50,9 @@ import (
 	"golang.zx2c4.com/wireguard/windows/tunnel/firewall"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
+
+//go:embed templates/*
+var files embed.FS
 
 var fromAgent net.PacketConn
 var toAgent net.Addr
@@ -62,14 +68,18 @@ var regInfoLock sync.RWMutex
 var unique uuid.UUID
 var username string
 var password string
-var idp string
-var clientid string
+var IDP string
+var ISSUER string
+var CLIENT_ID string
 var luid *winipcfg.LUID
 var loginStatus *widget.Button
+var progress *widget.ProgressBar
 var watcher *interfaceWatcher
 var myApp fyne.App
 var pool common.NxtPool
 var sinfo SysInfo
+var TOKENS *accessIdTokens
+var loggedIn = false
 
 // SysInfo saves the basic system information
 type SysInfo struct {
@@ -260,27 +270,32 @@ func credentials() (string, string) {
 	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
 
-func monitorController(lg *log.Logger, tokens *accessIdTokens) {
+func monitorController(lg *log.Logger) {
 	var keepalive uint = 30
 	force_onboard := false
 
 	refresh := time.Now()
 	last_keepalive := time.Now()
 	for {
+		// Well we cant do much till we authenticate and get tokens
+		if TOKENS == nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
 		if onboarded {
 			if uint(time.Since(last_keepalive).Seconds()) >= keepalive {
-				force_onboard = ControllerKeepalive(lg, controller, tokens.AccessToken, regInfo.Version, uniqueId)
+				force_onboard = ControllerKeepalive(lg, controller, TOKENS.AccessToken, regInfo.Version, uniqueId)
 				last_keepalive = time.Now()
 			}
 		}
 		// Okta is configured with one hour as the access token lifetime,
 		// refresh at 45 minutes
 		if time.Since(refresh).Minutes() >= 45 {
-			tokens = refreshTokens(idp, clientid, tokens.Refresh)
-			if tokens != nil {
+			TOKENS = refreshTokens(IDP, CLIENT_ID, TOKENS.Refresh)
+			if TOKENS != nil {
 				refresh = time.Now()
 				regInfoLock.Lock()
-				regInfo.AccessToken = tokens.AccessToken
+				regInfo.AccessToken = TOKENS.AccessToken
 				regInfoLock.Unlock()
 			} else {
 				lg.Println("Token refresh failed, will try again in 30 seconds")
@@ -288,7 +303,7 @@ func monitorController(lg *log.Logger, tokens *accessIdTokens) {
 		}
 		if !onboarded || force_onboard {
 			fmt.Println("Forcing onboard")
-			if ControllerOnboard(lg, controller, tokens.AccessToken) {
+			if ControllerOnboard(lg, controller, TOKENS.AccessToken) {
 				onboarded = true
 				force_onboard = false
 				if regInfo.Keepalive == 0 {
@@ -509,6 +524,25 @@ func vpnRoutes() {
 	}
 }
 
+func monitorProgress(lg *log.Logger) {
+	for {
+		if !loggedIn {
+			loginStatus.Text = "Login"
+			progress.SetValue(0)
+		} else {
+			p := C.agent_progress()
+			if p != 3 {
+				loginStatus.Text = "Authenticated, connecting.."
+			} else {
+				loginStatus.Text = "Authenticated, connected"
+			}
+			progress.SetValue(1 + float64(p))
+		}
+		loginStatus.Refresh()
+		time.Sleep(time.Second)
+	}
+}
+
 func UIEventLoop() {
 	myApp = app.New()
 	w := myApp.NewWindow("Login")
@@ -516,28 +550,18 @@ func UIEventLoop() {
 	w.SetOnClosed(func() {
 	})
 
-	u := widget.NewEntry()
-	p := widget.NewPasswordEntry()
+	progress = widget.NewProgressBar()
+	progress.Min = 0
+	progress.Max = 4
 	loginStatus = widget.NewButton("Login", func() {
-		username = u.Text
-		password = p.Text
-		loginStatus.Text = "Logging user in"
-		tokens := authenticate(idp, clientid, username, password)
-		if tokens != nil {
-			loginStatus.Text = "Logged in"
-			loginStatus.Disable()
-			go monitorController(lg, tokens)
-		} else {
-			loginStatus.Text = "Login failed, please try again"
-		}
+		browser.OpenURL("http://localhost:8180/login")
 	})
-
 	w.SetContent(container.NewVBox(
-		u,
-		p,
 		loginStatus,
+		progress,
 	))
 
+	go monitorProgress(lg)
 	w.ShowAndRun()
 }
 
@@ -727,15 +751,22 @@ func getGatewayIP() uint32 {
 	return uint32(stats.gateway_ip)
 }
 
+func init() {
+	tpl = template.Must(template.ParseFS(files, "templates/*"))
+}
+
 func main() {
 	getSysInfo()
 	lg = log.New(os.Stdout, "Nextensio: ", 0)
 	unique = uuid.New()
 	uniqueId = unique.String()
-	idp = "https://login.nextensio.net"
-	clientid = "0oav0q3hn65I4Zkmr5d6"
+	IDP = "https://login.nextensio.net"
+	ISSUER = IDP + "/oauth2/default"
+	CLIENT_ID = "0oav0q3hn65I4Zkmr5d6"
 	controller = "server.nextensio.net:8080"
 	go postLogin()
+	go monitorController(lg)
+	go handleLogin()
 	UIEventLoop()
 	lg.Printf("Shutting down")
 	if watcher != nil {

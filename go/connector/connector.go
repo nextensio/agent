@@ -233,6 +233,8 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 				newFlow := *flow
 				newFlow.ProcessingDuration = uint64(elapsed)
 				hdrFlow = &newFlow
+				//Set the flow.TraceCtx to NULL after the first pkt as we dont need to carry the same traceCtx
+				flow.TraceCtx = ""
 			} else {
 				hdrFlow = flow
 			}
@@ -424,15 +426,20 @@ func getClusterName(gateway string) string {
 func args() (*log.Logger, *os.File) {
 	var fptr *os.File
 	var err error
+	var version bool
 
 	c := flag.String("controller", "server.nextensio.net:8080", "controller host:port")
 	gateway = flag.String("gateway", "gateway.nextensio.net", "Gateway name")
 	keyFile = flag.String("key", "/opt/nextensio/connector.key", "Secret Key file name")
 	p := flag.String("ports", "", "Ports to listen on, comma seperated")
 	logFile := flag.String("logfile", "/tmp/connector.log", "Log file name")
-	flag.Bool("v[ersion]", false, "Show the Connector version information")
+	flag.BoolVar(&version, "version", false, "Show the Connector version information")
 	flag.Parse()
 
+	if version {
+		fmt.Printf("Connector version - %s \n", Version)
+		os.Exit(0)
+	}
 	if *logFile != "" {
 		fmt.Println("Creating logfile ", *logFile)
 		fptr, err = os.OpenFile(*logFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
@@ -514,11 +521,6 @@ func main() {
 	gwStreams = make(chan common.NxtStream)
 	appStreams = make(chan common.NxtStream)
 	flows = make(map[flowKey]*flowTuns)
-	// Check for -v[ersion] flag
-	if (len(os.Args) > 1) && (os.Args[1] == "-v" || os.Args[1] == "-V" || os.Args[1] == "-version") {
-		fmt.Printf("Connector version - %s \n", Version)
-		return
-	}
 	lg, fptr := args()
 	if fptr != nil {
 		defer fptr.Close()

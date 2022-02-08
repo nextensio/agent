@@ -54,3 +54,5 @@ void agent_off(void);
 void onboard(struct CRegistrationInfo info);
 
 void agent_stats(struct AgentStats *stats);
+
+int agent_progress(void);

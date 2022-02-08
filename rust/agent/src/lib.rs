@@ -58,6 +58,7 @@ static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
 static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
 static CUR_GATEWAY_IP: AtomicU32 = AtomicU32::new(0);
 static AGENT_STARTED: AtomicUsize = AtomicUsize::new(0);
+static AGENT_PROGRESS: AtomicUsize = AtomicUsize::new(0);
 const NXT_AGENT_PROXY: usize = 8181;
 
 const UNUSED_IDX: usize = 0;
@@ -266,7 +267,6 @@ struct FlowV4 {
     dest_agent: String,
     active: bool,
     trace_request: bool,
-    trace_response: bool,
 }
 
 enum TunFlow {
@@ -325,20 +325,24 @@ impl TunInfo {
 // This actually should be target-os linux AND target-arch x86_64, rdtsc is x86 only
 #[cfg(target_os = "linux")]
 struct AgentPerf {
-    _counters: Counters,
-    _perf_cnt: Perf,
+    _counters: Option<Counters>,
+    _perf_cnt: Option<Perf>,
 }
 
 #[cfg(target_os = "linux")]
 fn alloc_perf() -> AgentPerf {
     // the r2cnt utility expects a counter name of r2cnt, this can be changed later to
-    // pass in some name of our choice
+    // pass in some name of our choice. Also r2cnt needs shared mem access to create 
+    // the counter stats, so run the agent as root and uncomment this when perf measurement
+    // is needed
+    /*
     let mut _counters = Counters::new("r2cnt").unwrap();
     let _perf_cnt = Perf::new("perf_cnt1", &mut _counters);
     AgentPerf {
         _counters,
         _perf_cnt,
-    }
+    }*/
+    AgentPerf {_counters: None, _perf_cnt: None}
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -563,7 +567,6 @@ fn flow_new(
         parse_pending: None,
         active: false,
         trace_request: true,
-        trace_response: true,
     };
     if need_parsing {
         parse_pending.insert(key.clone(), ());
@@ -679,6 +682,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
         },
         Ok(_) => {
             error!("Onboard message sent (ok)");
+            AGENT_PROGRESS.store(2, Relaxed);
         }
     }
 }
@@ -777,6 +781,7 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                         );
                         tun.keepalive = Instant::now();
                         agent.ext.gw_onboarded = true;
+                        AGENT_PROGRESS.store(3, Relaxed);
                     }
                     Hdr::Flow(_) => {
                         let mut found = false;
@@ -1212,6 +1217,9 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
     let hdr = hdr.unwrap();
     match hdr.hdr.unwrap() {
         Hdr::Flow(f) => {
+            if f.trace_ctx.is_empty() {
+                return;
+            }
             trace.trace_ctx = f.trace_ctx;
             trace.processing_duration = rxtime.elapsed().as_nanos() as u64;
             trace.source = f.source;
@@ -1259,10 +1267,7 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
 fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun) {
     while let Some(mut rx) = flow.pending_rx.pop_front() {
         let hdr = rx.hdr.take();
-        let mut rxtime = None;
-        if hdr.is_some() && flow.trace_response {
-            rxtime = Some(Instant::now());
-        }
+        let rxtime = Instant::now();
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
                 EWOULDBLOCK => {
@@ -1279,11 +1284,8 @@ fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun) {
             },
             Ok(_) => {
                 flow_alive(key, flow);
-                if hdr.is_some() && flow.trace_response {
-                    if let Some(rt) = rxtime {
-                        send_trace_info(rt, hdr, tun);
-                        flow.trace_response = false;
-                    }
+                if hdr.is_some() {
+                    send_trace_info(rxtime, hdr, tun);
                 }
             }
         }
@@ -1604,6 +1606,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
     if !agent.ext.idp_onboarded {
         return;
     }
+    AGENT_PROGRESS.store(0, Relaxed);
     if let Some(websocket) =
         dial_gateway(&agent.ext.reginfo, &agent.ext.pkt_pool, &agent.ext.tcp_pool)
     {
@@ -1626,6 +1629,7 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
             Ok(_) => {
                 error!("Gateway Transport Registered");
                 agent.tuns.insert(GWTUN_IDX, TunInfo::Tun(tun));
+                AGENT_PROGRESS.store(1, Relaxed);
             }
         }
     }
@@ -2478,6 +2482,14 @@ pub unsafe extern "C" fn agent_init(
 #[no_mangle]
 pub unsafe extern "C" fn agent_started() -> usize {
     AGENT_STARTED.load(Relaxed)
+}
+
+/// # Safety
+/// This is marked unsafe purely because of extern C, otherwise there
+/// is no memory unsafe operations done in this API
+#[no_mangle]
+pub unsafe extern "C" fn agent_progress() -> usize {
+    AGENT_PROGRESS.load(Relaxed)
 }
 
 /// # Safety
