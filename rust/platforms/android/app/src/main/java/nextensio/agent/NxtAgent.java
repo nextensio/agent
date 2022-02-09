@@ -49,14 +49,7 @@ public class NxtAgent extends AppCompatActivity {
     private boolean firstSignin = false;
     private Timer timer;
     private TimerTask timerTask;
-
-    private OIDCConfig mOidcConfig = new OIDCConfig.Builder()
-    .clientId("0oav0q3hn65I4Zkmr5d6")
-    .redirectUri("nextensio.agent:/login")
-    .endSessionRedirectUri("nextensio.agent:/logout")
-    .scopes("openid", "email", "profile", "offline_access")
-    .discoveryUri("https://login.nextensio.net/oauth2/default")
-    .create();
+    private boolean authClientCreated = false;
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {
 
@@ -94,10 +87,69 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
+    private void createAuthClient() {
+        NxtApp app = (NxtApp) this.getApplicationContext();
+        OIDCConfig mOidcConfig = new OIDCConfig.Builder()
+                .clientId(app.GetClientid())
+                .redirectUri("nextensio.agent:/login")
+                .endSessionRedirectUri("nextensio.agent:/logout")
+                .scopes("openid", "email", "profile", "offline_access")
+                .discoveryUri("https://login.nextensio.net/oauth2/default")
+                .create();
+
+        authClient = new Okta.WebAuthBuilder()
+        .withConfig(mOidcConfig)
+        .withContext(app)
+        .supportedBrowsers(ANDROID_BROWSER, FIRE_FOX)
+        .setCacheMode(false).create();
+
+        sessionClient = authClient.getSessionClient();
+        authClient.registerCallback(new ResultCallback<AuthorizationStatus, AuthorizationException>() {
+            @Override
+            public void onSuccess(@NonNull AuthorizationStatus status) {
+                if (status == AuthorizationStatus.AUTHORIZED) {
+                    try {
+                        //client is authorized.
+                        Tokens tokens = sessionClient.getTokens();
+                        app.SetTokens(agentService, tokens.getAccessToken(), tokens.getRefreshToken());
+                    } catch (AuthorizationException exception) {
+                        return;
+                    }
+                } else if (status == AuthorizationStatus.SIGNED_OUT) {
+                    // TODO: We need to tell agent about this so agent can stop forwarding and tear
+                    // down tunnels etc..
+                }
+            }
+    
+            @Override
+            public void onCancel() {
+            }
+    
+            @Override
+            public void onError(@Nullable String s, @Nullable AuthorizationException e) {
+            }
+        }, this);
+    }
+    
     private void vpnStatus() {
         final Button vpnButton = (Button) findViewById(R.id.vpn);
         final ProgressBar pbar =(ProgressBar) findViewById(R.id.progress); 
+        NxtApp app = (NxtApp) this.getApplicationContext();
+
         vpnButton.setEnabled(true);
+
+        String clientid = app.GetClientid();
+        if (clientid.equals("")) {
+            vpnButton.setText(R.string.clientid_fetch);
+            pbar.setProgress(0);
+            return;
+        } else {
+            if (authClientCreated == false) {
+                createAuthClient();
+                authClientCreated = true;
+            }
+        }
+
         if (agentService == null || !agentService.vpnReady) {
             vpnButton.setText(R.string.start_agent);
             pbar.setProgress(0);
@@ -139,7 +191,7 @@ public class NxtAgent extends AppCompatActivity {
             Log.i(TAG, "Existing Vpn Intent");
         }
     }
-
+    
     void signin() {
         authClient.signIn(this, null);
         Log.i(TAG, "User signin");
@@ -164,7 +216,7 @@ public class NxtAgent extends AppCompatActivity {
         }
     }
 
-    // When the app is created, android calls onCreate() followed by onResume().
+    // When the activity is created, android calls onCreate() followed by onResume().
     // onResume() is also called when the app goes from background to foreground.
     // When the app is created, we just setup the buttons and other UI elements. 
     // After that when the user clicks the buttons etc.., the registered callbacks 
@@ -173,40 +225,6 @@ public class NxtAgent extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_nextensio);
-        NxtApp app = (NxtApp) this.getApplicationContext();
-
-        authClient = new Okta.WebAuthBuilder()
-        .withConfig(mOidcConfig)
-        .withContext(app)
-        .supportedBrowsers(ANDROID_BROWSER, FIRE_FOX)
-        .setCacheMode(false).create();
-
-        sessionClient = authClient.getSessionClient();
-        authClient.registerCallback(new ResultCallback<AuthorizationStatus, AuthorizationException>() {
-            @Override
-            public void onSuccess(@NonNull AuthorizationStatus status) {
-                if (status == AuthorizationStatus.AUTHORIZED) {
-                    try {
-                        //client is authorized.
-                        Tokens tokens = sessionClient.getTokens();
-                        app.SetTokens(agentService, tokens.getAccessToken(), tokens.getRefreshToken());
-                    } catch (AuthorizationException exception) {
-                        return;
-                    }
-                } else if (status == AuthorizationStatus.SIGNED_OUT) {
-                    // TODO: We need to tell agent about this so agent can stop forwarding and tear
-                    // down tunnels etc..
-                }
-            }
-    
-            @Override
-            public void onCancel() {
-            }
-    
-            @Override
-            public void onError(@Nullable String s, @Nullable AuthorizationException e) {
-            }
-        }, this);
 
         // Setup the button to turn the vpn on/off
         final Button vpnButton = (Button)findViewById(R.id.vpn);
