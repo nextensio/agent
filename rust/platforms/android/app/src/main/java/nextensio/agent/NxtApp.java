@@ -225,7 +225,7 @@ public class NxtApp extends Application {
                 Log.i(TAG, "Onboard response: " + response);
                 agentOnboard(response);
             } catch (final JSONException e)  {
-                Log.i(TAG, "Onboard json exception: " + e.getMessage());
+                Log.i(TAG, "Onboard json exception: " + e.getMessage() + "resp: " + res.body().string());
             }
         }  catch (IOException e) {
             Log.i(TAG, "Onboard fail " + e.getMessage());

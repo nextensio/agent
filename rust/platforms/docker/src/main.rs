@@ -521,7 +521,7 @@ fn is_test_mode() -> bool {
 
 fn okta_clientid(controller: &str, client: &mut reqwest::Client) -> String {
     let get_url = format!(
-        "https://{}/api/v1/global/get/clientid/09876432087648932147823456123768",
+        "https://{}/api/v1/noauth/clientid/09876432087648932147823456123768",
         controller
     );
     let resp = client.get(&get_url).send();
@@ -563,7 +563,7 @@ fn get_idp() -> String {
     if let Ok(nxtidp) = std::env::var("NXT_IDP") {
         nxtidp
     } else {
-        "login.nextensio.net".to_string()
+        "https://login.nextensio.net".to_string()
     }
 }
 
