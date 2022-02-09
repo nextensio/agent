@@ -104,6 +104,8 @@ public class NxtApp extends Application {
                             Activity activity = new Activity();
                             activity.finishAffinity();
                             activity.finishAndRemoveTask();
+                            // TODO: We should restart the app automatically or at least 
+                            // somehow let the user know why we are killing ourselves
                         }
                         clientid = cid;
                     }
@@ -248,6 +250,8 @@ public class NxtApp extends Application {
                      Activity activity = new Activity();
                      activity.finishAffinity();
                      activity.finishAndRemoveTask();
+                     // TODO: We should restart the app automatically or at least 
+                     // somehow let the user know why we are killing ourselves
                 }
                 if (result.equals("ok")) {
                     if (!version.equals(last_version)) {

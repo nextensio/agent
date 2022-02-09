@@ -302,7 +302,7 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(mut client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
+fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
     let mut access_token = tokens.access_token;
     let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
@@ -311,6 +311,7 @@ fn do_onboard(mut client_id: String, controller: String, tokens: pkce::AccessIdT
     let uuid = Uuid::new_v4();
     let mut keepalive: usize = 30;
     let mut last_keepalive = Instant::now();
+    let mut last_cid = Instant::now();
     let mut refresh = Instant::now();
     let mut keepalivecount = 0;
     let mut public_ip = "".to_string();
@@ -328,9 +329,24 @@ fn do_onboard(mut client_id: String, controller: String, tokens: pkce::AccessIdT
         .danger_accept_invalid_certs(is_test_mode())
         .build()
         .unwrap();
+    let mut okta_client = reqwest::Client::builder()
+        .redirect(reqwest::RedirectPolicy::none())
+        .danger_accept_invalid_certs(is_test_mode())
+        .build()
+        .unwrap();
 
     loop {
         let now = Instant::now();
+        if now > last_cid + Duration::from_secs(5 * 60 as u64) {
+            let c = okta_clientid(&controller, &mut okta_client);
+            // TODO: We should restart the app automatically or at least
+            // somehow let the user know why we are killing ourselves
+            if !c.is_empty() && !client_id.is_empty() && c != client_id {
+                error!("Clientid changed {} {}", c, client_id);
+                std::process::exit(1);
+            }
+            last_cid = now;
+        }
         if onboarded && now > last_keepalive + Duration::from_secs(keepalive as u64) {
             if (keepalivecount % 4) == 0 {
                 let p = get_public_ip();
@@ -352,8 +368,11 @@ fn do_onboard(mut client_id: String, controller: String, tokens: pkce::AccessIdT
                 // If clientid changes while users are connected, this will ensure users will
                 // have minimal impact, the next keepalive will restore sanity, otherwise we
                 // will have to call them up on phone and ask them to restart the agent etc..
-                if !c.is_empty() {
-                    client_id = c;
+                // TODO: We should restart the app automatically or at least
+                // somehow let the user know why we are killing ourselves
+                if !c.is_empty() && !client_id.is_empty() && c != client_id {
+                    error!("Clientid changed {} {}", c, client_id);
+                    std::process::exit(1);
                 }
             }
             last_keepalive = now;
