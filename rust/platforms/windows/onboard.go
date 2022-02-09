@@ -168,3 +168,39 @@ func ControllerKeepalive(lg *log.Logger, controller string, accessToken string, 
 	}
 	return false
 }
+
+type ClientidResponse struct {
+	Result   string `json:"Result"`
+	Clientid string `json:"clientid"`
+}
+
+func fetchClientid(lg *log.Logger, controller string) string {
+	var cid ClientidResponse
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+	}
+	client := &http.Client{Transport: tr}
+	req, err := http.NewRequest("GET", "https://"+controller+"/api/v1/noauth/clientid/09876432087648932147823456123768", nil)
+	if err == nil {
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err == nil {
+				err = json.Unmarshal(body, &cid)
+				if err == nil && cid.Result == "ok" {
+					lg.Println("Agent succesfully fetched clientid", cid.Clientid)
+					return cid.Clientid
+				} else {
+					lg.Println("fetchClientid: Json unmarshall failed", err, cid)
+				}
+			} else {
+				lg.Println("fetchClientid: json failed", err)
+			}
+		} else {
+			lg.Println("fetchClientid: request failed", err)
+		}
+	}
+	lg.Println("fetchClientid failed", err)
+	return ""
+}

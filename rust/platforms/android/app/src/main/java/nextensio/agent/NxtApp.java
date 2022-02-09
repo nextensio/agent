@@ -107,7 +107,9 @@ public class NxtApp extends Application {
                             // TODO: We should restart the app automatically or at least 
                             // somehow let the user know why we are killing ourselves
                         }
-                        clientid = cid;
+                        if (!cid.equals("")) {
+                            clientid = cid;
+                        }
                     }
                     if (!accessToken.equals("")) {
                         doOnboard(); 

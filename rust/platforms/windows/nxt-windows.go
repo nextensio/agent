@@ -276,7 +276,19 @@ func monitorController(lg *log.Logger) {
 
 	refresh := time.Now()
 	last_keepalive := time.Now()
+	last_clientid := time.Now()
 	for {
+		if CLIENT_ID == "" || time.Since(last_clientid).Seconds() >= 10 {
+			cid := fetchClientid(lg, controller)
+			if cid != "" && CLIENT_ID != "" && cid != CLIENT_ID {
+				lg.Panicln("Client id mismatch", cid, CLIENT_ID)
+				os.Exit(1)
+			}
+			if cid != "" {
+				CLIENT_ID = cid
+			}
+			last_clientid = time.Now()
+		}
 		// Well we cant do much till we authenticate and get tokens
 		if TOKENS == nil {
 			time.Sleep(1 * time.Second)
@@ -526,7 +538,10 @@ func vpnRoutes() {
 
 func monitorProgress(lg *log.Logger) {
 	for {
-		if !loggedIn {
+		if CLIENT_ID == "" {
+			loginStatus.Text = "Loading configs.."
+			progress.SetValue(0)
+		} else if !loggedIn {
 			loginStatus.Text = "Login"
 			progress.SetValue(0)
 		} else {
@@ -762,7 +777,7 @@ func main() {
 	uniqueId = unique.String()
 	IDP = "https://login.nextensio.net"
 	ISSUER = IDP + "/oauth2/default"
-	CLIENT_ID = "0oav0q3hn65I4Zkmr5d6"
+	CLIENT_ID = ""
 	controller = "server.nextensio.net:8080"
 	go postLogin()
 	go monitorController(lg)
