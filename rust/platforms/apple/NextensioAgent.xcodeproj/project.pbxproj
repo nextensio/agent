@@ -28,13 +28,11 @@
 		6B94CFC726293D4C00D27909 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B94CFC126293D4000D27909 /* NetworkExtension.framework */; };
 		6BB0152D260666DF00EA4881 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0151F260666DF00EA4881 /* Assets.xcassets */; };
 		6BB0152E260666DF00EA4881 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BB01521260666DF00EA4881 /* Main.storyboard */; };
-		6BB0152F260666DF00EA4881 /* Okta.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB01522260666DF00EA4881 /* Okta.plist */; };
 		6BB01530260666DF00EA4881 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB01523260666DF00EA4881 /* AppDelegate.swift */; };
 		6BB01532260666DF00EA4881 /* SignInViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB01525260666DF00EA4881 /* SignInViewController.swift */; };
 		6BB015452606681100EA4881 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0153A2606681100EA4881 /* Assets.xcassets */; };
 		6BB015462606681100EA4881 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0153C2606681100EA4881 /* LaunchScreen.storyboard */; };
 		6BB015472606681100EA4881 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BB0153E2606681100EA4881 /* Main.storyboard */; };
-		6BB015482606681100EA4881 /* Okta.plist in Resources */ = {isa = PBXBuildFile; fileRef = 6BB015402606681100EA4881 /* Okta.plist */; };
 		6BB015492606681100EA4881 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015412606681100EA4881 /* AppDelegate.swift */; };
 		6BB0155C2606682C00EA4881 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */; };
 		6BB015622606682D00EA4881 /* Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB0155A2606682C00EA4881 /* Socket.swift */; };
@@ -127,7 +125,6 @@
 		6BB0151F260666DF00EA4881 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6BB01520260666DF00EA4881 /* NextensioAppMacDebug.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioAppMacDebug.entitlements; sourceTree = "<group>"; };
 		6BB01521260666DF00EA4881 /* Main.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
-		6BB01522260666DF00EA4881 /* Okta.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Okta.plist; sourceTree = "<group>"; };
 		6BB01523260666DF00EA4881 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6BB01524260666DF00EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB01525260666DF00EA4881 /* SignInViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignInViewController.swift; sourceTree = "<group>"; };
@@ -135,7 +132,6 @@
 		6BB0153B2606681100EA4881 /* NextensioApp.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = NextensioApp.entitlements; sourceTree = "<group>"; };
 		6BB0153D2606681100EA4881 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		6BB0153F2606681100EA4881 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
-		6BB015402606681100EA4881 /* Okta.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Okta.plist; sourceTree = "<group>"; };
 		6BB015412606681100EA4881 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6BB015422606681100EA4881 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BB015552606682C00EA4881 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
@@ -286,7 +282,6 @@
 				6BB0151E260666DF00EA4881 /* ViewController.swift */,
 				6BB0151F260666DF00EA4881 /* Assets.xcassets */,
 				6BB01521260666DF00EA4881 /* Main.storyboard */,
-				6BB01522260666DF00EA4881 /* Okta.plist */,
 				6BB01523260666DF00EA4881 /* AppDelegate.swift */,
 				6BB01524260666DF00EA4881 /* Info.plist */,
 				6BB01525260666DF00EA4881 /* SignInViewController.swift */,
@@ -304,7 +299,6 @@
 				6BB0153B2606681100EA4881 /* NextensioApp.entitlements */,
 				6BB0153C2606681100EA4881 /* LaunchScreen.storyboard */,
 				6BB0153E2606681100EA4881 /* Main.storyboard */,
-				6BB015402606681100EA4881 /* Okta.plist */,
 				6BB015412606681100EA4881 /* AppDelegate.swift */,
 				6BB015422606681100EA4881 /* Info.plist */,
 			);
@@ -512,7 +506,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				6BB0152D260666DF00EA4881 /* Assets.xcassets in Resources */,
-				6BB0152F260666DF00EA4881 /* Okta.plist in Resources */,
 				6BB0152E260666DF00EA4881 /* Main.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -525,7 +518,6 @@
 				6B394B91261984C600ED3660 /* SignIn.storyboard in Resources */,
 				6BB015452606681100EA4881 /* Assets.xcassets in Resources */,
 				6BB015462606681100EA4881 /* LaunchScreen.storyboard in Resources */,
-				6BB015482606681100EA4881 /* Okta.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -720,7 +712,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.26;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -754,7 +746,7 @@
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.26;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(inherited)";
@@ -789,7 +781,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.26;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -830,11 +822,11 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.1.26;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "Macos App2";
+				PROVISIONING_PROFILE_SPECIFIER = "Macos App3";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SUPPORTS_MACCATALYST = NO;
@@ -990,7 +982,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.25;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1026,7 +1018,7 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(BUILD_PRODUCT_DIR)";
-				MARKETING_VERSION = 0.1.25;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1063,7 +1055,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.25;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1098,7 +1090,7 @@
 					"$(PROJECT_DIR)",
 					"$(PROJECT_DIR)/NextensioRustBridge",
 				);
-				MARKETING_VERSION = 0.1.25;
+				MARKETING_VERSION = 0.1.30;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.nextensio.agent1.tunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";

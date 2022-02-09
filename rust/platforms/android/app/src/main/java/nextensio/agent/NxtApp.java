@@ -1,5 +1,6 @@
 package nextensio.agent;
 import android.app.Application;
+import android.app.Activity;
 import android.util.Log;
 import java.util.Map;
 import java.util.HashMap;
@@ -25,7 +26,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.net.util.SubnetUtils;
 
-
 class NxtStats {
     int gateway_up;
     int gateway_flaps;
@@ -42,11 +42,13 @@ public class NxtApp extends Application {
     private String publicIP = "";
     private String accessToken = "";
     private String refreshToken = "";
+    private String clientid = "";
     private boolean onboarded = false;
     private boolean force_onboard = false;
     private String last_version = "";
     private String uuid = UUID.randomUUID().toString();
     private int keepalive = 30;
+    private Instant last_cid = Instant.now();
     private Instant last_keepalive = Instant.now();
     private Instant last_refresh = Instant.now();
     private static final String TAG = "NxtApp";
@@ -64,6 +66,10 @@ public class NxtApp extends Application {
         accessToken = access;
         refreshToken = refresh;
         force_onboard = true;
+    }
+
+    public String GetClientid() {
+        return clientid;
     }
 
     public NxtApp() {
@@ -84,6 +90,27 @@ public class NxtApp extends Application {
             public void run() {
                 Thread.currentThread().setName("nextensio.onboard");
                 while (true) {
+                    Instant now = Instant.now();
+                    boolean check_cid = false;
+                    long timeElapsed = Duration.between(last_cid, now).getSeconds();
+                    if (timeElapsed >= 5*60) {
+                        last_cid = now;
+                        check_cid = true;
+                    }
+                    if (check_cid || clientid.equals("")) {
+                        String cid = fetchClientid();
+                        if (!cid.equals("") && !clientid.equals("") && !cid.equals(clientid)) {
+                            Log.i(TAG, "Clientid mismatch: " + cid + ":" + clientid );
+                            Activity activity = new Activity();
+                            activity.finishAffinity();
+                            activity.finishAndRemoveTask();
+                            // TODO: We should restart the app automatically or at least 
+                            // somehow let the user know why we are killing ourselves
+                        }
+                        if (!cid.equals("")) {
+                            clientid = cid;
+                        }
+                    }
                     if (!accessToken.equals("")) {
                         doOnboard(); 
                     }
@@ -102,6 +129,28 @@ public class NxtApp extends Application {
     public void onCreate() {
     }
 
+
+    private String fetchClientid()  {
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://server.nextensio.net:8080/api/v1/noauth/clientid/09876432087648932147823456123768").newBuilder();
+        String url = urlBuilder.build().toString();
+        try {
+            Request request = new Request.Builder()
+                                .url(url)
+                                .build();
+            Response res = client.newCall(request).execute();
+            try {
+                JSONObject response = new JSONObject(res.body().string());
+                String cid = response.getString("clientid");
+                Log.i(TAG, "clientid is " + cid);
+                return cid;
+            } catch (final JSONException e)  {
+                Log.i(TAG, "clientid json exception: " + e.getMessage());
+            }
+        }  catch (IOException e) {
+            Log.i(TAG, "clientid fail: " + e.getMessage());
+        }
+        return "";
+    }
 
     private void doOnboard() {
         Instant now = Instant.now();
@@ -135,7 +184,7 @@ public class NxtApp extends Application {
     }
 
     private void refresh() {
-        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0q3hn65I4Zkmr5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
+        HttpUrl.Builder urlBuilder = HttpUrl.parse("https://login.nextensio.net/oauth2/default/v1/token?client_id=" + clientid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken).newBuilder();
         String url = urlBuilder.build().toString();
         RequestBody reqbody = RequestBody.create(null, new byte[0]);  
         try {
@@ -195,6 +244,17 @@ public class NxtApp extends Application {
                 JSONObject response = new JSONObject(res.body().string());
                 String result = response.getString("Result");
                 String version = response.getString("version");
+                String cid = response.getString("clientid");
+                // Well, if clientid changes, the whole authentication/tokens everything is 
+                // useless and has to be done again
+                if (!cid.equals("") && !clientid.equals("") && !cid.equals(clientid)) {
+                    Log.i(TAG, "Clientid mismatch: " + cid + ":" + clientid );
+                     Activity activity = new Activity();
+                     activity.finishAffinity();
+                     activity.finishAndRemoveTask();
+                     // TODO: We should restart the app automatically or at least 
+                     // somehow let the user know why we are killing ourselves
+                }
                 if (result.equals("ok")) {
                     if (!version.equals(last_version)) {
                         Log.i(TAG, "Version mismatch: " + version + ":" + last_version );

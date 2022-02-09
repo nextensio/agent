@@ -28,6 +28,8 @@ class SignInViewController: AuthBaseViewController {
     var progressBarTimer: Timer!
     var authenticated = 0
     var progress = 0
+    var timerCount = 0
+    var clientid = ""
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -36,7 +38,6 @@ class SignInViewController: AuthBaseViewController {
         progressView.progressTintColor = UIColor.blue
         progressView.progressViewStyle = .bar
         self.progressBarTimer = Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(SignInViewController.updateProgressView), userInfo: nil, repeats: true)
-        createOidcClient()
     }
 
     func getConnectedStatus() {
@@ -59,7 +60,18 @@ class SignInViewController: AuthBaseViewController {
     }
     
     @objc func updateProgressView() {
-        if authenticated == 0 {
+        timerCount += 1
+        if (timerCount % (5*60)) == 0 || clientid == "" {
+            fetchClientid()
+        }
+        if clientid != "" && oidcAuth == nil {
+            createOidcClient(cid: clientid)
+        }
+        
+        if clientid == "" {
+            signinButton.setTitle("Loading configs..", for: .normal)
+            progressView.progress = 0
+        } else if authenticated == 0 {
             signinButton.setTitle("Sign In", for: .normal)
             progressView.progress = 0
         } else if authenticated == 1 {
@@ -78,6 +90,10 @@ class SignInViewController: AuthBaseViewController {
     }
     
     @IBAction private func signInTapped() {
+        if self.oidcAuth == nil {
+            NSLog("OIDC not initialized yet")
+            return
+        }
         if authenticated != 0 {
             guard let oktaOidc = self.oidcAuth,
                   let stateManager = self.stateManager else { return }
@@ -149,6 +165,7 @@ class SignInViewController: AuthBaseViewController {
                                         "refresh": self.refreshToken as Any,
                                         "id": self.idToken as Any,
                                         "highMem": false,
+                                        "clientid": self.clientid as Any,
                                         "modelName": UIDevice.current.modelName,
                 ]
                 providerProtocol.serverAddress = "127.0.0.1"
@@ -211,13 +228,71 @@ class SignInViewController: AuthBaseViewController {
             break
         }
     }
-
-    func createOidcClient() -> OktaOidc? {
-        if oidcAuth != nil {
-            return oidcAuth
+    
+    private func fetchClientid()  {
+        let rUrl =  "https://server.nextensio.net:8080/api/v1/noauth/clientid/09876432087648932147823456123768"
+        let url = URL(string: rUrl)!
+        //create the session object
+        let session = URLSession.shared
+        session.configuration.httpMaximumConnectionsPerHost = 1;
+        session.configuration.timeoutIntervalForRequest = 60;
+        session.configuration.timeoutIntervalForResource = 60;
+        //now create the URLRequest object using the url object
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField:"Accept")
+        request.timeoutInterval = 60.0
+        
+        //create dataTask using the session object to send data to the server
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            guard error == nil else {
+                if #available(macOS 11.0, *) {
+                    NSLog("fetchClientid: url error " + error!.localizedDescription)
+                }
+                return
+            }
+            guard let data = data else {
+                NSLog("fetchClientid: data error")
+                return
+            }
+            do {
+                //create json object from data
+                if let resp = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] {
+                    let cid = resp["clientid"] as! String
+                    NSLog("fetchClientid Success " + cid)
+                    if cid != "" && self.clientid != "" && cid != self.clientid {
+                        NSLog("fetchClientid: Clientids changed " +  cid + " " +  self.clientid)
+                        self.vpnManager.connection.stopVPNTunnel()
+                        exit(1)
+                    }
+                    if cid != "" {
+                        self.clientid = cid
+                    }
+                    return
+                }
+            } catch _ {
+                NSLog("fetchClientid: error in json serialization")
+                return
+            }
+        })
+        task.resume()
+    }
+    
+    func createOidcClient(cid: String)  {
+        let configuration = try! OktaOidcConfig(with: [
+          "issuer": "https://login.nextensio.net/oauth2/default",
+          "clientId": cid,
+          "redirectUri": "io.nextensio.agent1:/callback",
+          "logoutRedirectUri": "io.nextensio.agent1:/callback",
+          "scopes": "openid profile offline_access",
+        ])
+        do {
+            oidcAuth = try OktaOidc(configuration: configuration)
+            NSLog("OIDC initialized")
+        } catch let error {
+            NSLog("OIDC init error " + error.localizedDescription)
         }
-        oidcAuth = try! OktaOidc()
-        return oidcAuth
+        return
     }
 }
 
