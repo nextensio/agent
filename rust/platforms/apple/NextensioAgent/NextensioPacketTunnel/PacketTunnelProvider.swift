@@ -234,7 +234,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func refresh(refreshToken: String) {
-        let rUrl =  "https://login.nextensio.net/oauth2/default/v1/token?client_id=0oav0q3hn65I4Zkmr5d6&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken
+        let cid = conf["clientid"] as! String
+        let rUrl =  "https://login.nextensio.net/oauth2/default/v1/token?client_id=" + cid + "&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access&grant_type=refresh_token&refresh_token=" + refreshToken
         let url = URL(string: rUrl)!
         //create the session object
         let session = URLSession.shared
