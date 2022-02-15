@@ -1,4 +1,4 @@
-VERSION=0.1
+VERSION=latest
 NAME=rust-agent
 USER=registry.gitlab.com/nextensio/agent
 
@@ -8,8 +8,8 @@ all: build
 .PHONY: build
 build:
 	cp ~/.ssh/gitlab_rsa files/
-	docker build -f Dockerfile.build -t $(USER)/$(NAME)-build:$(VERSION) .
-	docker create $(USER)/$(NAME)-build:$(VERSION)
+	docker build -f Dockerfile.build -t $(USER)/$(NAME):$(VERSION) .
+	docker create $(USER)/$(NAME):$(VERSION)
 	rm files/gitlab_rsa
 
 .PHONY: clean

@@ -49,7 +49,6 @@ public class NxtAgent extends AppCompatActivity {
     private boolean firstSignin = false;
     private Timer timer;
     private TimerTask timerTask;
-    private boolean authClientCreated = false;
 
     private BroadcastReceiver vpnStateReceiver = new BroadcastReceiver() {
 
@@ -103,6 +102,11 @@ public class NxtAgent extends AppCompatActivity {
         .supportedBrowsers(ANDROID_BROWSER, FIRE_FOX)
         .setCacheMode(false).create();
 
+        if (authClient == null) {
+            Log.e(TAG, "authclient create fail");
+            return;
+        }
+
         sessionClient = authClient.getSessionClient();
         authClient.registerCallback(new ResultCallback<AuthorizationStatus, AuthorizationException>() {
             @Override
@@ -139,14 +143,17 @@ public class NxtAgent extends AppCompatActivity {
         vpnButton.setEnabled(true);
 
         String clientid = app.GetClientid();
-        if (clientid.equals("")) {
+        if (clientid.equals("") || (authClient == null)) {
             vpnButton.setText(R.string.clientid_fetch);
             pbar.setProgress(0);
-            return;
-        } else {
-            if (authClientCreated == false) {
+            if (clientid.equals("")) {
+                return;
+            }
+            if (authClient == null) {
                 createAuthClient();
-                authClientCreated = true;
+            }
+            if (authClient == null) {
+                return;
             }
         }
 
@@ -193,8 +200,12 @@ public class NxtAgent extends AppCompatActivity {
     }
     
     void signin() {
-        authClient.signIn(this, null);
-        Log.i(TAG, "User signin");
+        if (authClient != null) {
+            authClient.signIn(this, null);
+            Log.i(TAG, "User signin");
+        } else {
+            Log.i(TAG, "User signin, authclient null");
+        }
     }
 
     // This gets called when user clicks the button to start VPN. The prepare()
@@ -209,8 +220,12 @@ public class NxtAgent extends AppCompatActivity {
         }
         if (agentService.vpnReady == true) {
             agentService.stop();
-            authClient.signOut(this, null);
-            Log.i(TAG, "Stopped VPN");
+            if (authClient != null) {
+                authClient.signOut(this, null);
+                Log.i(TAG, "Stopped VPN");
+            } else {
+                Log.i(TAG, "Stopped VPN, authclient null");
+            }
         } else {
             signin();
         }
