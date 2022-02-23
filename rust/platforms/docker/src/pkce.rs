@@ -31,7 +31,7 @@ pub struct AccessIdTokens {
 }
 
 fn authn_username_pwd(
-    client: &mut reqwest::Client,
+    client: &mut reqwest::blocking::Client,
     username: &str,
     password: &str,
 ) -> Option<SessionToken> {
@@ -54,8 +54,9 @@ fn authn_username_pwd(
         .header("Content-Type", "application/json")
         .send();
     match resp {
-        Ok(mut res) => {
-            if res.status().is_success() {
+        Ok(res) => {
+            let status = res.status();
+            if status.is_success() {
                 let stoken: std::result::Result<SessionToken, reqwest::Error> = res.json();
                 match stoken {
                     Ok(t) => {
@@ -65,15 +66,15 @@ fn authn_username_pwd(
                         error!("HTTP authn body failed {:?}", e);
                         println!(
                             "Authentication failed ({}), please check username/password",
-                            res.status()
+                            status
                         )
                     }
                 }
             } else {
-                error!("HTTP authn result {}, failed", res.status());
+                error!("HTTP authn result {}, failed", status);
                 println!(
                     "Authentication failed ({}), please check username/password",
-                    res.status()
+                    status
                 )
             }
         }
@@ -105,7 +106,7 @@ fn authorize_url(
 
 fn authorize(
     client_id: &str,
-    client: &mut reqwest::Client,
+    client: &mut reqwest::blocking::Client,
     t: SessionToken,
 ) -> (String, oauth2::PkceCodeVerifier) {
     let (code_challenge, code_verify) = oauth2::PkceCodeChallenge::new_random_sha256();
@@ -146,7 +147,7 @@ fn authorize(
 
 pub fn get_tokens(
     client_id: &str,
-    client: &mut reqwest::Client,
+    client: &mut reqwest::blocking::Client,
     code: String,
     code_verify: Arc<Mutex<oauth2::PkceCodeVerifier>>,
 ) -> Option<AccessIdTokens> {
@@ -166,7 +167,7 @@ pub fn get_tokens(
         .header("cache-control", "no-cache")
         .send();
     match resp {
-        Ok(mut res) => {
+        Ok(res) => {
             if res.status().is_success() {
                 let token: std::result::Result<AccessIdTokens, reqwest::Error> = res.json();
                 match token {
@@ -186,7 +187,7 @@ pub fn get_tokens(
 
 pub fn authenticate(
     client_id: &str,
-    client: &mut reqwest::Client,
+    client: &mut reqwest::blocking::Client,
     username: &str,
     password: &str,
 ) -> Option<AccessIdTokens> {
@@ -200,13 +201,12 @@ pub fn authenticate(
     None
 }
 
-pub fn refresh(client_id: &str, refresh: &str) -> Option<AccessIdTokens> {
+pub fn refresh(
+    client: &mut reqwest::blocking::Client,
+    client_id: &str,
+    refresh: &str,
+) -> Option<AccessIdTokens> {
     let idp = super::get_idp();
-
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::RedirectPolicy::none())
-        .build()
-        .unwrap();
 
     let mut queries = format!("client_id={}&redirect_uri=http://localhost:8180/&response_type=code&scope=openid%20offline_access", client_id);
     queries = format!(
@@ -221,7 +221,7 @@ pub fn refresh(client_id: &str, refresh: &str) -> Option<AccessIdTokens> {
         .header("cache-control", "no-cache")
         .send();
     match resp {
-        Ok(mut res) => {
+        Ok(res) => {
             if res.status().is_success() {
                 let token: std::result::Result<AccessIdTokens, reqwest::Error> = res.json();
                 match token {
@@ -258,8 +258,10 @@ pub fn web_server(controller: String, schan: fltk::app::Sender<super::gui::Messa
             },
 
             (GET) (/login) => {
-                let mut client = reqwest::Client::builder()
-                .redirect(reqwest::RedirectPolicy::none())
+                let mut client = reqwest::blocking::Client::builder()
+                .pool_idle_timeout(Some(std::time::Duration::new(30, 0)))
+                .pool_max_idle_per_host(2)
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .unwrap();
                 *client_id.lock().unwrap() = super::okta_clientid(&controller, &mut client);
@@ -282,8 +284,10 @@ pub fn web_server(controller: String, schan: fltk::app::Sender<super::gui::Messa
                     }
                 }
                 if err.is_empty() {
-                    let mut client = reqwest::Client::builder()
-                    .redirect(reqwest::RedirectPolicy::none())
+                    let mut client = reqwest::blocking::Client::builder()
+                    .pool_idle_timeout(Some(std::time::Duration::new(30, 0)))
+                    .pool_max_idle_per_host(2)
+                    .redirect(reqwest::redirect::Policy::none())
                     .build()
                     .unwrap();
                     let tokens = get_tokens(&client_id.lock().unwrap(), &mut client, code.to_string(), code_verify.clone());
@@ -291,7 +295,7 @@ pub fn web_server(controller: String, schan: fltk::app::Sender<super::gui::Messa
                         if !onboarded.load(std::sync::atomic::Ordering::Relaxed) {
                             let cid = client_id.lock().unwrap().to_owned();
                             std::thread::spawn(move || {
-                               super::do_onboard(cid, "server.nextensio.net:8080".to_string(), t)
+                               super::do_onboard(client, cid, "server.nextensio.net:8080".to_string(), t)
                             });
                             onboarded.store(true, std::sync::atomic::Ordering::Relaxed);
                         }

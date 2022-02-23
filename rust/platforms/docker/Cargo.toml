@@ -10,7 +10,7 @@ edition = "2018"
 
 [dependencies]
 native-tls = {version = "0.2", features = ["vendored"]}
-reqwest = { version = "0.9.24", features = ["native-tls"]}
+reqwest = { version = "0.11.9", features = ["native-tls", "blocking", "json"]}
 rouille = "3.5.0"
 log = "0.4.14"
 env_logger = "0.8.3"

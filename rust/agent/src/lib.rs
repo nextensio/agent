@@ -15,7 +15,7 @@ use dummy::Dummy;
 use fd::Fd;
 use l3proxy::Socket;
 #[allow(unused_imports)]
-use log::{error, Level, LevelFilter};
+use log::{error, info, Level, LevelFilter};
 use mio::{Events, Poll, Token};
 use netconn::NetConn;
 use object_pool::{Pool, Reusable};
@@ -43,6 +43,27 @@ mod dns;
 // to our agent. Its bascailly the "vpnService" tunnel or the networkExtention/packetTunnel
 // in ios.
 
+// Note2: About the nomenclatures rx_socket and tx_socket in this file - this is with reference
+// to the direction of data coming in from the vpn tun interface going out to the internet,
+// direct or via gateway. This is the direction of reference because the flow is assumed to be
+// created for the first time by a packet coming in from the vpn tun interface - as of today we
+// do not have a case of a packet coming in from internet creating flow for the first time.
+// So with that reference, the packet coming in from the vpn tun interface will create a new flow,
+// and it will be terminated using the smoltcp stack. And that socket which terminates the  flow
+// is called an "rx_socket". So the packets from vpn tun interface is "polled" into the rx_socket.
+// Then later we "read"  from the rx_socket and get tcp/udp data (ie packet is now converted to data)
+// which we then decide to transmit  to the internet. That socket is called a "tx_socket" - it can
+// be either a socket towards Nextensio gateway or just a socket directly to the destination.
+// So the code paths are
+// 1. vpn_tun_rx packet --> rx_socket poll pkts --> rx_socket.read() tcp/udp data --> tx_socket.write data
+// 2. tx_socket.read() tcp/udp data --> rx_socket.write() data --> rx_socket poll, get packets --> vpn_tun_tx
+//
+// Note that in each directions we give packets to smoltcp and get tcp/udp data or vice versa.
+
+// Note3: Apart from the rx/tx nomenclature above, most of the other APIs have been named as
+// "to external" (ie sending to internet/gateway) and "from external" (from internet/gateway)
+// just to keep it easy on the brain to remember what is rx/tx in each instance
+
 // These are atomic because rust will complain loudly about mutable global variables
 static VPNFD: AtomicI32 = AtomicI32::new(0);
 static BINDIP: AtomicU32 = AtomicU32::new(0);
@@ -51,11 +72,6 @@ static DIRECT: AtomicI32 = AtomicI32::new(0);
 static mut REGINFO: Option<Box<RegistrationInfo>> = None;
 static REGINFO_CHANGED: AtomicUsize = AtomicUsize::new(0);
 
-static STATS_GWUP: AtomicI32 = AtomicI32::new(0);
-static STATS_NUMFLAPS: AtomicI32 = AtomicI32::new(0);
-static STATS_LASTFLAP: AtomicI32 = AtomicI32::new(0);
-static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
-static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
 static CUR_GATEWAY_IP: AtomicU32 = AtomicU32::new(0);
 static AGENT_STARTED: AtomicUsize = AtomicUsize::new(0);
 static AGENT_PROGRESS: AtomicUsize = AtomicUsize::new(0);
@@ -75,11 +91,11 @@ const CLEANUP_NOW: usize = 5; // 5 seconds
 const CLEANUP_TCP_HALFOPEN: usize = 30; // 30 seconds
 const CLEANUP_TCP_IDLE: usize = 60 * 60; // one hour
 const CLEANUP_UDP_IDLE: usize = 4 * 60; // 4 minutes
-const CLEANUP_UDP_DNS: usize = 10; // 10 seconds
-const MONITOR_IDLE_BUFS: u64 = 1; // 1 seconds
+const CLEANUP_UDP_DNS: usize = 5; // 5 seconds
 const DNS_TTL: u32 = 300; // 5 minutes
 const MONITOR_DNS: u64 = 360; // 6 minutes
-const MONITOR_FLOW_AGE: u64 = 30; // 30 seconds
+const MONITOR_BUFFERED_FLOWS: u64 = 2; // 2 seconds
+const MONITOR_ALL_FLOWS: u64 = 30; // 30 seconds
 const MONITOR_CONNECTIONS: u64 = 2; // 2 seconds
 const MONITOR_PKTS: u64 = 30; // 30 seconds
 const PARSE_MAX: usize = 2048;
@@ -88,6 +104,33 @@ const ONBOARD_RETRY: u64 = 500; // milliseconds
 const MAXPAYLOAD: usize = 64 * 1024;
 const MINPKTBUF: usize = 4096;
 const FLOW_BUFFER_HOG: u64 = 4; // seconds;
+
+// Various stats that the app (android/ios etc.) using this agent might be interested in.
+// These are atomic because the app calls APIs to get these stats and app does not have the
+// AgentInfo handle
+static STATS_GWUP: AtomicI32 = AtomicI32::new(0);
+static STATS_NUMFLAPS: AtomicI32 = AtomicI32::new(0);
+static STATS_LASTFLAP: AtomicI32 = AtomicI32::new(0);
+static STATS_NUMFLOWS: AtomicI32 = AtomicI32::new(0);
+static STATS_GWFLOWS: AtomicI32 = AtomicI32::new(0);
+static STATS_TCP_POOL_SIZE: AtomicUsize = AtomicUsize::new(0);
+static STATS_TCP_POOL_FAIL_CNT: AtomicUsize = AtomicUsize::new(0);
+static STATS_TCP_POOL_FAIL_TIME: AtomicUsize = AtomicUsize::new(0);
+static STATS_PKT_POOL_SIZE: AtomicUsize = AtomicUsize::new(0);
+static STATS_PKT_POOL_FAIL_CNT: AtomicUsize = AtomicUsize::new(0);
+static STATS_PKT_POOL_FAIL_TIME: AtomicUsize = AtomicUsize::new(0);
+static STATS_PARSE_PENDING_LEN: AtomicUsize = AtomicUsize::new(0);
+static STATS_TCP_FLOWS: AtomicUsize = AtomicUsize::new(0);
+static STATS_UDP_FLOWS: AtomicUsize = AtomicUsize::new(0);
+static STATS_DNS_FLOWS: AtomicUsize = AtomicUsize::new(0);
+static STATS_PENDING_RX: AtomicUsize = AtomicUsize::new(0);
+static STATS_PENDING_TX: AtomicUsize = AtomicUsize::new(0);
+static STATS_IDLE_BUFS: AtomicUsize = AtomicUsize::new(0);
+static STATS_FLOWS_BUFFERED: AtomicUsize = AtomicUsize::new(0);
+static STATS_FLOWS_DEAD: AtomicUsize = AtomicUsize::new(0);
+static STATS_TOT_TUNS: AtomicUsize = AtomicUsize::new(0);
+static STATS_OLD_FLOWS: AtomicUsize = AtomicUsize::new(0);
+static STATS_HOGS_CLEARED: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Default, Debug)]
 pub struct Domain {
@@ -146,7 +189,61 @@ pub struct AgentStats {
     pub last_gateway_flap: c_int,
     pub gateway_flows: c_int,
     pub total_flows: c_int,
+    pub flows_old: c_uint,
+    pub flows_buffered: c_uint,
+    pub flows_dead: c_uint,
+    pub parse_pending: c_uint,
     pub gateway_ip: c_uint,
+    pub tcp_pool_cnt: c_uint,
+    pub tcp_pool_fail_cnt: c_uint,
+    pub tcp_pool_fail_time: c_uint,
+    pub pkt_pool_cnt: c_uint,
+    pub pkt_pool_fail_cnt: c_uint,
+    pub pkt_pool_fail_time: c_uint,
+    pub tcp_flows: c_uint,
+    pub udp_flows: c_uint,
+    pub dns_flows: c_uint,
+    pub pending_rx: c_uint,
+    pub pending_tx: c_uint,
+    pub idle_bufs: c_uint,
+    pub total_tunnels: c_uint,
+    pub hogs_cleared: c_uint,
+}
+
+#[allow(unused)]
+fn dump_stats() {
+    error!(
+        "STATS-Tunnels: Gateway Up {}, numflaps {}, lastflap {}, gatewayflows {}; Tunnels count {}",
+        STATS_GWUP.load(Relaxed),
+        STATS_NUMFLAPS.load(Relaxed),
+        STATS_LASTFLAP.load(Relaxed),
+        STATS_GWFLOWS.load(Relaxed),
+        STATS_TOT_TUNS.load(Relaxed)
+    );
+
+    error!(
+        "STATS-Flows: total {}, old {}, tcp {}, udp {}, dns {}, buffered {}, dead {}, in-parse {}",
+        STATS_NUMFLOWS.load(Relaxed),
+        STATS_OLD_FLOWS.load(Relaxed),
+        STATS_TCP_FLOWS.load(Relaxed),
+        STATS_UDP_FLOWS.load(Relaxed),
+        STATS_DNS_FLOWS.load(Relaxed),
+        STATS_FLOWS_BUFFERED.load(Relaxed),
+        STATS_FLOWS_DEAD.load(Relaxed),
+        STATS_PARSE_PENDING_LEN.load(Relaxed)
+    );
+
+    error!("STATS-Pool: tcp size {}, fail cnt {}, fail time {}; pkt size {}, fail cnt {}, fail time {}",
+    STATS_TCP_POOL_SIZE.load(Relaxed), STATS_TCP_POOL_FAIL_CNT.load(Relaxed), STATS_TCP_POOL_FAIL_TIME.load(Relaxed),
+    STATS_PKT_POOL_SIZE.load(Relaxed), STATS_PKT_POOL_FAIL_CNT.load(Relaxed), STATS_PKT_POOL_FAIL_TIME.load(Relaxed));
+
+    error!(
+        "STATS-buffers: pending rx {} tx {} idle {}, hogs-cleared {}",
+        STATS_PENDING_RX.load(Relaxed),
+        STATS_PENDING_TX.load(Relaxed),
+        STATS_IDLE_BUFS.load(Relaxed),
+        STATS_HOGS_CLEARED.load(Relaxed)
+    );
 }
 
 fn parse_subnet(subnet: &str) -> (u32, u32) {
@@ -260,21 +357,27 @@ struct FlowV4 {
     creation_instant: Instant,
     last_rdwr: Instant,
     cleanup_after: usize,
+    dialled: bool,
     dead: bool,
     pending_tx_qed: bool,
     service: String,
     parse_pending: Option<Reusable<Vec<u8>>>,
     dest_agent: String,
-    active: bool,
     trace_request: bool,
 }
 
+// A Tunnel can be either towards a gateway or just a direct tunnel
+// to the end server. A gateway tunnel can have many flows going through
+// it (OneToMany) whereas a direct tunnel can only have one flow mapping
+// to it (OneToOne)
 enum TunFlow {
     NoFlow,
     OneToOne(FlowV4Key),
     OneToMany(HashMap<u64, FlowV4Key>),
 }
 
+// A tunnel (socket) either to the Nextensio gateway or directly to the
+// end server
 struct Tun {
     tun: Box<dyn Transport>,
     pending_tx: VecDeque<FlowV4Key>,
@@ -332,7 +435,7 @@ struct AgentPerf {
 #[cfg(target_os = "linux")]
 fn alloc_perf() -> AgentPerf {
     // the r2cnt utility expects a counter name of r2cnt, this can be changed later to
-    // pass in some name of our choice. Also r2cnt needs shared mem access to create 
+    // pass in some name of our choice. Also r2cnt needs shared mem access to create
     // the counter stats, so run the agent as root and uncomment this when perf measurement
     // is needed
     /*
@@ -342,7 +445,10 @@ fn alloc_perf() -> AgentPerf {
         _counters,
         _perf_cnt,
     }*/
-    AgentPerf {_counters: None, _perf_cnt: None}
+    AgentPerf {
+        _counters: None,
+        _perf_cnt: None,
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -381,7 +487,8 @@ struct AgentInfoExt {
     reginfo_changed: usize,
     last_flap: Instant,
     mtu: usize,
-    flows_active: HashMap<FlowV4Key, ()>,
+    flows_buffered: HashMap<FlowV4Key, ()>,
+    flows_dead: HashMap<FlowV4Key, ()>,
     npkts: usize,
     ntcp: usize,
     tcp_low: usize,
@@ -427,12 +534,17 @@ impl Default for AgentInfoExt {
             reginfo_changed: 0,
             last_flap: Instant::now(),
             mtu: 0,
-            flows_active: HashMap::new(),
+            flows_buffered: HashMap::new(),
+            flows_dead: HashMap::new(),
             npkts: 0,
             ntcp: 0,
             tcp_low: 0,
-            pkt_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
-            tcp_pool: Arc::new(Pool::new(0, || Vec::with_capacity(0))),
+            pkt_pool: Arc::new(Pool::new("pkt_pool".to_string(), 0, || {
+                Vec::with_capacity(0)
+            })),
+            tcp_pool: Arc::new(Pool::new("tcp_pool".to_string(), 0, || {
+                Vec::with_capacity(0)
+            })),
             _perf: alloc_perf(),
             tcp_vpn: 0,
             tcp_vpn_handshake: None,
@@ -441,13 +553,44 @@ impl Default for AgentInfoExt {
     }
 }
 
+// This is to be called for DIRECT flows, and the intention is to make a
+// lazy connection to the end server when we are SURE that smoltcp has deemed
+// this session to be having some data to be transmitted. The reason to do this
+// is because for tcp, we can have "stray" packets like a tcp RST or Fin-Ack
+// coming in even after a flow is dead etc.. So just because a stray packet came
+// in and created a flow structure, we dont want to dial a tcp connection to the
+// outside. We want to ensure the session is fully established and has data before
+// we trial to dial out
+fn flow_dial(
+    poll: &mut Poll,
+    ext: &mut AgentInfoExt,
+    tx_socket: &mut Tun,
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+) -> Result<(), NxtError> {
+    if let Err(e) = tx_socket.tun.dial() {
+        flow_dead(&mut ext.flows_dead, key, flow);
+        return Err(e);
+    }
+    if let Err(e) = tx_socket
+        .tun
+        .event_register(Token(flow.tx_socket), poll, RegType::Reg)
+    {
+        error!("Direct transport register failed {}", format!("{}", e));
+        tx_socket.tun.close(0).ok();
+        flow_dead(&mut ext.flows_dead, key, flow);
+        return Err(e);
+    }
+    Ok(())
+}
+
 fn set_tx_socket(
     key: &FlowV4Key,
     flow: &mut FlowV4,
     mut direct: bool,
     tuns: &mut HashMap<usize, TunInfo>,
     ext: &mut AgentInfoExt,
-    poll: &mut Poll,
+    _poll: &mut Poll,
 ) {
     if DIRECT.load(Relaxed) == 1 {
         direct = true;
@@ -474,13 +617,6 @@ fn set_tx_socket(
             ext.tcp_pool.clone(),
             BINDIP.load(Relaxed),
         );
-        match tun.dial() {
-            Err(_) => {
-                flow_dead(key, flow);
-                return;
-            }
-            Ok(()) => {}
-        }
         tx_stream = tun.new_stream();
         // The async tcp socket has to be established properly after handshake
         // and mio has to signal us that tx is ready before we can write. For
@@ -490,7 +626,7 @@ fn set_tx_socket(
             tx_ready = true;
         }
         ext.next_tun_idx = tx_socket + 1;
-        let mut tun = Tun {
+        let tun = Tun {
             tun: Box::new(tun),
             pending_tx: VecDeque::with_capacity(1),
             tx_ready,
@@ -499,12 +635,6 @@ fn set_tx_socket(
             pkts_rx: 0,
             keepalive: Instant::now(),
         };
-        if let Err(e) = tun.tun.event_register(Token(tx_socket), poll, RegType::Reg) {
-            error!("Direct transport register failed {}", format!("{}", e));
-            tun.tun.close(0).ok();
-            flow_dead(key, flow);
-            return;
-        }
         tuns.insert(tx_socket, TunInfo::Tun(tun));
     } else if ext.gw_onboarded {
         tx_socket = GWTUN_IDX;
@@ -518,13 +648,13 @@ fn set_tx_socket(
                 _ => panic!("We expect a hashmap for gateway flows"),
             }
         } else {
-            flow_dead(key, flow);
+            flow_dead(&mut ext.flows_dead, key, flow);
             return;
         }
     } else {
         // flow is supposed to go via nextensio, but nextensio gateway connection
         // is down at the moment, so close the flow
-        flow_dead(key, flow);
+        flow_dead(&mut ext.flows_dead, key, flow);
         return;
     }
     flow.tx_socket = tx_socket;
@@ -560,12 +690,12 @@ fn flow_new(
         last_rdwr: Instant::now(),
         creation_instant: Instant::now(),
         cleanup_after,
+        dialled: false,
         dead: false,
         pending_tx_qed: false,
         service: "".to_string(),
         dest_agent: "".to_string(),
         parse_pending: None,
-        active: false,
         trace_request: true,
     };
     if need_parsing {
@@ -687,7 +817,7 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
     }
 }
 
-fn flow_rx_data(
+fn flow_process_data_from_external(
     stream: u64,
     tun: &mut Tun,
     key: &FlowV4Key,
@@ -695,6 +825,8 @@ fn flow_rx_data(
     data: NxtBufs,
 ) -> bool {
     if let Some(flow) = agent.flows.get_mut(key) {
+        // For a direct there is really only a tx_stream id, so instead of the
+        // stream != tx_stream we might as well make it a more readable "OneToOne" check ?
         if flow.rx_stream.is_none() && stream != flow.tx_stream {
             flow.rx_stream = Some(stream);
             if let TunFlow::OneToMany(ref mut tun_flows) = tun.flows {
@@ -702,15 +834,12 @@ fn flow_rx_data(
             }
         }
         flow.pending_rx.push_back(data);
-        flow_data_from_external(key, flow, tun);
+        flow_data_buffered(&mut agent.ext, key);
+        flow_data_from_external(&mut agent.ext, key, flow, tun);
         // this call will generate packets to be sent out back to the kernel
         // into the vpn_tx queue which will be processed in vpntun_tx
         flow.rx_socket
             .poll(&mut agent.ext.vpn_rx, &mut agent.ext.vpn_tx);
-        if !flow.active {
-            agent.ext.flows_active.insert(key.clone(), ());
-            flow.active = true;
-        }
         return true;
     }
     false
@@ -724,11 +853,12 @@ fn flow_rx_data(
 // from the direct socket anymore till the flow queue gets drained
 fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: &mut Poll) {
     // Poor mans flow control: we are running low on buffers, mostly because one or few
-    // flows is bursting a lot of download from gateway, hogging up buffers. So we penalize
+    // flows is bursting a lot of download from direct/gateway, hogging up buffers. So we penalize
     // everyone here by stopping read from the entire tunnel till we get those buffers back
     if agent.ext.tcp_pool.len() <= agent.ext.tcp_low && tun_idx == Token(GWTUN_IDX) {
-        error!("Pool low, bail out");
-        tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+        if let Err(e) = tun.tun.event_register(tun_idx, poll, RegType::Rereg) {
+            error!("MIO Rereg failed {} for vpntun rx", e);
+        }
         return;
     }
 
@@ -740,7 +870,9 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                 // it will block. But in case of websocket library, it keeps data buffered,
                 // and returns EWOULDBLOCK *after* reading in all it can. So for such libs,
                 // we have to reregister even if read returns EWOULDBLOCK
-                tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+                if let Err(e) = tun.tun.event_register(tun_idx, poll, RegType::Rereg) {
+                    error!("MIO Rereg failed {} for vpntun rx", e);
+                }
                 return;
             }
             _ => {
@@ -749,7 +881,7 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                     ck = k.clone();
                 }
                 if let Some(f) = agent.flows.get_mut(&ck) {
-                    flow_dead(&ck, f);
+                    flow_dead(&mut agent.ext.flows_dead, &ck, f);
                 }
                 return;
             }
@@ -770,7 +902,7 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                             _ => panic!("We expect hashmap for gateway flows"),
                         }
                         if let Some(f) = agent.flows.get_mut(&ck) {
-                            flow_dead(&ck, f);
+                            flow_dead(&mut agent.ext.flows_dead, &ck, f);
                         }
                     }
                     Hdr::Onboard(onb) => {
@@ -786,7 +918,7 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                     Hdr::Flow(_) => {
                         let mut found = false;
                         if let Some(key) = hdr_to_key(hdr) {
-                            found = flow_rx_data(stream, tun, &key, agent, data);
+                            found = flow_process_data_from_external(stream, tun, &key, agent, data);
                         }
                         if !found {
                             tun.tun.close(stream).ok();
@@ -805,14 +937,16 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
                         }
                         _=> panic!("We either need an nxthdr to identify the flow or we need the tun to map 1:1 to the flow"),
                     }
-                let found = flow_rx_data(stream, tun, &key, agent, data);
+                let found = flow_process_data_from_external(stream, tun, &key, agent, data);
                 if !found {
                     tun.tun.close(stream).ok();
                 }
             }
         }
     }
-    tun.tun.event_register(tun_idx, poll, RegType::Rereg).ok();
+    if let Err(e) = tun.tun.event_register(tun_idx, poll, RegType::Rereg) {
+        error!("MIO Rereg failed {} for vpntun rx", e);
+    }
 }
 
 fn external_sock_tx(tun: &mut Tun, agent: &mut AgentInfo, poll: &mut Poll) {
@@ -828,6 +962,7 @@ fn external_sock_tx(tun: &mut Tun, agent: &mut AgentInfo, poll: &mut Poll) {
             // If the flow is back to waiting state then we cant send any more
             // on this tunnel, so break out and try next time
             if flow.pending_tx.is_some() {
+                flow_data_buffered(&mut agent.ext, &key);
                 break;
             }
         }
@@ -931,11 +1066,12 @@ fn parse_copy(
             break;
         }
         drain += 1;
-        let l = b[tx.headroom..].len();
+        let headroom = tx.headroom;
         // Remember, only the first buffer in the chain has/may have headroom
         tx.headroom = 0;
+        let l = b[headroom..].len();
         if l > remaining {
-            pending.extend_from_slice(&b[tx.headroom..tx.headroom + remaining]);
+            pending.extend_from_slice(&b[headroom..headroom + remaining]);
             // when all parsing is done, the "pending" will be the first buffer
             // in the chain, and the other buffers are all second and onwards.
             // And we allow only the first buffer to have a headroom, and hence
@@ -944,14 +1080,14 @@ fn parse_copy(
             if let Some(mut new) = pool_get(pkt_pool.clone()) {
                 // Clear just to set vector data/len to empty
                 new.clear();
-                new.extend_from_slice(&b[tx.headroom + remaining..]);
+                new.extend_from_slice(&b[headroom + remaining..]);
                 out.push(new);
             } else {
                 return (vec![], true);
             }
             break;
         } else {
-            pending.extend_from_slice(&b[tx.headroom..tx.headroom + l]);
+            pending.extend_from_slice(&b[headroom..headroom + l]);
             remaining -= l;
         }
     }
@@ -1011,12 +1147,14 @@ fn parse_complete(
     if tx.bufs.is_empty() {
         return None;
     }
-    // Most common case: the first buffer (usually at least 2048 in size) should be able
-    // to contain a complete tls client hello (for https) or http headers with host
-    // (for http). If the first buffer doesnt have the max data we want to attempt
-    // to parse, then deep copy the buffers to one large buffer (very bad case ,( )
-    if parse_or_maxlen(key, flow, tuns, ext, poll, &tx.bufs[0][tx.headroom..]) {
-        return Some(tx);
+    if flow.parse_pending.is_none() {
+        // Most common case: the first buffer (usually at least 2048 in size) should be able
+        // to contain a complete tls client hello (for https) or http headers with host
+        // (for http). If the first buffer doesnt have the max data we want to attempt
+        // to parse, then deep copy the buffers to one large buffer (very bad case ,( )
+        if parse_or_maxlen(key, flow, tuns, ext, poll, &tx.bufs[0][tx.headroom..]) {
+            return Some(tx);
+        }
     }
 
     // Ok so we dont have enough data to parse, copy the data into a pending
@@ -1030,12 +1168,12 @@ fn parse_complete(
         p.clear();
         pending = p;
     } else {
-        flow_dead(key, flow);
+        flow_dead(&mut ext.flows_dead, key, flow);
         return None;
     }
     let (out, err) = parse_copy(&ext.pkt_pool, &mut pending, tx);
     if err {
-        flow_dead(key, flow);
+        flow_dead(&mut ext.flows_dead, key, flow);
         return None;
     }
     if parse_or_maxlen(key, flow, tuns, ext, poll, &pending[0..]) {
@@ -1055,6 +1193,44 @@ fn parse_complete(
         assert!(out.is_empty());
         None
     }
+}
+
+// If the flow is fully parsed, return true. If the flow needs further parsing, return false
+fn flow_parse(key: &FlowV4Key, poll: &mut Poll, agent: &mut AgentInfo) -> (bool, Option<NxtBufs>) {
+    if let Some(flow) = agent.flows.get_mut(key) {
+        if !flow.service.is_empty() {
+            // already parsed
+            return (true, None);
+        }
+
+        loop {
+            match flow.rx_socket.read() {
+                Ok((_, tx)) => {
+                    flow_alive(key, flow);
+                    if let Some(p) =
+                        parse_complete(key, flow, tx, &mut agent.tuns, &mut agent.ext, poll)
+                    {
+                        // succesfully parsed
+                        return (true, Some(p));
+                    } else {
+                        // continue reading more data to try and complete the parse
+                    }
+                }
+                Err(e) => match e.code {
+                    EWOULDBLOCK => {
+                        // Need more data to parse
+                        return (false, None);
+                    }
+                    _ => {
+                        flow_dead(&mut agent.ext.flows_dead, key, flow);
+                        // errored, stop parsing any further
+                        return (true, None);
+                    }
+                },
+            }
+        }
+    }
+    (false, None)
 }
 
 fn flow_handle_dns(
@@ -1089,11 +1265,15 @@ fn flow_handle_dns(
                 },
             ) {
                 Err((_, e)) => match e.code {
-                    // Dont care, dns will retry again
-                    EWOULDBLOCK => {}
-                    _ => flow_dead(key, flow),
+                    // We are not even cared if its EAGAIN here, because dns will retry again.
+                    // And there is not going to be an EAGAIN from the smoltcp flow.rx_socket
+                    // because its a UDP socket and theres really no blocking going on.
+                    _ => flow_dead(&mut ext.flows_dead, key, flow),
                 },
-                Ok(_) => flow_alive(key, flow),
+                Ok(_) => {
+                    flow_data_buffered(ext, key);
+                    flow_alive(key, flow);
+                }
             }
             return true;
         }
@@ -1120,7 +1300,7 @@ fn flow_data_to_external(
     poll: &mut Poll,
 ) {
     loop {
-        let mut tx_init = true;
+        let mut add_headers = true;
         let mut tx;
         if init_data.is_some() {
             tx = init_data.unwrap();
@@ -1129,7 +1309,7 @@ fn flow_data_to_external(
             tx = flow.pending_tx.take().unwrap();
             // Something is queued up because it couldnt be sent last time, DONT
             // muck around with it, send it EXACTLY as it is to the tx socket.
-            tx_init = false;
+            add_headers = false;
         } else {
             tx = match flow.rx_socket.read() {
                 Ok((_, t)) => {
@@ -1141,14 +1321,23 @@ fn flow_data_to_external(
                         return;
                     }
                     _ => {
-                        flow_dead(key, flow);
+                        flow_dead(&mut ext.flows_dead, key, flow);
                         return;
                     }
                 },
             }
         }
 
-        if flow.tx_socket == GWTUN_IDX && tx_init {
+        // For direct flow, We make a lazy connection to the server, whenever we have data ready to
+        // be transmitted. See more comments against flow_dial() as to why we do that
+        if flow.tx_socket != GWTUN_IDX && !flow.dialled {
+            flow.dialled = true;
+            if flow_dial(poll, ext, tx_socket, key, flow).is_err() {
+                return;
+            }
+        }
+
+        if flow.tx_socket == GWTUN_IDX && add_headers {
             let mut hdr = key_to_hdr(key, &flow.service);
             hdr.streamid = flow.tx_stream;
             if let Hdr::Flow(ref mut f) = hdr.hdr.as_mut().unwrap() {
@@ -1165,7 +1354,7 @@ fn flow_data_to_external(
         // See if its a dns query for a private domain that we can respond to
         let ret;
         if flow_handle_dns(key, flow, ext, &mut tx) {
-            // flow_rx_tx which called us will call flow_data_from_external and send
+            // flow_process_bidir_data which called us will call flow_data_from_external and send
             // the dns response to vpn_tx
             ret = Ok(());
         } else {
@@ -1187,10 +1376,14 @@ fn flow_data_to_external(
             match e.code {
                 EWOULDBLOCK => {
                     tx_socket.tx_ready = false;
-                    tx_socket
-                        .tun
-                        .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
-                        .ok();
+                    if let Err(e) =
+                        tx_socket
+                            .tun
+                            .event_register(Token(flow.tx_socket), poll, RegType::Rereg)
+                    {
+                        error!("MIO Rereg failed {} - for {} / {}", e, key, flow.service);
+                    }
+
                     if data.is_some() {
                         flow.pending_tx = data;
                         if !flow.pending_tx_qed {
@@ -1200,11 +1393,12 @@ fn flow_data_to_external(
                             tx_socket.pending_tx.push_back(key.clone());
                             flow.pending_tx_qed = true;
                         }
+                        flow_data_buffered(ext, key);
                     }
                     return;
                 }
                 _ => {
-                    flow_dead(key, flow);
+                    flow_dead(&mut ext.flows_dead, key, flow);
                     return;
                 }
             }
@@ -1264,10 +1458,16 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
 // Check if the flow has payload from the gateway (or direct) queued up in its
 // pending_rx queue and if so try to give it to the tcp/udp stack and then if the
 // stack spits that data out to be sent as packets to the app, do so by calling poll()
-fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun) {
+fn flow_data_from_external(
+    ext: &mut AgentInfoExt,
+    key: &FlowV4Key,
+    flow: &mut FlowV4,
+    tun: &mut Tun,
+) {
     while let Some(mut rx) = flow.pending_rx.pop_front() {
         let hdr = rx.hdr.take();
         let rxtime = Instant::now();
+        flow_data_buffered(ext, key);
         match flow.rx_socket.write(0, rx) {
             Err((data, e)) => match e.code {
                 EWOULDBLOCK => {
@@ -1278,7 +1478,7 @@ fn flow_data_from_external(key: &FlowV4Key, flow: &mut FlowV4, tun: &mut Tun) {
                     return;
                 }
                 _ => {
-                    flow_dead(key, flow);
+                    flow_dead(&mut ext.flows_dead, key, flow);
                     return;
                 }
             },
@@ -1352,9 +1552,10 @@ fn proxyclient_rx(
                                         bufs: vec![empty],
                                         headroom: 0,
                                     });
+                                    flow_data_buffered(&mut agent.ext, &key);
                                     proxyclient_tx(&tun_info, agent);
                                 } else {
-                                    flow_dead(&key, flow);
+                                    flow_dead(&mut agent.ext.flows_dead, &key, flow);
                                 }
                             }
                             Some(tun_info)
@@ -1377,9 +1578,12 @@ fn proxyclient_rx(
                 if let Some(tx_sock) = agent.tuns.get_mut(&flow.tx_socket) {
                     flow_data_to_external(key, flow, None, tx_sock.tun(), &mut agent.ext, poll);
                 }
-                flow.rx_socket
-                    .event_register(tun_idx, poll, RegType::Rereg)
-                    .ok();
+                if let Err(e) = flow.rx_socket.event_register(tun_idx, poll, RegType::Rereg) {
+                    error!(
+                        "MIO Rereg failed {} - for flow {} / {}",
+                        e, key, flow.service
+                    );
+                }
             } else {
                 panic!("Got an rx event for proxy client with no associated flow");
             }
@@ -1392,55 +1596,22 @@ fn proxyclient_tx(tun_info: &TunInfo, agent: &mut AgentInfo) {
     if let TunInfo::Flow(ref key) = tun_info {
         if let Some(flow) = agent.flows.get_mut(key) {
             if let Some(tx_socket) = agent.tuns.get_mut(&flow.tx_socket) {
-                flow_data_from_external(key, flow, tx_socket.tun());
+                flow_data_from_external(&mut agent.ext, key, flow, tx_socket.tun());
             }
         }
     } // else Not yet ready for tx, we havent received the connect request yet
 }
 
-// If the flow is fully parsed, return true. If the flow needs further parsing, return false
-fn flow_parse(key: &FlowV4Key, poll: &mut Poll, agent: &mut AgentInfo) -> (bool, Option<NxtBufs>) {
-    if let Some(flow) = agent.flows.get_mut(key) {
-        if !flow.service.is_empty() {
-            // already parsed
-            return (true, None);
-        }
-
-        loop {
-            match flow.rx_socket.read() {
-                Ok((_, tx)) => {
-                    flow_alive(key, flow);
-                    if let Some(p) =
-                        parse_complete(key, flow, tx, &mut agent.tuns, &mut agent.ext, poll)
-                    {
-                        // succesfully parsed
-                        return (true, Some(p));
-                    } else {
-                        // continue reading more data to try and complete the parse
-                    }
-                }
-                Err(e) => match e.code {
-                    EWOULDBLOCK => {
-                        // Need more data to parse
-                        return (false, None);
-                    }
-                    _ => {
-                        flow_dead(key, flow);
-                        // errored, stop parsing any further
-                        return (true, None);
-                    }
-                },
-            }
-        }
-    }
-    (false, None)
-}
-
-fn flow_rx_tx(key: &FlowV4Key, init_data: Option<NxtBufs>, agent: &mut AgentInfo, poll: &mut Poll) {
+fn flow_process_bidir_data(
+    key: &FlowV4Key,
+    init_data: Option<NxtBufs>,
+    agent: &mut AgentInfo,
+    poll: &mut Poll,
+) {
     if let Some(flow) = agent.flows.get_mut(key) {
         if let Some(tx_sock) = agent.tuns.get_mut(&flow.tx_socket) {
             flow_data_to_external(key, flow, init_data, tx_sock.tun(), &mut agent.ext, poll);
-            flow_data_from_external(key, flow, tx_sock.tun());
+            flow_data_from_external(&mut agent.ext, key, flow, tx_sock.tun());
             if flow.pending_tx.is_none() {
                 flow.rx_socket.write_ready();
             }
@@ -1464,7 +1635,7 @@ fn flow_rx_tx(key: &FlowV4Key, init_data: Option<NxtBufs>, agent: &mut AgentInfo
 // that a bunch of times. Lets say we do that 10 times and 8 times the packets are all for the same tcp flow,
 // which will help collect a bunch of a tcp data for that flow - and maybe the rest two are for another tcp
 // flow or maybe two seperate udp flows. Once all tcp flow packets are given to smoltcp, at the very end we
-// call flow_rx_tx to basically take that data and send it to external and read from external etc.. - this
+// call flow_process_bidir_data to basically take that data and send it to external and read from external etc.. - this
 // helps in achieve better tcp upstream performance. As can be seen here we dont do that for udp, because there
 // is really no concept of "stream / collecting-data" for udp, so we  process each packet / each bit of udp data
 // as and when it arrives as a packet from the vpn tunnel
@@ -1476,14 +1647,15 @@ fn vpntun_rx(max_pkts: usize, agent: &mut AgentInfo, poll: &mut Poll) {
             Err(x) => match x.code {
                 EWOULDBLOCK => {
                     for (key, data) in tcp_flows {
-                        flow_rx_tx(&key, data, agent, poll);
+                        flow_process_bidir_data(&key, data, agent, poll);
                     }
-                    agent
-                        .ext
-                        .vpn_tun
-                        .tun
-                        .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
-                        .ok();
+                    if let Err(e) = agent.ext.vpn_tun.tun.event_register(
+                        Token(VPNTUN_IDX),
+                        poll,
+                        RegType::Rereg,
+                    ) {
+                        error!("MIO Rereg failed {} for vpntun rx", e);
+                    }
                     return;
                 }
                 _ => {
@@ -1516,10 +1688,6 @@ fn vpntun_rx(max_pkts: usize, agent: &mut AgentInfo, poll: &mut Poll) {
                             f = agent.flows.get_mut(&key);
                         }
                         if let Some(flow) = f {
-                            if !flow.active {
-                                agent.ext.flows_active.insert(key.clone(), ());
-                                flow.active = true;
-                            }
                             // This is any kind of tcp/udp packet - payload or control - like it can be just
                             // a TCP ack. the socket.poll() below will figure all that out
                             agent.ext.vpn_rx.push_back((data.headroom, b));
@@ -1535,7 +1703,7 @@ fn vpntun_rx(max_pkts: usize, agent: &mut AgentInfo, poll: &mut Poll) {
                             let (parsed, data) = flow_parse(&key, poll, agent);
                             if parsed {
                                 if key.proto != common::TCP {
-                                    flow_rx_tx(&key, data, agent, poll);
+                                    flow_process_bidir_data(&key, data, agent, poll);
                                 } else {
                                     tcp_flows.entry(key).or_insert(data);
                                 }
@@ -1548,15 +1716,17 @@ fn vpntun_rx(max_pkts: usize, agent: &mut AgentInfo, poll: &mut Poll) {
         }
     }
     for (key, data) in tcp_flows {
-        flow_rx_tx(&key, data, agent, poll);
+        flow_process_bidir_data(&key, data, agent, poll);
     }
     // We read max_pkts and looks like we have more to read, yield and reregister
-    agent
+    if let Err(e) = agent
         .ext
         .vpn_tun
         .tun
         .event_register(VPNTUN_POLL, poll, RegType::Rereg)
-        .ok();
+    {
+        error!("MIO Rereg failed {} for vpntun rx", e);
+    }
 }
 
 fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, poll: &mut Poll) {
@@ -1584,9 +1754,12 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, p
                             vpn_tx.push_front((data.headroom, pop));
                         }
                     }
-                    tun.tun
+                    if let Err(e) = tun
+                        .tun
                         .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
-                        .ok();
+                    {
+                        error!("MIO Rereg failed {} for vpn tun tx", e);
+                    }
                     return;
                 }
                 _ => {
@@ -1699,6 +1872,9 @@ fn monitor_gw(now: Instant, agent: &mut AgentInfo, poll: &mut Poll) {
         STATS_LASTFLAP.store(0, Relaxed);
         new_gw(agent, poll);
     }
+
+    // Misc stats
+    STATS_TOT_TUNS.store(agent.tuns.len(), Relaxed);
 }
 
 fn app_transport(
@@ -1730,23 +1906,26 @@ fn monitor_tcp_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
         .tun
         .write(0, agent.ext.tcp_vpn_handshake.take().unwrap())
     {
-        Err((d, e)) => match e.code {
-            EWOULDBLOCK => {
-                error!(
-                    "Wrote handshake to tcp pkt server, error {}, {}",
-                    e,
-                    d.is_none()
-                );
-                agent.ext.tcp_vpn_handshake = d;
-                agent
-                    .ext
-                    .vpn_tun
-                    .tun
-                    .event_register(Token(VPNTUN_IDX), poll, RegType::Rereg)
-                    .ok();
+        Err((d, e)) => {
+            match e.code {
+                EWOULDBLOCK => {
+                    error!(
+                        "Wrote handshake to tcp pkt server, error {}, {}",
+                        e,
+                        d.is_none()
+                    );
+                    agent.ext.tcp_vpn_handshake = d;
+                    if let Err(e) = agent.ext.vpn_tun.tun.event_register(
+                        Token(VPNTUN_IDX),
+                        poll,
+                        RegType::Rereg,
+                    ) {
+                        error!("MIO Rereg failed {} for tcp vpn", e);
+                    }
+                }
+                _ => panic!("Cannot handshake with  tcp vpn server"),
             }
-            _ => panic!("Cannot handshake with  tcp vpn server"),
-        },
+        }
         Ok(_) => error!("Wrote handshake to tcp vpn server succesfully"),
     }
 }
@@ -1777,7 +1956,7 @@ fn monitor_fd_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
         }
 
         // After closing gateway flows, what is left is direct flows
-        close_direct_flows(agent, poll);
+        close_direct_flows(agent);
     }
     if agent.ext.vpn_fd != fd {
         let vpn_tun = app_transport(fd, agent.ext.platform, agent.ext.mtu, &agent.ext.pkt_pool);
@@ -1819,14 +1998,12 @@ fn monitor_parse_pending(agent: &mut AgentInfo, poll: &mut Poll) {
                     }
                     if f.parse_pending.is_none() {
                         // There are cases (like a mysql Workbench app) where the client
-                        // does a tcp handshake and waits for the server to send data!! So
-                        // in that case the parsing will of course timeout, AND we have to
-                        // send some empty data to get to the connector and trigger a handshake
-                        // with the server and kickstart the data transfer from the server end
-                        if let Some(mut new) = pool_get(agent.ext.pkt_pool.clone()) {
-                            // Clear just to set vector data/len to empty
-                            new.clear();
-                            f.parse_pending = Some(new);
+                        // does a tcp handshake and waits for the server to send data!! But
+                        // the tcp handshake is terminated by the agent, so the actual end server
+                        // does not even know a client is trying to connect. So we send an empty
+                        // data to the connector which will trigger a tcp hanshake with server
+                        if k.proto == common::TCP && f.rx_socket.may_recv_send() {
+                            f.parse_pending = Some(Reusable::new(None, vec![]));
                         }
                     }
                 }
@@ -1848,65 +2025,112 @@ fn monitor_parse_pending(agent: &mut AgentInfo, poll: &mut Poll) {
     for k in keys {
         agent.parse_pending.remove(&k).unwrap();
     }
+
+    STATS_PARSE_PENDING_LEN.store(agent.parse_pending.len(), Relaxed);
 }
 
-// The goal of this api is to handle cases where say someone is using an app on
-// their phone, that app has some tcp sessions open and is in the middle of some
-// read / write, and in the middle of that the user switches that app to
-// the background. And on devices like apple ios, there is no activity by a
-// background app, its completely suspended (I guess androind is the same?). So
-// then we will have a case where a ton of inactive flows are lying around
-// potentially holding on to buffers which they were using before they went inactive.
-// So we come here and close such flows IF they happened to be holding buffers
-// when they were switched to background. We dont have any problem if a flow is
-// idle and its not holding onto buffers - which is the most common case when an
-// active app has tcp/udp sessions that are idle - they will continue to be open,
-// but they are not taking up any buffer space.
-fn monitor_buffers(
-    flows: &mut HashMap<FlowV4Key, FlowV4>,
-    flows_active: &mut HashMap<FlowV4Key, ()>,
-) {
-    let mut keys = Vec::new();
+fn flow_has_buffers(f: &mut FlowV4, now: Instant) -> (usize, bool) {
+    let mut b = 0;
+    // The "idle" buffer check is what checks for case 1) describe in the comments,
+    // above monitor_buffered_flows() (whether smoltcp is holding onto buffers)
+    if !f.rx_socket.idle(false) {
+        // It can actually be one or two buffers (rx/tx/both), we dont
+        // have that granular output from the idle() API.
+        b += 1;
+    }
+    b += f.pending_rx.len();
+    if f.pending_tx.is_some() {
+        b += 1;
+    }
+    if b != 0 && now >= f.last_rdwr + Duration::from_secs(FLOW_BUFFER_HOG) {
+        return (b, true);
+    }
+    (b, false)
+}
+
+// There are three places where a flow can hold buffered data.
+// 1. Inside smoltcp when we call flow.rx_socket.write()
+// 2. When we push something to flow.pending_rx
+// 3. when we push something to flow.pending_tx
+//
+// 1) can happen say if a user with a mobile device has an app running which opens
+//    a tcp session and now user puts that app in background. So maybe the tcp session
+//    stays alive and holding onto buffers in smoltcp but the app is not gonna respond
+//    to any tcp stuff now that its in background. So we cant waste up precious memory
+//    (on memory stingy ios) and if the app doesnt respond in some time we close the flow
+//    NOTE: This is a very dubious statement, I do not know if this is how apps in background
+//    work, so there is no "real" world evidence to back this up
+//
+// 2) can happen and ive seen it happen very very frequently where a CDN just downloads
+//    a bunch of data blazing fast and the app is not able to handle that as fast as the CDN
+//    downloads it. The app hopefully "eventually" handles it, but for whatever reason if the
+//    app is blocked or cant drain the data fast enough, we need to reclaim those buffers.
+//
+// 3) can happen when the app tries to send data and the server is slow, this also ive seen
+//    happening. And if there is a lot of loss in the path and the server is really stuck for
+//    long time, we need to reclaim those buffers.
+//
+// In short: our buffer reclamation mechanisms are super aggressive, mainly driven by iOS
+// forcing us to live with 5Mb of buffers in a vpn agent. And the natural end result of being
+// aggressive is that if the internet and apps are all behaving smooth and fast, no problems,
+// but if one of them slows down then we penalize the app by closing flows. So our behaviour
+// in case of slow internet/app will be unforgiving compared to scenario without nextensio
+// agent in between
+fn monitor_buffered_flows(ext: &mut AgentInfoExt, flows: &mut HashMap<FlowV4Key, FlowV4>) {
     let now = Instant::now();
-    for (k, _) in flows_active.iter() {
-        if let Some(mut f) = flows.get_mut(k) {
-            let mut b = 0;
-            if !f.rx_socket.idle(false) {
-                // It can actually be one or two buffers (rx/tx/both), we dont
-                // have that granular output from the idle() API.
-                b += 1;
-            }
-            b += f.pending_rx.len();
-            if f.pending_tx.is_some() {
-                b += 1;
-            }
-            if now >= f.last_rdwr + Duration::from_secs(FLOW_BUFFER_HOG) {
-                if b != 0 {
-                    error!(
-                        "Buffer close flow {} / {}, idle {}, pending_rx {}, pending_tx {}",
-                        k,
-                        f.service,
-                        f.rx_socket.idle(false),
-                        f.pending_rx.len(),
-                        f.parse_pending.is_some()
-                    );
-                    flow_dead(k, f);
-                }
+    let mut keys = Vec::new();
+    for (k, _) in ext.flows_buffered.iter() {
+        if let Some(f) = flows.get_mut(k) {
+            let (cnt, hog) = flow_has_buffers(f, now);
+            // Take flow out of the buffered list if it isnt buffering anything now
+            // or its buffered too much and we terminated the flow
+            if cnt == 0 || hog {
                 keys.push(k.clone());
-                f.active = false;
+            }
+            if hog {
+                STATS_HOGS_CLEARED.fetch_add(1, Relaxed);
+                flow_dead(&mut ext.flows_dead, k, f);
             }
         }
     }
+
     for k in keys {
-        flows_active.remove(&k);
+        ext.flows_buffered.remove(&k);
     }
-    flows_active.shrink_to_fit();
+    ext.flows_buffered.shrink_to_fit();
+
+    // Store various stats
+    STATS_TCP_POOL_SIZE.store(ext.tcp_pool.len(), Relaxed);
+    STATS_TCP_POOL_FAIL_CNT.store(ext.tcp_pool.cnt_fail.load(Relaxed), Relaxed);
+    STATS_TCP_POOL_FAIL_TIME.store(
+        ext.tcp_pool.last_fail.lock().elapsed().as_millis() as usize,
+        Relaxed,
+    );
+    STATS_PKT_POOL_SIZE.store(ext.pkt_pool.len(), Relaxed);
+    STATS_PKT_POOL_FAIL_CNT.store(ext.pkt_pool.cnt_fail.load(Relaxed), Relaxed);
+    STATS_PKT_POOL_FAIL_TIME.store(
+        ext.pkt_pool.last_fail.lock().elapsed().as_millis() as usize,
+        Relaxed,
+    );
+    STATS_FLOWS_BUFFERED.store(ext.flows_buffered.len(), Relaxed);
+
+    dump_stats();
 }
 
-// Just punch the flow liveliness timestamp.
-// The internet RFCs stipulate 4 hours for TCP idle flow, 5 minutes for UDP idle flow -
-// we have made it some more shorter here, that will pbbly have to be bumped up to match
-// the RFC eventually. And for dns we are being super aggressive here, cleaning up in 30 seconds.
+// NOTE: WHEN do we punch the liveliness stamp ? Do we have some method to the madness or we just
+// go randomly call this api wherever ? We do have a method - its simple - if the smoltcp socket
+// has data coming out of it (ie flow.rx_socket.read() is Ok()) OR the smoltcp socket has data
+// written to it (regardless of whether the write was Ok or Err), then the flow is alive.
+// What does that translate to in real life ? In real life the application on the device is
+// sending data which the agent captures and terminates using smoltcp. So we just want to know
+// if the application is sending us any data (in which case flow.rx_socket.read() will be Ok) or
+// if we are sending any data to the application (in which case we will call flow.rx_socket.write
+// which will say "Ok() I wrote the data")
+//
+// And why do we need to know if a flow is alive ? Because internet RFCs tell us that if a flow
+// exists for a long time with no Rx/Tx activity, we can just remove them - RFC says 4 hours for
+// tcp and 5 minutes for udp, although we have cut it down even further to be more aggressive on
+// saving memory
 fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4) {
     if flow.dead {
         return;
@@ -1921,7 +2145,29 @@ fn flow_alive(key: &FlowV4Key, flow: &mut FlowV4) {
     }
 }
 
-fn flow_dead(_key: &FlowV4Key, flow: &mut FlowV4) {
+// This API puts the flows in a list of "flows potentially holding onto some buffer".
+// Note that its "potentially" holding a buffer, no need of being 100% sure. Well we
+// can walk through the entire list of flows and find out which ones are holding onto
+// buffers, but in a typical laptop with 4000 flows, walking that frequently can be
+// heavy, and we need to walk that reasonably frequently (monitor_buffered_flows) because
+// we want to free up buffers as fast as we can. So this is kind of a best effort list
+// to identify a smaller list of flows that "might" be holding onto buffers. The full
+// list will be walked slowly (monitor_all_flows) anyways.
+//
+// What is the criteria for calling this API ? Is there a method to the madness ?
+// Yes there is - there are three places where a flow can hold buffered data.
+// 1. Inside smoltcp when we call flow.rx_socket.write()
+// 2. When we push something to flow.pending_rx
+// 3. when we push something to flow.pending_tx
+//
+// So very simply put, we call this api wherever one of the above three activities are done,
+// and again we dont strive to be super accurate - like we dont check if flow.socket_rx.write()
+// was succesful or not etc..
+fn flow_data_buffered(ext: &mut AgentInfoExt, key: &FlowV4Key) {
+    ext.flows_buffered.insert(key.clone(), ());
+}
+
+fn flow_dead(flows_dead: &mut HashMap<FlowV4Key, ()>, key: &FlowV4Key, flow: &mut FlowV4) {
     if flow.dead {
         return;
     }
@@ -1929,6 +2175,8 @@ fn flow_dead(_key: &FlowV4Key, flow: &mut FlowV4) {
     // to this flow and release the flow itself from flow table
     flow.dead = true;
     flow.cleanup_after = CLEANUP_NOW;
+    flows_dead.insert(key.clone(), ());
+    STATS_FLOWS_DEAD.store(flows_dead.len(), Relaxed);
 }
 
 // Send notifications to all parties (local kernel sockets, remote cluster etc..) that
@@ -1942,7 +2190,7 @@ fn flow_dead(_key: &FlowV4Key, flow: &mut FlowV4) {
 // a tx socket. ONLY in cases where flow is closed before tx-socket is found can it be
 // passed as None
 fn flow_close(
-    _key: &FlowV4Key,
+    key: &FlowV4Key,
     flow: &mut FlowV4,
     tx_socket: &mut Option<&mut TunInfo>,
     poll: &mut Poll,
@@ -1957,25 +2205,42 @@ fn flow_close(
             tx_socket.tun.close(rx_stream).ok();
         }
         if flow.tx_socket != GWTUN_IDX {
-            tx_socket
-                .tun
-                .event_register(Token(flow.tx_socket), poll, RegType::Dereg)
-                .ok();
+            if let Err(e) =
+                tx_socket
+                    .tun
+                    .event_register(Token(flow.tx_socket), poll, RegType::Dereg)
+            {
+                error!(
+                    "MIO tx unregister failed {} - {} / {}",
+                    e, key, flow.service
+                );
+            }
         }
     }
     flow.rx_socket.close(0).ok();
     // Unregister the poller so we dont keep polling till the flow is cleaned
     // up which can be many seconds away
-    flow.rx_socket
+    if let Err(e) = flow
+        .rx_socket
         .event_register(Token(flow.rx_socket_idx), poll, RegType::Dereg)
-        .ok();
+    {
+        error!(
+            "MIO rx unregister failed {} - {} / {}",
+            e, key, flow.service
+        );
+    }
 
     // Free all memory occupying stuff
     flow.rx_socket.idle(true);
-    flow.pending_rx.clear();
+    // If we do flow.pending_rx.clear() that mgight not (not 100% sure)
+    // drop the memory. So if we have flows that sit around till tcp timeout (like 1 hour)
+    // then they keep holding onto the pool objects. Hence we are explicitly looping and
+    // freeing stuff below
+    while let Some(p) = flow.pending_rx.pop_back() {
+        drop(p);
+    }
     flow.pending_tx = None;
     flow.parse_pending = None;
-    flow.pending_tx = None;
 }
 
 // Do all the close/cleanups etc.. and release the flow (ie remove from flow table)
@@ -2012,29 +2277,56 @@ fn flow_terminate(
     agent.tuns.shrink_to_fit();
     agent.parse_pending.remove(k);
     agent.parse_pending.shrink_to_fit();
-    agent.ext.flows_active.remove_entry(k);
-    agent.ext.flows_active.shrink_to_fit();
+    agent.ext.flows_buffered.remove_entry(k);
+    agent.ext.flows_buffered.shrink_to_fit();
+    agent.ext.flows_dead.remove_entry(k);
+    agent.ext.flows_dead.shrink_to_fit();
 }
+
+fn cleanup_dead_flows(poll: &mut Poll, agent: &mut AgentInfo) {
+    let mut keys = vec![];
+    for (k, _) in agent.ext.flows_dead.iter() {
+        // There is no point cleaning up a dead tcp flow right away because
+        // that will have some FIN/RST going on and that stray packet will
+        // come in and re-create the flow right away only to get cleaned up
+        // later again
+        keys.push(k.clone())
+    }
+    for k in keys {
+        if let Some(mut f) = agent.flows.remove(&k) {
+            flow_terminate(&k, &mut f, None, agent, poll);
+        }
+    }
+    agent.flows.shrink_to_fit();
+}
+
 // TODO: This can be made more effective by using some kind of timer wheel
 // to sort the flows in the order of their expiry rather than having to walk
 // through them all. Right now the use case is for a couple of hundred flows
 // at most, so this might be just ok, but this needs fixing soon
-fn monitor_flows(poll: &mut Poll, agent: &mut AgentInfo) {
-    STATS_NUMFLOWS.store(agent.flows.len() as i32, Relaxed);
-
+fn monitor_all_flows(agent: &mut AgentInfo) {
     let mut udp = 0;
     let mut dns = 0;
     let mut tcp = 0;
     let mut pending_rx = 0;
     let mut pending_tx = 0;
     let mut idle = 0;
+    let mut old = 0;
 
     let mut keys = Vec::new();
     for (k, f) in agent.flows.iter_mut() {
         let rdwr = f.last_rdwr + Duration::from_secs(f.cleanup_after as u64);
         let now = Instant::now();
-        if now > rdwr {
+        let (_, hog) = flow_has_buffers(f, now);
+        if now > rdwr || hog {
+            if hog {
+                STATS_HOGS_CLEARED.fetch_add(1, Relaxed);
+            }
             keys.push(k.clone());
+        }
+        let oldage = f.last_rdwr + Duration::from_secs(10_u64);
+        if now > oldage {
+            old += 1;
         }
         if k.proto == common::TCP {
             tcp += 1;
@@ -2057,24 +2349,20 @@ fn monitor_flows(poll: &mut Poll, agent: &mut AgentInfo) {
         }
     }
     for k in keys {
-        if let Some(mut f) = agent.flows.remove(&k) {
-            flow_terminate(&k, &mut f, None, agent, poll);
+        if let Some(f) = agent.flows.get_mut(&k) {
+            flow_dead(&mut agent.ext.flows_dead, &k, f);
         }
     }
-    agent.flows.shrink_to_fit();
 
-    error!(
-        "tcp {}, udp {}, dns {}, pkt bufs {}, tcp bufs {}, pending rx {} / tx {}, idle {},  dns {}, rdns{}",
-        tcp,
-        udp,
-        dns,
-        agent.ext.pkt_pool.len(),
-        agent.ext.tcp_pool.len(),
-        pending_rx,
-        pending_tx,
-        idle,
-        agent.ext.nameip.dns.len(), agent.ext.nameip.rdns.len()
-    );
+    // store various stats
+    STATS_NUMFLOWS.store(agent.flows.len() as i32, Relaxed);
+    STATS_TCP_FLOWS.store(tcp, Relaxed);
+    STATS_UDP_FLOWS.store(udp, Relaxed);
+    STATS_DNS_FLOWS.store(dns, Relaxed);
+    STATS_PENDING_RX.store(pending_rx, Relaxed);
+    STATS_PENDING_TX.store(pending_tx, Relaxed);
+    STATS_IDLE_BUFS.store(idle, Relaxed);
+    STATS_OLD_FLOWS.store(old, Relaxed);
 }
 
 fn close_gateway_flows(agent: &mut AgentInfo, tun: &mut TunInfo, poll: &mut Poll) {
@@ -2088,6 +2376,11 @@ fn close_gateway_flows(agent: &mut AgentInfo, tun: &mut TunInfo, poll: &mut Poll
         }
         _ => panic!("Expecting hashmap for gateway tunnel"),
     }
+    // Why dont we just call flow_dead() here and let the cleanup_flows deal with
+    // it ? Thats because the gateway tunnel is going away here, its taken out of
+    // the agent.tuns hashmap by the caller of this API. So if flow_dead() tries to
+    // find the tx_socket by looking up agent.tuns it wont find it. So we just
+    // directly call flow_terminate here.
     for k in keys {
         if let Some(mut f) = agent.flows.remove(&k) {
             flow_terminate(&k, &mut f, Some(tun), agent, poll);
@@ -2095,16 +2388,10 @@ fn close_gateway_flows(agent: &mut AgentInfo, tun: &mut TunInfo, poll: &mut Poll
     }
 }
 
-fn close_direct_flows(agent: &mut AgentInfo, poll: &mut Poll) {
-    let mut keys = Vec::new();
+fn close_direct_flows(agent: &mut AgentInfo) {
     for (k, f) in agent.flows.iter_mut() {
         if f.tx_socket != GWTUN_IDX {
-            keys.push(k.clone());
-        }
-    }
-    for k in keys {
-        if let Some(mut f) = agent.flows.remove(&k) {
-            flow_terminate(&k, &mut f, None, agent, poll);
+            flow_dead(&mut agent.ext.flows_dead, k, f);
         }
     }
 }
@@ -2171,12 +2458,15 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
         },
     }
     if success {
-        agent
+        if agent
             .ext
             .proxy_tun
             .tun
             .event_register(WEBPROXY_POLL, poll, RegType::Reg)
-            .ok();
+            .is_err()
+        {
+            error!("Proxy tunnel MIO registration failed");
+        }
     } else {
         error!("Cannot listen to port {}", NXT_AGENT_PROXY);
     }
@@ -2210,10 +2500,12 @@ fn agent_init_pools(agent: &mut AgentInfo, mtu: u32, highmem: u32) {
     agent.ext.npkts = 64 * (highmem as usize + 1);
     agent.ext.ntcp = 22 * (highmem as usize + 1);
     agent.ext.tcp_low = agent.ext.ntcp / 4;
-    agent.ext.pkt_pool = Arc::new(Pool::new(agent.ext.npkts, || {
+    agent.ext.pkt_pool = Arc::new(Pool::new("pkt_pool".to_string(), agent.ext.npkts, || {
         Vec::with_capacity(pktbuf_len)
     }));
-    agent.ext.tcp_pool = Arc::new(Pool::new(agent.ext.ntcp, || Vec::with_capacity(MAXPAYLOAD)));
+    agent.ext.tcp_pool = Arc::new(Pool::new("tcp_pool".to_string(), agent.ext.ntcp, || {
+        Vec::with_capacity(MAXPAYLOAD)
+    }));
 }
 
 // Instead of getting vpn packets from an OS file descriptor interface,
@@ -2310,7 +2602,12 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
         Ok(p) => p,
     };
 
-    let mut events = Events::with_capacity(2048);
+    let mut max_events = 4096;
+    if highmem != 0 {
+        // Laptops will have a TON more flows compared to a mobile phone
+        max_events = 65536;
+    }
+    let mut events = Events::with_capacity(max_events as usize);
 
     let mut agent = AgentInfo::default();
     if direct == 1 {
@@ -2426,13 +2723,16 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
             monitor_parse_pending(&mut agent, &mut poll);
             service_parse_ager = now;
         }
-        if now > flow_ager + Duration::from_secs(MONITOR_FLOW_AGE) {
+
+        cleanup_dead_flows(&mut poll, &mut agent);
+
+        if now > flow_ager + Duration::from_secs(MONITOR_ALL_FLOWS) {
             // Check the flow aging only once every 30 seconds
-            monitor_flows(&mut poll, &mut agent);
+            monitor_all_flows(&mut agent);
             flow_ager = now;
         }
-        if now > buffer_monitor + Duration::from_secs(MONITOR_IDLE_BUFS) {
-            monitor_buffers(&mut agent.flows, &mut agent.ext.flows_active);
+        if now > buffer_monitor + Duration::from_secs(MONITOR_BUFFERED_FLOWS) {
+            monitor_buffered_flows(&mut agent.ext, &mut agent.flows);
             buffer_monitor = now;
         }
         if now > dns_monitor + Duration::from_secs(MONITOR_DNS) {
@@ -2442,7 +2742,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
     }
 }
 
-// NOTE1: PLEASE ENSURE THAT THIS API IS CALLED ONLY ONCE BY THE PLATFORM
+// NOTE1: PLEASE ENSURE THAT THIS API IS TO BE CALLED ONLY ONCE BY THE PLATFORM
 //
 // NOTE2: This is a for-ever loop inside, so call this from a seperate thread in
 // the platform (android/ios/linux). We can launch a thread right in here
@@ -2551,4 +2851,22 @@ pub unsafe extern "C" fn agent_stats(stats: *mut AgentStats) {
     (*stats).gateway_flows = STATS_GWFLOWS.load(Relaxed);
     (*stats).total_flows = STATS_NUMFLOWS.load(Relaxed);
     (*stats).gateway_ip = CUR_GATEWAY_IP.load(Relaxed);
+    (*stats).flows_old = STATS_OLD_FLOWS.load(Relaxed) as u32;
+    (*stats).tcp_flows = STATS_TCP_FLOWS.load(Relaxed) as u32;
+    (*stats).udp_flows = STATS_UDP_FLOWS.load(Relaxed) as u32;
+    (*stats).dns_flows = STATS_DNS_FLOWS.load(Relaxed) as u32;
+    (*stats).flows_buffered = STATS_FLOWS_BUFFERED.load(Relaxed) as u32;
+    (*stats).flows_dead = STATS_FLOWS_DEAD.load(Relaxed) as u32;
+    (*stats).parse_pending = STATS_PARSE_PENDING_LEN.load(Relaxed) as u32;
+    (*stats).tcp_pool_cnt = STATS_TCP_POOL_SIZE.load(Relaxed) as u32;
+    (*stats).tcp_pool_fail_cnt = STATS_TCP_POOL_FAIL_CNT.load(Relaxed) as u32;
+    (*stats).tcp_pool_fail_time = STATS_TCP_POOL_FAIL_TIME.load(Relaxed) as u32;
+    (*stats).pkt_pool_cnt = STATS_PKT_POOL_SIZE.load(Relaxed) as u32;
+    (*stats).pkt_pool_fail_cnt = STATS_PKT_POOL_FAIL_CNT.load(Relaxed) as u32;
+    (*stats).pkt_pool_fail_time = STATS_PKT_POOL_FAIL_TIME.load(Relaxed) as u32;
+    (*stats).pending_rx = STATS_PENDING_RX.load(Relaxed) as u32;
+    (*stats).pending_tx = STATS_PENDING_TX.load(Relaxed) as u32;
+    (*stats).idle_bufs = STATS_IDLE_BUFS.load(Relaxed) as u32;
+    (*stats).total_tunnels = STATS_TOT_TUNS.load(Relaxed) as u32;
+    (*stats).hogs_cleared = STATS_HOGS_CLEARED.load(Relaxed) as u32;
 }

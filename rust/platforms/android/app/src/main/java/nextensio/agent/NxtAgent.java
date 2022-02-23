@@ -151,9 +151,9 @@ public class NxtAgent extends AppCompatActivity {
             }
             if (authClient == null) {
                 createAuthClient();
-            }
-            if (authClient == null) {
-                return;
+                if (authClient == null) {
+                    return;
+                }
             }
         }
 

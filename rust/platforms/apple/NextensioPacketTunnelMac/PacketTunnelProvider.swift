@@ -217,7 +217,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         networkSettings.mtu = mtu as NSNumber?
         
         if (conf["highMem"] as! Bool) == true {
-            highmem = 1; 
+            highmem = 2; 
         }
         // Save the settings
         self.setTunnelNetworkSettings(networkSettings) { error in

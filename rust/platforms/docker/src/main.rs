@@ -157,6 +157,10 @@ fn iptables_ignore_connected_subnets(add: bool) {
     for iface in datalink::interfaces() {
         for ip in iface.ips {
             if let pnet::ipnetwork::IpNetwork::V4(x) = ip {
+                // Dont bother about the tun215 interface
+                if x.ip().to_string() == "169.254.2.1" {
+                    continue;
+                }
                 let ipm;
                 if first {
                     ipm = format!("{}/{}", x.ip(), x.prefix());
@@ -302,7 +306,12 @@ fn agent_onboard(onb: &OnboardInfo, access_token: String, uuid: &Uuid) {
 
 // Onboard the agent and see if there are too many tunnel flaps, in which case
 // do onboarding again in case the agent parameters are changed on the controller
-fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdTokens) {
+fn do_onboard(
+    mut client: reqwest::blocking::Client,
+    client_id: String,
+    controller: String,
+    tokens: pkce::AccessIdTokens,
+) {
     let mut access_token = tokens.access_token;
     let mut refresh_token = tokens.refresh_token;
     let mut onboarded = false;
@@ -321,24 +330,10 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
         hostname = h;
     }
 
-    let mut ka_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(is_test_mode())
-        .build()
-        .unwrap();
-    let mut onb_client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(is_test_mode())
-        .build()
-        .unwrap();
-    let mut okta_client = reqwest::Client::builder()
-        .redirect(reqwest::RedirectPolicy::none())
-        .danger_accept_invalid_certs(is_test_mode())
-        .build()
-        .unwrap();
-
     loop {
         let now = Instant::now();
-        if now > last_cid + Duration::from_secs(5 * 60 as u64) {
-            let c = okta_clientid(&controller, &mut okta_client);
+        if now > last_cid + Duration::from_secs(5 * 60_u64) {
+            let c = okta_clientid(&controller, &mut client);
             // TODO: We should restart the app automatically or at least
             // somehow let the user know why we are killing ourselves
             if !c.is_empty() && !client_id.is_empty() && c != client_id {
@@ -349,7 +344,7 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
         }
         if onboarded && now > last_keepalive + Duration::from_secs(keepalive as u64) {
             if (keepalivecount % 4) == 0 {
-                let p = get_public_ip();
+                let p = get_public_ip(&mut client);
                 if !p.is_empty() {
                     public_ip = p;
                 }
@@ -359,7 +354,7 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
                 controller.clone(),
                 access_token.clone(),
                 &version,
-                &mut ka_client,
+                &mut client,
                 &public_ip,
                 &hostname,
             );
@@ -380,7 +375,7 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
         // Okta is configured with one hour as the access token lifetime,
         // refresh at 45 minutes
         if now > refresh + Duration::from_secs(45 * 60) {
-            let token = pkce::refresh(&client_id, &refresh_token);
+            let token = pkce::refresh(&mut client, &client_id, &refresh_token);
             if let Some(t) = token {
                 access_token = t.access_token;
                 refresh_token = t.refresh_token;
@@ -393,12 +388,8 @@ fn do_onboard(client_id: String, controller: String, tokens: pkce::AccessIdToken
         if !onboarded || force_onboard {
             error!("Onboarding again");
             println!("Onboarding with nextensio controller");
-            let (o, onb) = okta_onboard(
-                controller.clone(),
-                access_token.clone(),
-                &uuid,
-                &mut onb_client,
-            );
+            let (o, onb) =
+                okta_onboard(controller.clone(), access_token.clone(), &uuid, &mut client);
             if o {
                 let onb = onb.unwrap();
                 version = onb.version.clone();
@@ -418,13 +409,13 @@ fn okta_onboard(
     controller: String,
     access_token: String,
     uuid: &Uuid,
-    client: &mut reqwest::Client,
+    client: &mut reqwest::blocking::Client,
 ) -> (bool, Option<OnboardInfo>) {
     let get_url = format!("https://{}/api/v1/global/get/onboard", controller);
     let bearer = format!("Bearer {}", access_token);
     let resp = client.get(&get_url).header("Authorization", bearer).send();
     match resp {
-        Ok(mut res) => {
+        Ok(res) => {
             if res.status().is_success() {
                 let onb: Result<OnboardInfo, reqwest::Error> = res.json();
                 match onb {
@@ -463,14 +454,12 @@ fn okta_onboard(
     }
 }
 
-fn get_public_ip() -> String {
-    if let Ok(client) = reqwest::Client::builder().build() {
-        let resp = client.get("https://api.ipify.org").send();
-        if let Ok(mut res) = resp {
-            if res.status().is_success() {
-                if let Ok(t) = res.text() {
-                    return t;
-                }
+fn get_public_ip(client: &mut reqwest::blocking::Client) -> String {
+    let resp = client.get("https://api.ipify.org").send();
+    if let Ok(res) = resp {
+        if res.status().is_success() {
+            if let Ok(t) = res.text() {
+                return t;
             }
         }
     }
@@ -481,7 +470,7 @@ fn agent_keepalive(
     controller: String,
     access_token: String,
     version: &str,
-    client: &mut reqwest::Client,
+    client: &mut reqwest::blocking::Client,
     public_ip: &str,
     hostname: &str,
 ) -> (bool, Option<String>) {
@@ -502,7 +491,7 @@ fn agent_keepalive(
         .header("Authorization", bearer)
         .send();
     match resp {
-        Ok(mut res) => {
+        Ok(res) => {
             if res.status().is_success() {
                 let keep_res: Result<KeepaliveResponse, reqwest::Error> = res.json();
                 match keep_res {
@@ -538,14 +527,14 @@ fn is_test_mode() -> bool {
     std::env::var("NXT_TESTING").is_ok()
 }
 
-fn okta_clientid(controller: &str, client: &mut reqwest::Client) -> String {
+fn okta_clientid(controller: &str, client: &mut reqwest::blocking::Client) -> String {
     let get_url = format!(
         "https://{}/api/v1/noauth/clientid/09876432087648932147823456123768",
         controller
     );
     let resp = client.get(&get_url).send();
     match resp {
-        Ok(mut res) => {
+        Ok(res) => {
             if res.status().is_success() {
                 let onb: Result<ClientId, reqwest::Error> = res.json();
                 match onb {
@@ -586,6 +575,15 @@ fn get_idp() -> String {
     }
 }
 
+fn raise_limits() -> i32 {
+    unsafe {
+        let limit = libc::rlimit {
+            rlim_cur: 65535,
+            rlim_max: 65535,
+        };
+        libc::setrlimit(libc::RLIMIT_NOFILE, &limit)
+    }
+}
 fn main() {
     if !has_iptables() {
         println!("Need iptables and iproute2 packages: sudo apt-install iptables iproute2");
@@ -597,6 +595,13 @@ fn main() {
     }
     if !is_root() {
         println!("Need to run as sudo (for adding iptable mangle rule): \"sudo nextensio\"");
+        return;
+    }
+
+    // This is required for all the direct connections (not going through gateway) that the
+    // agent ends up opening
+    if raise_limits() != 0 {
+        println!("Please increase file descriptor limits (ulimit -n 65535)");
         return;
     }
 
@@ -637,25 +642,16 @@ fn main() {
         )
         .get_matches();
 
+    // Always start by cleaning up the previously installed rules if any
+    cleanup_iptables(interface.clone());
+
     if matches.is_present("stop") {
         kill_agent();
-        cleanup_iptables(interface);
         return;
     }
     let mut text_only = false;
     if matches.is_present("text-only") {
         text_only = true;
-    }
-
-    if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
-        let intf = interface.clone();
-        thread::spawn(move || {
-            for sig in signals.forever() {
-                println!("Received signal {:?}, terminating nextensio", sig);
-                cleanup_iptables(intf);
-                std::process::exit(0);
-            }
-        });
     }
 
     let mut uid: u32 = 0;
@@ -697,15 +693,26 @@ fn main() {
     let fd = create_tun().unwrap();
     config_tun(&interface, MTU);
 
-    if uid != 0 && chuser(uid).is_err() {
+    if uid != 0 && (chuser(uid).is_err() || chgroup("nextensioapp").is_err()) {
         println!("Unable to drop privileges to uid {}, exiting", uid);
         cleanup_iptables(interface);
         return;
     }
 
+    if let Ok(mut signals) = Signals::new(&[SIGINT, SIGTERM, SIGABRT]) {
+        let intf = interface.clone();
+        thread::spawn(move || {
+            for sig in signals.forever() {
+                println!("Received signal {:?}, terminating nextensio", sig);
+                cleanup_iptables(intf);
+                std::process::exit(0);
+            }
+        });
+    }
+
     unsafe {
         agent_on(fd);
-        thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 1, 0));
+        thread::spawn(move || agent_init(0 /*platform*/, 0 /*direct*/, MTU, 2, 0));
     }
 
     if !is_test_mode() && (username.is_empty() || password.is_empty()) {
@@ -713,8 +720,10 @@ fn main() {
         cleanup_iptables(interface);
         std::process::exit(0);
     } else {
-        let mut client = reqwest::Client::builder()
-            .redirect(reqwest::RedirectPolicy::none())
+        let mut client = reqwest::blocking::Client::builder()
+            .pool_idle_timeout(Some(std::time::Duration::new(30, 0)))
+            .pool_max_idle_per_host(2)
+            .redirect(reqwest::redirect::Policy::none())
             .danger_accept_invalid_certs(is_test_mode())
             .build()
             .unwrap();
@@ -722,7 +731,7 @@ fn main() {
             let client_id = okta_clientid(&controller, &mut client);
             let token = pkce::authenticate(&client_id, &mut client, &username, &password);
             if let Some(t) = token {
-                thread::spawn(move || do_onboard(client_id, controller, t));
+                thread::spawn(move || do_onboard(client, client_id, controller, t));
                 break;
             } else {
                 error!("Login to nextensio failed");

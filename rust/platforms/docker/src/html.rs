@@ -16,7 +16,7 @@ pub const HTML_SUCCESS: &str = r##"
 </style>
 
 <div id="message" class="ui text container">
-  <h1>Operation Complete, you can close this tab and return to Nextensio client</h1>
+  <h1>Operation Complete, you can close this tab and return to Nextensio Extender</h1>
 </div>
 
 </body>
@@ -43,7 +43,7 @@ pub fn html_error(err: &str) -> String {
 <div id="message" class="ui text container">
   <h1>Operation failed"##;
 
-    let html_error_2 = r##", please close this tab, return to Nextensio client and try again</h1>
+    let html_error_2 = r##", please close this tab, return to Nextensio Extender and try again</h1>
 </div>
 
 </body>
