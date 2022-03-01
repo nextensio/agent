@@ -381,7 +381,6 @@ enum TunFlow {
 struct Tun {
     tun: Box<dyn Transport>,
     pending_tx: VecDeque<FlowV4Key>,
-    tx_ready: bool,
     flows: TunFlow,
     proxy_client: bool,
     pkts_rx: usize,
@@ -393,7 +392,6 @@ impl Default for Tun {
         Tun {
             tun: Box::new(Dummy::default()),
             pending_tx: VecDeque::with_capacity(0),
-            tx_ready: true,
             flows: TunFlow::NoFlow,
             proxy_client: false,
             pkts_rx: 0,
@@ -618,18 +616,10 @@ fn set_tx_socket(
             BINDIP.load(Relaxed),
         );
         tx_stream = tun.new_stream();
-        // The async tcp socket has to be established properly after handshake
-        // and mio has to signal us that tx is ready before we can write. For
-        // UDP tx is ready from get go
-        let mut tx_ready = false;
-        if key.proto == common::UDP {
-            tx_ready = true;
-        }
         ext.next_tun_idx = tx_socket + 1;
         let tun = Tun {
             tun: Box::new(tun),
             pending_tx: VecDeque::with_capacity(1),
-            tx_ready,
             flows: TunFlow::OneToOne(key.clone()),
             proxy_client: false,
             pkts_rx: 0,
@@ -802,7 +792,6 @@ fn send_onboard_info(reginfo: &mut RegistrationInfo, tun: &mut Tun) {
     ) {
         Err((_, e)) => match e.code {
             EWOULDBLOCK => {
-                tun.tx_ready = false;
                 error!("Onboard message sent (block)");
             }
             _ => {
@@ -950,8 +939,6 @@ fn external_sock_rx(tun: &mut Tun, tun_idx: Token, agent: &mut AgentInfo, poll: 
 }
 
 fn external_sock_tx(tun: &mut Tun, agent: &mut AgentInfo, poll: &mut Poll) {
-    tun.tx_ready = true;
-
     while let Some(key) = tun.pending_tx.pop_front() {
         if let Some(flow) = agent.flows.get_mut(&key) {
             flow.pending_tx_qed = false;
@@ -1360,22 +1347,11 @@ fn flow_data_to_external(
         } else {
             // Now try writing the payload to the destination socket. If the destination
             // socket says EWOULDBLOCK, then queue up the data as pending and try next time
-            if !tx_socket.tx_ready {
-                ret = Err((
-                    Some(tx),
-                    NxtError {
-                        code: EWOULDBLOCK,
-                        detail: "".to_string(),
-                    },
-                ))
-            } else {
-                ret = tx_socket.tun.write(flow.tx_stream, tx);
-            }
+            ret = tx_socket.tun.write(flow.tx_stream, tx);
         }
         if let Err((data, e)) = ret {
             match e.code {
                 EWOULDBLOCK => {
-                    tx_socket.tx_ready = false;
                     if let Err(e) =
                         tx_socket
                             .tun
@@ -1445,7 +1421,6 @@ fn send_trace_info(rxtime: Instant, hdr: Option<NxtHdr>, tun: &mut Tun) {
                 // Well, here the data has to be actually queued up and resent. But
                 // that makes things more complicated, for now tracing is silently
                 // ignored if the send blocks and wants us to retry
-                tun.tx_ready = false;
             }
             _ => {
                 error!("Trace message send fail ({})", e.detail);
@@ -1655,6 +1630,7 @@ fn vpntun_rx(max_pkts: usize, agent: &mut AgentInfo, poll: &mut Poll) {
                         RegType::Rereg,
                     ) {
                         error!("MIO Rereg failed {} for vpntun rx", e);
+                        agent.ext.vpn_tun.tun.close(0).ok();
                     }
                     return;
                 }
@@ -1747,7 +1723,6 @@ fn vpntun_tx(tun: &mut Tun, vpn_tx: &mut VecDeque<(usize, Reusable<Vec<u8>>)>, p
         ) {
             match e.code {
                 EWOULDBLOCK => {
-                    tun.tx_ready = false;
                     if let Some(mut data) = data {
                         // Return the data to the head again
                         if let Some(pop) = data.bufs.pop() {
@@ -1787,7 +1762,6 @@ fn new_gw(agent: &mut AgentInfo, poll: &mut Poll) {
         let mut tun = Tun {
             tun: Box::new(websocket),
             pending_tx: VecDeque::with_capacity(1),
-            tx_ready: false,
             flows: TunFlow::OneToMany(HashMap::new()),
             proxy_client: false,
             pkts_rx: 0,
@@ -1963,7 +1937,6 @@ fn monitor_fd_vpn(agent: &mut AgentInfo, poll: &mut Poll) {
         let mut tun = Tun {
             tun: vpn_tun,
             pending_tx: VecDeque::with_capacity(1),
-            tx_ready: true,
             flows: TunFlow::NoFlow,
             proxy_client: false,
             pkts_rx: 0,
@@ -2230,7 +2203,7 @@ fn flow_close(
         );
     }
 
-    // Free all memory occupying stuff
+    // Free buffers held onto by smoltcp (if any)
     flow.rx_socket.idle(true);
     // If we do flow.pending_rx.clear() that mgight not (not 100% sure)
     // drop the memory. So if we have flows that sit around till tcp timeout (like 1 hour)
@@ -2405,7 +2378,6 @@ fn proxy_listener(agent: &mut AgentInfo, poll: &mut Poll) {
                 let mut tun = Tun {
                     tun: client,
                     pending_tx: VecDeque::with_capacity(1),
-                    tx_ready: true,
                     flows: TunFlow::NoFlow,
                     proxy_client: true,
                     pkts_rx: 0,
@@ -2441,7 +2413,6 @@ fn proxy_init(agent: &mut AgentInfo, poll: &mut Poll) {
             agent.ext.pkt_pool.clone(),
         )),
         pending_tx: VecDeque::with_capacity(0),
-        tx_ready: true,
         flows: TunFlow::NoFlow,
         proxy_client: false,
         pkts_rx: 0,
@@ -2542,7 +2513,6 @@ fn tcp_vpn_init(agent: &mut AgentInfo, poll: &mut Poll) {
     let mut tun = Tun {
         tun: vpn_tun,
         pending_tx: VecDeque::with_capacity(1),
-        tx_ready: true,
         flows: TunFlow::NoFlow,
         proxy_client: false,
         pkts_rx: 0,
@@ -2646,9 +2616,6 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
                     if event.is_readable() {
                         vpntun_rx(ratio, &mut agent, &mut poll);
                     }
-                    if event.is_writable() {
-                        agent.ext.vpn_tun.tx_ready = true;
-                    }
                 }
                 WEBPROXY_POLL => {
                     if event.is_readable() {
@@ -2696,9 +2663,7 @@ fn agent_main_thread(platform: u32, direct: u32, mtu: u32, highmem: u32, tcp_vpn
             // Note that write-ready is a single shot event and it will continue to be write-ready
             // till we get an will-block return value on attempting some write. So as long as things
             // are write-ready, see if we have any pending data to Tx to the app tunnel or the gateway
-            if agent.ext.vpn_tun.tx_ready {
-                vpntun_tx(&mut agent.ext.vpn_tun, &mut agent.ext.vpn_tx, &mut poll);
-            }
+            vpntun_tx(&mut agent.ext.vpn_tun, &mut agent.ext.vpn_tx, &mut poll);
         }
 
         if now > monitor_ager + Duration::from_secs(MONITOR_CONNECTIONS) {
