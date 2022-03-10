@@ -1,47 +1,8 @@
 use super::*;
-use crate::Dummy;
 
-#[test]
-fn pkt_parse_two_bufs() {
-    pkt_parse(64 * 1024);
-}
-
-#[test]
-fn pkt_parse_one_bufs() {
-    pkt_parse(2 * 1024);
-}
-
-fn pkt_parse(bytes: usize) {
+fn pkt_parse(headroom: usize, bytes: usize, pendsz: usize, outlen: Vec<usize>) {
     let mut agent = AgentInfo::default();
     agent_init_pools(&mut agent, 1500, 0);
-
-    let key = FlowV4Key {
-        sip: 0x01010101,
-        dip: "2.2.2.2".to_string(),
-        sport: 32145,
-        dport: 443,
-        proto: common::TCP,
-    };
-
-    let flow = FlowV4 {
-        rx_socket: Box::new(Dummy::default()),
-        rx_socket_idx: 0,
-        rx_stream: None,
-        tx_stream: 0,
-        tx_socket: UNUSED_IDX,
-        pending_tx: None,
-        pending_rx: VecDeque::with_capacity(1),
-        last_rdwr: Instant::now(),
-        creation_instant: Instant::now(),
-        cleanup_after: CLEANUP_TCP_HALFOPEN,
-        dialled: false,
-        dead: false,
-        pending_tx_qed: false,
-        service: "".to_string(),
-        dest_agent: "".to_string(),
-        parse_pending: None,
-        trace_request: true,
-    };
 
     let mut pending = pool_get(agent.ext.pkt_pool.clone()).unwrap();
     pending.clear();
@@ -64,6 +25,9 @@ X-Long-Header:
     let mut next = 0;
     let mut t = pool_get(agent.ext.tcp_pool.clone()).unwrap();
     t.clear();
+    let zero = vec![0; headroom];
+    t.extend_from_slice(&zero[..]);
+
     let mut v: Vec<Reusable<Vec<u8>>> = vec![];
 
     loop {
@@ -88,20 +52,38 @@ X-Long-Header:
     let tx = NxtBufs {
         hdr: None,
         bufs: v,
-        headroom: 0,
+        headroom,
     };
     let (out, err) = parse_copy(&agent.ext.tcp_pool, &mut pending, tx);
     println!(
-        "post-parse: pending len {}, out len {}",
+        "post-parse: pending len {}, out len {} ",
         pending.len(),
         out.len()
     );
+
+    assert!(pendsz == pending.len());
+    assert!(outlen.len() == out.len());
+
     if err {
         println!("post-parse: error {}", err);
     }
     for i in 0..out.len() {
+        assert!(out[i].len() == outlen[i]);
         println!("post-parse: index {}, len {}", i, out[i].len());
     }
     let (_, _, service) = parse_host(&pending[0..]);
     println!("Service is {}", service);
+    assert!(service == "www.tutorialspoint.com");
+}
+
+#[test]
+fn pkt_parse_two_bufs() {
+    let v = vec![63488, 207];
+    pkt_parse(0, 64 * 1024, 2048, v);
+}
+
+#[test]
+fn pkt_parse_one_bufs() {
+    let v = vec![207];
+    pkt_parse(0, 2 * 1024, 2048, v);
 }
