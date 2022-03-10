@@ -1040,7 +1040,7 @@ fn parse_https_and_http(
 // We try to parse upto a max size (PARSE_MAX), theres no point indefinitely
 // queueing up data to parse.
 fn parse_copy(
-    pkt_pool: &Arc<Pool<Vec<u8>>>,
+    pool: &Arc<Pool<Vec<u8>>>,
     pending: &mut Reusable<Vec<u8>>,
     mut tx: NxtBufs,
 ) -> (Vec<Reusable<Vec<u8>>>, bool) {
@@ -1064,7 +1064,7 @@ fn parse_copy(
             // And we allow only the first buffer to have a headroom, and hence
             // having to copy all the other buffers into a new one since now they
             // have a slice of their initial data already moved to "pending"
-            if let Some(mut new) = pool_get(pkt_pool.clone()) {
+            if let Some(mut new) = pool_get(pool.clone()) {
                 // Clear just to set vector data/len to empty
                 new.clear();
                 new.extend_from_slice(&b[headroom + remaining..]);
@@ -1151,6 +1151,8 @@ fn parse_complete(
     if flow.parse_pending.is_some() {
         pending = flow.parse_pending.take().unwrap();
     } else if let Some(mut p) = pool_get(ext.pkt_pool.clone()) {
+        // We got a buffer from the pkt_pool because we dont intend to keep a
+        // lot of data buffered, only PARSE_MAX which typically fits in a pkt buffer
         // Clear to set vector data/length to empty
         p.clear();
         pending = p;
@@ -1158,7 +1160,14 @@ fn parse_complete(
         flow_dead(&mut ext.flows_dead, key, flow);
         return None;
     }
-    let (out, err) = parse_copy(&ext.pkt_pool, &mut pending, tx);
+
+    let pool;
+    if key.proto == common::TCP {
+        pool = &ext.tcp_pool;
+    } else {
+        pool = &ext.pkt_pool;
+    }
+    let (out, err) = parse_copy(pool, &mut pending, tx);
     if err {
         flow_dead(&mut ext.flows_dead, key, flow);
         return None;
@@ -1174,10 +1183,9 @@ fn parse_complete(
     } else {
         // wait for more data or timeout
         flow.parse_pending = Some(pending);
-        // The out should always be empty here because if out is not empty,
+        // The "out" should always be empty here because if out is not empty,
         // that means we have more data than PARSE_MAX, and if we have more
         // data than PARSE_MAX, parse_or_maxlen() WILL return true
-        assert!(out.is_empty());
         None
     }
 }
@@ -2835,3 +2843,6 @@ pub unsafe extern "C" fn agent_stats(stats: *mut AgentStats) {
     (*stats).total_tunnels = STATS_TOT_TUNS.load(Relaxed) as u32;
     (*stats).hogs_cleared = STATS_HOGS_CLEARED.load(Relaxed) as u32;
 }
+
+#[cfg(test)]
+mod test;
