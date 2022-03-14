@@ -77,13 +77,25 @@ X-Long-Header:
 }
 
 #[test]
-fn pkt_parse_two_bufs() {
-    let v = vec![63488, 207];
-    pkt_parse(0, 64 * 1024, 2048, v);
+fn pkt_parse_zero_bufs() {
+    let v = vec![];
+    pkt_parse(0, 1024, 1231, v);
 }
 
 #[test]
 fn pkt_parse_one_bufs() {
     let v = vec![207];
     pkt_parse(0, 2 * 1024, 2048, v);
+}
+
+#[test]
+fn pkt_parse_two_bufs() {
+    let v = vec![63488, 207];
+    pkt_parse(0, 64 * 1024, 2048, v);
+}
+
+#[test]
+fn pkt_parse_three_bufs() {
+    let v = vec![63488, 64 * 1024, 207];
+    pkt_parse(0, 2 * 64 * 1024, 2048, v);
 }
