@@ -3,7 +3,6 @@ use super::*;
 fn pkt_parse(headroom: usize, bytes: usize, pendsz: usize, outlen: Vec<usize>) {
     let mut agent = AgentInfo::default();
     agent_init_pools(&mut agent, 1500, 0);
-
     let mut pending = pool_get(agent.ext.pkt_pool.clone()).unwrap();
     pending.clear();
 
@@ -13,9 +12,8 @@ Accept-Language: en-us
 Accept-Encoding: gzip, deflate
 Connection: Keep-Alive
 Host: www.tutorialspoint.com
-X-Long-Header: 
-"#
-    .to_string();
+X-Long-Header: "#
+        .to_string();
 
     for _ in 0..bytes {
         http.push_str("a");
@@ -68,8 +66,8 @@ X-Long-Header:
         println!("post-parse: error {}", err);
     }
     for i in 0..out.len() {
-        assert!(out[i].len() == outlen[i]);
         println!("post-parse: index {}, len {}", i, out[i].len());
+        assert!(out[i].len() == outlen[i]);
     }
     let (_, _, service) = parse_host(&pending[0..]);
     println!("Service is {}", service);
@@ -79,23 +77,23 @@ X-Long-Header:
 #[test]
 fn pkt_parse_zero_bufs() {
     let v = vec![];
-    pkt_parse(0, 1024, 1231, v);
+    pkt_parse(0, 1024, 1230, v);
 }
 
 #[test]
 fn pkt_parse_one_bufs() {
-    let v = vec![207];
+    let v = vec![206];
     pkt_parse(0, 2 * 1024, 2048, v);
 }
 
 #[test]
 fn pkt_parse_two_bufs() {
-    let v = vec![63488, 207];
+    let v = vec![63488, 206];
     pkt_parse(0, 64 * 1024, 2048, v);
 }
 
 #[test]
 fn pkt_parse_three_bufs() {
-    let v = vec![63488, 64 * 1024, 207];
+    let v = vec![63488, 64 * 1024, 206];
     pkt_parse(0, 2 * 64 * 1024, 2048, v);
 }
