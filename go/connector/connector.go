@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -461,12 +462,20 @@ func args() (*log.Logger, *os.File) {
 		}
 	}
 	controller = *c
-	s, e := ioutil.ReadFile(*keyFile)
-	if e != nil {
-		fmt.Println("Cannot read from key file: ", *keyFile, e)
+	if _, err := os.Stat(*keyFile); err == nil {
+		s, e := ioutil.ReadFile(*keyFile)
+		if e != nil {
+			fmt.Println("Cannot read from key file: ", *keyFile, e)
+			os.Exit(1)
+		}
+		sharedKey = string(s)
+	} else if errors.Is(err, os.ErrNotExist) {
+		// If there is no such file, then treat the input as the key itself
+		sharedKey = *keyFile
+	} else {
+		fmt.Println("key file does not exist: ", *keyFile, err)
 		os.Exit(1)
 	}
-	sharedKey = string(s)
 	sharedKey = strings.TrimSpace(sharedKey)
 	sharedKey = strings.TrimRight(strings.TrimLeft(sharedKey, "\n"), "\n")
 	lg.Println("Connector version : ", Version)
