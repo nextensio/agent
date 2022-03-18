@@ -66,7 +66,12 @@ X-Long-Header: "#
         println!("post-parse: error {}", err);
     }
     for i in 0..out.len() {
-        println!("post-parse: index {}, len {}", i, out[i].len());
+        println!(
+            "post-parse: index {}, len {} / {}",
+            i,
+            out[i].len(),
+            outlen[i]
+        );
         assert!(out[i].len() == outlen[i]);
     }
     let (_, _, service) = parse_host(&pending[0..]);
@@ -96,4 +101,32 @@ fn pkt_parse_two_bufs() {
 fn pkt_parse_three_bufs() {
     let v = vec![63488, 64 * 1024, 206];
     pkt_parse(0, 2 * 64 * 1024, 2048, v);
+}
+
+#[test]
+fn pkt_parse_zero_bufs_headroom() {
+    const HEADROOM: usize = 256;
+    let v = vec![];
+    pkt_parse(HEADROOM, 1024, 1230, v);
+}
+
+#[test]
+fn pkt_parse_one_bufs_headroom() {
+    const HEADROOM: usize = 256;
+    let v = vec![206];
+    pkt_parse(HEADROOM, 2 * 1024, 2048, v);
+}
+
+#[test]
+fn pkt_parse_two_bufs_headroom() {
+    const HEADROOM: usize = 256;
+    let v = vec![63488 - HEADROOM, 206 + HEADROOM];
+    pkt_parse(HEADROOM, 64 * 1024, 2048, v);
+}
+
+#[test]
+fn pkt_parse_three_bufs_headroom() {
+    const HEADROOM: usize = 256;
+    let v = vec![63488 - HEADROOM, 64 * 1024, 206 + HEADROOM];
+    pkt_parse(HEADROOM, 2 * 64 * 1024, 2048, v);
 }
