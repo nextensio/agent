@@ -1,0 +1,26 @@
+FROM golang:1.15.7-alpine3.12
+RUN apk update && apk add lighttpd git openssh curl
+
+# Now compile the code
+WORKDIR /go/src/app
+RUN mkdir -p /root/.ssh
+RUN mkdir -p /go/files/
+COPY files/ /go/files
+RUN chmod +x /go/files/gitlab.sh
+RUN /go/files/gitlab.sh
+RUN go env -w GOPRIVATE="gitlab.com"
+RUN go env -w GO111MODULE="on"
+COPY . .
+RUN go get -d -v ./... 
+RUN cd connector; go install -ldflags="-X 'main.Version=Development'" -v ./...
+RUN rm -r -f /go/src/app/* \
+    && \rm -r -f /go/pkg/mod \
+    && \rm -r -f /go/pkg/sumdb
+
+RUN rm /go/files/gitlab_rsa
+
+RUN apk del git && apk del openssh
+
+RUN chmod +x /go/files/run_prod.sh
+EXPOSE 8180/tcp 8081/tcp 8181/tcp
+CMD /go/files/run_prod.sh

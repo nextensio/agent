@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -469,7 +468,7 @@ func args() (*log.Logger, *os.File) {
 			os.Exit(1)
 		}
 		sharedKey = string(s)
-	} else if errors.Is(err, os.ErrNotExist) {
+	} else if err != nil {
 		// If there is no such file, then treat the input as the key itself
 		sharedKey = *keyFile
 	} else {
