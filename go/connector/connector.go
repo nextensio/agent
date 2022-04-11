@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	common "gitlab.com/nextensio/common/go"
 	"gitlab.com/nextensio/common/go/messages/nxthdr"
+	nhttp2 "gitlab.com/nextensio/common/go/transport/http2"
 	"gitlab.com/nextensio/common/go/transport/netconn"
 	websock "gitlab.com/nextensio/common/go/transport/websocket"
 )
@@ -57,6 +58,7 @@ var cluster string
 var ports []int = []int{}
 var gatewayIP uint32
 var deviceName string
+var totGoRoutines int32
 
 func flowAdd(key *flowKey, app common.Transport) {
 	flowLock.Lock()
@@ -98,20 +100,30 @@ func gwToAppClose(tun common.Transport, dest ConnStats) {
 	}
 }
 
+var cacert []byte
+
 // Stream coming from the gateway, send data over tcp/udp socket on the connector
 func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 	for {
 		hdr, buf, err := tun.Read()
 		if err != nil {
+			lg.Printf("gwToApp read error %v\n", err)
 			gwToAppClose(tun, dest)
 			return
 		}
+		tlen := 0
+		for _, l := range buf.Slices {
+			tlen += len(l)
+		}
+		lg.Printf("Received stream from gw with %d slices and data length %d\n", len(buf.Slices), tlen)
 		switch hdr.Hdr.(type) {
 		case *nxthdr.NxtHdr_Onboard:
 			lg.Println("Got onboard response")
 		case *nxthdr.NxtHdr_Flow:
+			isHttp := false
 			if dest.Conn == nil {
 				flow := hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
+				lg.Printf("Got new flow from %s for %s\n", flow.SourceAgent, flow.Dest)
 				if flow.TraceCtx != "" {
 					// Save the time now for calculating the process elapsed time when sending the packet back to
 					// the connector in appToGw()
@@ -120,26 +132,45 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 				key := flowKey{src: flow.Source, dest: flow.Dest, sport: flow.Sport, dport: flow.Dport, proto: flow.Proto}
 				dest.Conn = flowGet(key, tun)
 				if dest.Conn == nil {
-					if flow.Proto == common.TCP {
+					method := ""
+					if flow.Proto == common.HTTP {
+						isHttp = true
+						lg.Printf("Agentless HTTP flow received for %s from %s:%d\n", flow.HttpMethod, flow.Dest, flow.Dport)
+						// open http connection to app server
+						reqhdr := make(http.Header)
+						for i, k := range flow.HttpKeys {
+							reqhdr.Add(k, flow.HttpValues[i])
+							lg.Printf("HTTP header [%d]: %s: %s\n", i, k, flow.HttpValues[i])
+						}
+						method = flow.HttpMethod
+						dest.Conn = nhttp2.NewClient(mainCtx, lg, pool, cacert, flow.Dest,
+							flow.Dest, int(flow.Dport), reqhdr, &totGoRoutines, 10000, 1000, false)
+					} else if flow.Proto == common.TCP {
+						lg.Println("Agent TCP flow received")
 						dest.Conn = netconn.NewClient(mainCtx, lg, pool, "tcp", flow.DestSvc, flow.Dport)
 					} else {
+						lg.Println("Agent UDP flow received")
 						dest.Conn = netconn.NewClient(mainCtx, lg, pool, "udp", flow.DestSvc, flow.Dport)
 					}
 					// the appStreams passed here never gets used
-					e := dest.Conn.Dial(appStreams)
+					e := dest.Conn.Dial(appStreams, method)
 					if e != nil {
+						lg.Printf("Could not dial out %s to app %s\n", method, flow.DestSvc)
 						gwToAppClose(tun, dest)
 						return
 					}
+					lg.Printf("Dialed out %s to app %s\n", method, flow.DestSvc)
 
 					// This flow is originated for the first time from the gateway
 					// to connector, so lets create a reverse direction here. Otherwise
 					// the flow is originated from the connector to gateway, so reverse already exists
 					newTun := tun.NewStream(nil)
 					if newTun == nil {
+						lg.Println("Could not open new stream to gw")
 						gwToAppClose(tun, dest)
 						return
 					}
+					lg.Println("Opened new stream to gw")
 
 					// copy the flow
 					newFlow := *flow
@@ -147,20 +178,34 @@ func gwToApp(lg *log.Logger, tun common.Transport, dest ConnStats) {
 					s, d := newFlow.SourceAgent, newFlow.DestAgent
 					newFlow.SourceAgent, newFlow.DestAgent = d, s
 					newFlow.ResponseData = true
+					newFlow.HttpKeys = []string{}
+					newFlow.HttpValues = []string{}
 					var timeout time.Duration
-					if newFlow.Proto == common.TCP {
-						timeout = TCP_AGER
-					} else {
+					if newFlow.Proto == common.UDP {
 						timeout = UDP_AGER
+					} else {
+						timeout = TCP_AGER
 					}
+					lg.Printf("Forking process to reply back to gw from app %s\n", flow.DestSvc)
 					go appToGw(lg, &dest, newTun, timeout, &newFlow, tun)
 				}
 			}
-			e := dest.Conn.Write(hdr, buf)
+			var e error
+			if isHttp {
+				lg.Println("Writing buf to http connection")
+				e = dest.Conn.Write(nil, buf)
+				lg.Println("Returned from write to http connection")
+			} else {
+				lg.Println("Writing buf to TCP/UDP connection")
+				e = dest.Conn.Write(hdr, buf)
+				lg.Println("Returned from write to TCP/UDP connection")
+			}
 			if e != nil {
+				lg.Printf("Gw to app write failed - %v\n", e)
 				gwToAppClose(tun, dest)
 				return
 			}
+			lg.Println("Gw to app write done")
 			dest.Tx += 1
 		}
 	}
@@ -190,6 +235,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 	// If the destination (Tx) closes, close the rx also so the entire goroutine exits and
 	// the close is cascaded to the the cluster
 	dest.CloseCascade(src.Conn)
+	lg.Printf("Entered appToGw for response from app %s\n", flow.DestSvc)
 
 	for {
 		src.Conn.SetReadDeadline(time.Now().Add(timeout))
@@ -197,6 +243,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 		tx := src.Tx
 		hdr, buf, err := src.Conn.Read()
 		if err != nil {
+			lg.Printf("appToGw: read error from app - %v", err)
 			ignore := false
 			if err.Err != nil {
 				if e, ok := err.Err.(net.Error); ok && e.Timeout() {
@@ -214,6 +261,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 				return
 			}
 		}
+		lg.Println("appToGw: read response from app")
 		src.Rx += 1
 		// if hdr is nil, that means this is a gateway originated flow, if its non-nil then
 		// its a connector originated flow (a "server" NetConn). If hdr is nil, then the
@@ -221,6 +269,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 		// If hdr is non-nil, that contains details parsed from the packet, so we construct
 		// a flow using those parsed details
 		if hdr == nil {
+			lg.Println("appToGw: flow from gw")
 			var hdrFlow *nxthdr.NxtFlow
 			if flow.TraceCtx != "" {
 				// Calculate the elapsed time for processing this packet before sending it back to connector
@@ -246,6 +295,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 			// connector origin side of the flow. We could keep this common for connector/gateway originated
 			// and cache the flow all the time, but there is no need as of today and hence why waste memory
 			// since the bulk of the use case will be gateway originated flows
+			lg.Println("appToGw: flow from Connector")
 			flow = hdr.Hdr.(*nxthdr.NxtHdr_Flow).Flow
 			if destAgent == "" {
 				// TODO: Do we need the reginfoLock here ? I think not because when we get
@@ -257,6 +307,7 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 				}
 				// No service advertised that matches the one we want
 				if destAgent == "" {
+					lg.Printf("appToGw: Closing connection as service to %s not found\n", destAgent)
 					appToGwClose(src, dest, gwRx, key)
 					return
 				}
@@ -271,9 +322,11 @@ func appToGw(lg *log.Logger, src *ConnStats, dest common.Transport, timeout time
 		}
 		e := dest.Write(hdr, buf)
 		if e != nil {
+			lg.Printf("appToGw: write to gw failed - %v\n", e)
 			appToGwClose(src, dest, gwRx, key)
 			return
 		}
+		lg.Println("appToGw: write to gw successful")
 	}
 }
 
@@ -313,7 +366,7 @@ func dialWebsocket(ctx context.Context, lg *log.Logger, regInfo *RegistrationInf
 	// Ask for a keepalive to be sent once in two seconds
 	wsock := websock.NewClient(ctx, lg, pool, []byte(string(regInfo.CACert)), regInfo.Gateway, regInfo.Gateway, 443, req, 2*1000)
 	regInfoLock.RUnlock()
-	if err := wsock.Dial(c); err != nil {
+	if err := wsock.Dial(c, ""); err != nil {
 		lg.Println("Cannot dial websocket", err, regInfo.ConnectID)
 		return nil
 	}
